@@ -1,5 +1,5 @@
 // idea: lua based template thingy
-// config in site.toml
+// config in site.lua
 // css in style/main.scss
 // content in content/
 // more lua script in lib/
@@ -69,7 +69,7 @@ enum FileNode {
 
 #[derive(Parser)]
 struct Args {
-    /// directory to the site.toml file of the site to build, current working directory by default
+    /// directory to the site.lua file of the site to build, current working directory by default
     #[clap(short, long)]
     dir: Option<PathBuf>,
 
@@ -153,18 +153,20 @@ fn main() {
     let args = Args::parse();
 
     // path to load from
-    let path =
-        args.dir
-            .unwrap_or_else(|| {
-                let dir = current_dir().expect("Could not run from the current working directory!");
+    let path = args
+        .dir
+        .unwrap_or_else(|| {
+            let dir = current_dir().expect("Could not run from the current working directory!");
 
-                // go up to find the dir containing the site.toml file
-                dir.ancestors()
-            .find(|x| x.join("site.toml").exists())
-            .expect("Could not find a site.toml file in this directory or any of it's ancestors!")
-            .to_path_buf()
-            })
-            .join("site.toml");
+            // go up to find the dir containing the site.lua file
+            dir.ancestors()
+                .find(|x| x.join("site.lua").exists())
+                .expect(
+                    "Could not find a site.lua file in this directory or any of it's ancestors!",
+                )
+                .to_path_buf()
+        })
+        .join("site.lua");
 
     // load it
     // config contains base url?
