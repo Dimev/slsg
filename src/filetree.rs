@@ -10,8 +10,7 @@ pub(crate) enum FileNode {
     /// A lua file to process, as well as all of it's siblings
     Lua {
         code: String,
-        name: String,
-        sibs: HashMap<String, FileNode>,
+        subs: HashMap<String, FileNode>,
     },
 
     /// An asset file
@@ -65,20 +64,7 @@ pub(crate) fn load_tree<P: AsRef<Path>>(root: P) -> Option<FileNode> {
                 .expect("Could not convert OsString into string!"),
             FileNode::Lua {
                 code,
-                name: x
-                    .path()
-                    .file_stem()
-                    .map(|x| {
-                        x.to_os_string()
-                            .into_string()
-                            .expect("Could not convert OsString to string!")
-                    })
-                    .unwrap_or(
-                        x.file_name()
-                            .into_string()
-                            .expect("Could not convert OsString to string!"),
-                    ),
-                sibs: HashMap::new(),
+                subs: HashMap::new(),
             },
         )
     });
@@ -100,19 +86,7 @@ pub(crate) fn load_tree<P: AsRef<Path>>(root: P) -> Option<FileNode> {
 
     // if there is an index.lua, load it and return this as a lua file
     if let Ok(code) = read_to_string(root.as_ref().join("index.lua")) {
-        Some(FileNode::Lua {
-            code,
-            name: root
-                .as_ref()
-                .file_name()
-                .map(|x| {
-                    x.to_os_string()
-                        .into_string()
-                        .expect("Could not convert OsString to string!")
-                })
-                .unwrap_or(String::from("index.lua")),
-            sibs: subs,
-        })
+        Some(FileNode::Lua { code, subs })
 
     // if not, this is a directory
     } else {

@@ -17,6 +17,7 @@
 // static assets can be loaded with static
 
 mod filetree;
+mod sitetree;
 
 use std::{
     collections::HashMap,
@@ -29,28 +30,7 @@ use std::{
 use clap::Parser;
 use mlua::Lua;
 
-use crate::filetree::load_tree;
-
-/// A single item in the page tree
-#[derive(Debug)]
-enum SiteNode {
-    /// Asset, any file that can be included or loaded
-    Asset { name: String, path: PathBuf },
-
-    /// Page, with siblings
-    Page {
-        html: String,
-        name: String,
-        table: (),
-        sibs: HashMap<OsString, SiteNode>,
-    },
-
-    /// Lua table
-    Table { table: () },
-
-    /// Subdirectory
-    Dir { subs: HashMap<OsString, SiteNode> },
-}
+use crate::{filetree::load_tree, sitetree::render_tree};
 
 #[derive(Parser)]
 struct Args {
@@ -92,12 +72,18 @@ fn main() {
     set_current_dir(path.parent().unwrap()).expect("Failed to change working directory!");
 
     // load the tree
-    let filetree = load_tree("content/");
+    let filetree = load_tree("content/").expect("Failed to load the file tree!");
 
-    // load and convert the sass styles
+    println!("{:?}", filetree);
+
+    // load and convert the sass style
 
     // start lua
     let lua = Lua::new();
 
-    println!("{:?}", filetree);
+    // render the tree
+    let tree = render_tree(&lua, filetree);
+    println!("{:?}", tree);
+
+    // convert it to files
 }
