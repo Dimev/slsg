@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 
 use mlua::{Lua, Table};
 
@@ -27,6 +27,37 @@ pub(crate) enum SiteNode<'lua> {
 }
 
 impl<'lua> SiteNode<'lua> {
+    pub(crate) fn render(&self, path: PathBuf) {
+        match self {
+            SiteNode::Asset { path: asset_path } => {
+                // write out file, directory should already exist
+                fs::copy(asset_path, path).expect("Failed to copy file");
+            }
+            SiteNode::Page { html, subs, .. } => {
+                // create the directory
+                fs::create_dir_all(&path).expect("Failed to make directory!");
+
+                // write out the rest
+                for (key, value) in subs.iter() {
+                    value.render(path.join(key));
+                }
+
+                // write out the page
+                fs::write(path.join("index.html"), html).expect("Failed to write file");
+            }
+            SiteNode::Dir { subs } => {
+                // create the directory
+                fs::create_dir_all(&path).expect("Failed to make directory!");
+
+                // write out all files
+                for (key, value) in subs.iter() {
+                    value.render(path.join(key));
+                }
+            }
+            SiteNode::Table { .. } => {}
+        }
+    }
+
     fn to_table(self, lua: &Lua) -> Table<'_> {
         let table = lua.create_table().expect("Failed to create table!");
 
@@ -171,9 +202,4 @@ pub(crate) fn render_tree(lua: &Lua, filetree: FileNode) -> SiteNode {
         },
         FileNode::Asset { path } => SiteNode::Asset { path },
     }
-}
-
-/// write out the files
-pub(crate) fn render_files(tree: SiteNode) -> HashMap<PathBuf, Vec<u8>> {
-    todo!()
 }

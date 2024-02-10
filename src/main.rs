@@ -20,9 +20,7 @@ mod filetree;
 mod sitetree;
 
 use std::{
-    collections::HashMap,
     env::{current_dir, set_current_dir},
-    ffi::OsString,
     fs::read_to_string,
     path::PathBuf,
 };
@@ -86,4 +84,7 @@ fn main() {
     println!("{:?}", tree);
 
     // convert it to files
+    tree.render(PathBuf::from("public/"));
+
+    // write out the files
 }
