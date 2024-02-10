@@ -1,7 +1,10 @@
-print("Hello from content/index.lua!")
-for k, v in pairs(directories) do
-  print(k, v)
+local pages = {}
+for key, value in pairs(colocatedFiles) do 
+  if value.type == "page" then 
+    pages[key] = value
+  end
 end
 
-
-return { type = "page", meta = {}, html = "<!doctype html>index", subs = { posts = directories.blog } }
+return page()
+  :withHtml(p():sub(txt("Hello")))
+  :withSubs(pages)

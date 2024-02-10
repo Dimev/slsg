@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use mlua::{Lua, Table};
 
@@ -26,44 +26,49 @@ pub(crate) enum SiteNode<'lua> {
     },
 }
 
+// TODO: make this a lua uservalue instead, with the option to convert to/from?
 impl<'lua> SiteNode<'lua> {
-    pub(crate) fn render(&self, path: PathBuf) {
-        match self {
-            SiteNode::Asset { path: asset_path } => {
-                // write out file, directory should already exist
-                fs::copy(asset_path, path).expect("Failed to copy file");
-            }
-            SiteNode::Page { html, subs, .. } => {
-                // create the directory
-                fs::create_dir_all(&path).expect("Failed to make directory!");
-
-                // write out the rest
-                for (key, value) in subs.iter() {
-                    value.render(path.join(key));
-                }
-
-                // write out the page
-                fs::write(path.join("index.html"), html).expect("Failed to write file");
-            }
-            SiteNode::Dir { subs } => {
-                // create the directory
-                fs::create_dir_all(&path).expect("Failed to make directory!");
-
-                // write out all files
-                for (key, value) in subs.iter() {
-                    value.render(path.join(key));
-                }
-            }
-            SiteNode::Table { .. } => {}
-        }
-    }
-
     fn to_table(self, lua: &Lua) -> Table<'_> {
         let table = lua.create_table().expect("Failed to create table!");
 
         match self {
             Self::Asset { path } => {
+                // we are an asset
                 table.set("type", "asset").expect("Failed to intert table");
+
+                // add file name, stem and extention
+                table
+                    .set(
+                        "extention",
+                        path.extension().map(|x| {
+                            x.to_os_string()
+                                .into_string()
+                                .expect("Failed to convert OsString to string!")
+                        }),
+                    )
+                    .expect("Failed to intert table");
+                table
+                    .set(
+                        "stem",
+                        path.file_stem().map(|x| {
+                            x.to_os_string()
+                                .into_string()
+                                .expect("Failed to convert OsString to string!")
+                        }),
+                    )
+                    .expect("Failed to intert table");
+                table
+                    .set(
+                        "name",
+                        path.file_name().map(|x| {
+                            x.to_os_string()
+                                .into_string()
+                                .expect("Failed to convert OsString to string!")
+                        }),
+                    )
+                    .expect("Failed to intert table");
+
+                // asset path
                 table
                     .set(
                         "path",
@@ -72,6 +77,9 @@ impl<'lua> SiteNode<'lua> {
                             .expect("Failed to convert OsString to string!"),
                     )
                     .expect("Failed to intert table");
+
+                // file loading functions
+                // TODO
             }
             Self::Page { html, meta, subs } => {
                 table.set("type", "page").expect("Failed to intert table");
@@ -170,8 +178,14 @@ impl<'lua> SiteNode<'lua> {
     }
 }
 
+impl FileNode {
+    pub(crate) fn evaluate(self, lua: &Lua) -> SiteNode {
+        render_tree(lua, self)
+    }
+}
+
 /// Build the tree
-pub(crate) fn render_tree(lua: &Lua, filetree: FileNode) -> SiteNode {
+fn render_tree(lua: &Lua, filetree: FileNode) -> SiteNode {
     match filetree {
         FileNode::Lua { code, subs } => {
             // collect siblings
@@ -182,9 +196,9 @@ pub(crate) fn render_tree(lua: &Lua, filetree: FileNode) -> SiteNode {
             // load into a table
             let subs = lua.create_table_from(subs).expect("Failed to make table");
 
-            // set in globals
+            // set the colocated files in the globals
             lua.globals()
-                .set("directories", subs)
+                .set("colocatedFiles", subs)
                 .expect("Failed to set ");
 
             // run script

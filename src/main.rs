@@ -17,19 +17,20 @@
 // static assets can be loaded with static
 
 mod filetree;
+mod sitefiles;
 mod sitetree;
+mod assets;
 
 use std::{
     env::{current_dir, set_current_dir},
-    fs::read_to_string,
+    fs::{self, read_to_string},
     path::PathBuf,
 };
 
 use clap::Parser;
 use mlua::Lua;
 
-use crate::{filetree::load_tree, sitetree::render_tree};
-
+use crate::filetree::FileNode;
 #[derive(Parser)]
 struct Args {
     /// directory to the site.lua file of the site to build, current working directory by default
@@ -70,21 +71,24 @@ fn main() {
     set_current_dir(path.parent().unwrap()).expect("Failed to change working directory!");
 
     // load the tree
-    let filetree = load_tree("content/").expect("Failed to load the file tree!");
-
-    println!("{:?}", filetree);
+    let filetree = FileNode::load("content/").expect("Failed to load the file tree!");
 
     // load and convert the sass style
 
     // start lua
     let lua = Lua::new();
 
-    // render the tree
-    let tree = render_tree(&lua, filetree);
-    println!("{:?}", tree);
+    // load the library
+    lua.load(include_str!("lib.lua"))
+        .exec()
+        .expect("Failed to load stdlib!");
 
-    // convert it to files
-    tree.render(PathBuf::from("public/"));
+    // render the tree
+    let tree = filetree.evaluate(&lua);
+
+        // convert it to files
+    fs::remove_dir_all("public/").expect("Failed to remove public dir!");
+    tree.write_to_files(PathBuf::from("public/"));
 
     // write out the files
 }

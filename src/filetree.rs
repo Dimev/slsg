@@ -20,8 +20,15 @@ pub(crate) enum FileNode {
     Dir { subs: HashMap<String, FileNode> },
 }
 
+impl FileNode {
+    /// Try to load all files into the tree
+    pub(crate) fn load<P: AsRef<Path>>(root: P) -> Option<FileNode> {
+        load_tree(root)
+    } 
+}
+
 // load the file tree
-pub(crate) fn load_tree<P: AsRef<Path>>(root: P) -> Option<FileNode> {
+fn load_tree<P: AsRef<Path>>(root: P) -> Option<FileNode> {
     // find all the lua files
     let luafiles = read_dir(&root)
         .expect("Failed to read directory!")
