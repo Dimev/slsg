@@ -16,10 +16,10 @@
 // assets are NOT deduplicated, and are inserted in the page directory
 // static assets can be loaded with static
 
+mod assets;
 mod filetree;
 mod sitefiles;
 mod sitetree;
-mod assets;
 
 use std::{
     env::{current_dir, set_current_dir},
@@ -51,15 +51,15 @@ fn main() {
         .unwrap_or_else(|| {
             let dir = current_dir().expect("Could not run from the current working directory!");
 
-            // go up to find the dir containing the site.lua file
+            // go up to find the dir containing the site.toml file
             dir.ancestors()
-                .find(|x| x.join("site.lua").exists())
+                .find(|x| x.join("site.toml").exists())
                 .expect(
-                    "Could not find a site.lua file in this directory or any of it's ancestors!",
+                    "Could not find a site.toml file in this directory or any of it's ancestors!",
                 )
                 .to_path_buf()
         })
-        .join("site.lua");
+        .join("site.toml");
 
     // load it
     // config contains base url?
@@ -86,7 +86,7 @@ fn main() {
     // render the tree
     let tree = filetree.evaluate(&lua);
 
-        // convert it to files
+    // convert it to files
     fs::remove_dir_all("public/").expect("Failed to remove public dir!");
     tree.write_to_files(PathBuf::from("public/"));
 
