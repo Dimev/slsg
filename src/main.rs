@@ -37,7 +37,7 @@ fn main() -> Result<(), anyhow::Error> {
             Ok(dir
                 .ancestors()
                 .find(|x| x.join("site.toml").exists())
-                .ok_or_else(|| anyhow!("No site.toml found in the current directory ({:?})", dir))?
+                .ok_or_else(|| anyhow!("No site.toml found in the current directory or ancestors ({:?})", dir))?
                 .to_path_buf())
         })?
         .join("site.toml");
