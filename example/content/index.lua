@@ -1,9 +1,4 @@
-local pages = {}
-for key, value in pairs(colocatedFiles) do 
-  if value.type == "page" then 
-    pages[key] = value
-  end
-end
+print('Hello!')
 
 return page()
   :withHtml(p():sub(txt("Hello")))
