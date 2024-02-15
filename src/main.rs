@@ -16,17 +16,23 @@
 // assets are NOT deduplicated, and are inserted in the page directory
 // static assets can be loaded with static
 
+mod api;
 mod assets;
 mod filetree;
 mod sitefiles;
 mod sitetree;
 
 use std::{
+    collections::HashMap,
     env::{current_dir, set_current_dir},
     fs::{self, read_to_string},
     path::PathBuf,
 };
 
+use api::{
+    directory::Directory,
+    script::{self, Script},
+};
 use clap::Parser;
 use mlua::Lua;
 
@@ -42,7 +48,7 @@ struct Args {
     output: Option<PathBuf>,
 }
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     // path to load from
@@ -71,7 +77,7 @@ fn main() {
     set_current_dir(path.parent().unwrap()).expect("Failed to change working directory!");
 
     // load the tree
-    let filetree = FileNode::load("content/").expect("Failed to load the file tree!");
+    // let filetree = FileNode::load("content/").expect("Failed to load the file tree!");
 
     // load and convert the sass style
 
@@ -83,12 +89,33 @@ fn main() {
         .exec()
         .expect("Failed to load stdlib!");
 
+    // load the static files
+    let static_files = Directory::empty();
+
+    // load the styles
+    let styles = HashMap::new();
+
+    // load the root script
+    let script = Script::load(&"content/", &lua, static_files, styles)?;
+
+    // load the settings into the lua environment
+    // TODO
+
+    println!("{:?}", script); 
+    
+    // run the script
+    let page = script.run(&lua)?;
+
+    // store the tree
+    page.write_to_directory("public/")?;
+
     // render the tree
-    let tree = filetree.evaluate(&lua);
+    // let tree = filetree.evaluate(&lua);
 
     // convert it to files
-    fs::remove_dir_all("public/").expect("Failed to remove public dir!");
-    tree.write_to_files(PathBuf::from("public/"));
+    // fs::remove_dir_all("public/").expect("Failed to remove public dir!");
+    // tree.write_to_files(PathBuf::from("public/"));
 
     // write out the files
+    Ok(())
 }

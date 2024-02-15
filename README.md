@@ -30,9 +30,9 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `colocated`: `directory` for the colocated files, if this was an `index.lua` file, otherwise an empty directory
 - `name`: stem of the `*.lua` file, or directory name if `index.lua`
 - `static`: `directory` for the static files
-- `styles`: return table of files, for the style
-- `find(path)`: finds a file from the given path
-- `findStatic(path)`: find a static file from the given path
+- `styles`: return table of `file`s, for the style
+- `find(path)`: finds a `file` from the given path
+- `findStatic(path)`: find a static `file` from the given path
 
 `directory`:
 - `files`: table for all colocated files
