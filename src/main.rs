@@ -54,7 +54,9 @@ fn main() -> Result<(), anyhow::Error> {
     // load the config to the global scope
 
     // load the library
-    lua.load(include_str!("lib.lua")).exec()?;
+    lua.load(include_str!("lib.lua"))
+        .set_name("builtin://stdlib.lua")
+        .exec()?;
 
     // load the static files
     let static_files = Directory::empty();
