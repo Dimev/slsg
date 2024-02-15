@@ -65,7 +65,7 @@ fn main() -> Result<(), anyhow::Error> {
     let styles = HashMap::new();
 
     // load the root script
-    let script = Script::load(&"content/", &lua, static_files, styles)?;
+    let script = Script::load(&"site/", &lua, static_files, styles)?;
 
     // load the settings into the lua environment
     // TODO
