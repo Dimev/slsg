@@ -1,24 +1,19 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{fs, path::Path};
 
+use anyhow::anyhow;
 use clap::error::Result;
-use mlua::{AnyUserData, Function, Lua, UserData};
+use mlua::{AnyUserData, Function, Lua, Table, Value};
 
-use super::{directory::Directory, file::File, page::Page};
+use super::{directory::Directory, page::Page};
 
 /// Script to run
 #[derive(Clone, Debug)]
 pub(crate) struct Script<'lua> {
     /// script code
-    script: Function<'lua>,
+    pub(crate) script: Function<'lua>,
 
-    /// directories that are colocated for this script
-    colocated: Directory<'lua>,
-
-    /// static files
-    static_files: Directory<'lua>,
-
-    /// style files
-    styles: HashMap<String, File>,
+    /// name of the script
+    pub(crate) name: String,
 }
 
 impl<'lua> Script<'lua> {
@@ -26,62 +21,109 @@ impl<'lua> Script<'lua> {
     pub(crate) fn load<P: AsRef<Path>>(
         path: &P,
         lua: &'lua Lua, // TODO: do the static file and style as reference
-        static_files: Directory<'lua>,
-        styles: HashMap<String, File>,
+        static_files: &Directory<'lua>,
+        styles: &Table<'lua>,
     ) -> Result<Self, anyhow::Error> {
         // if this is a file, simply load it, rest is empty
         if path.as_ref().is_file() {
             let script = fs::read_to_string(path)?;
 
+            // set load the environment script
+            let template = lua.create_table()?;
+
+            // colocated files is empty
+            template.set("colocated", lua.create_table()?)?;
+
+            // name of the file
+            let name = path
+                .as_ref()
+                .file_stem()
+                .ok_or_else(|| anyhow!("{:?} does not have a file stem", path.as_ref()))?
+                .to_str()
+                .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file stem", path.as_ref()))?
+                .to_owned();
+
+            template.set("name", name.as_str())?;
+
+            // static and styles
+            template.set("static", static_files.table.clone())?;
+            template.set("styles", styles.clone())?;
+
+            // TODO: find and findStatic
+
+            // make the environment
+            let env = clone_table(lua, lua.globals())?;
+            env.set("template", template)?;
+
             // load script to lua
             let script = lua
                 .load(script)
+                .set_environment(env)
                 .set_name(path.as_ref().to_string_lossy().to_owned())
                 .into_function()?;
 
-            Ok(Self {
-                script,
-                colocated: Directory::empty(),
-                static_files,
-                styles,
-            })
+            // went ok
+            Ok(Self { script, name })
         } else {
             // find and read the index.lua
             let script = fs::read_to_string(path.as_ref().join("index.lua"))?;
 
+            // read the directory
+            let colocated = Directory::load(path, lua, static_files, styles)?;
+
+            // set load the environment script
+            let template = lua.create_table()?;
+
+            // colocated files is the directory we loaded
+            template.set("colocated", colocated.table)?;
+
+            // name of the file
+            let name = path
+                .as_ref()
+                .file_name()
+                .ok_or_else(|| anyhow!("{:?} does not have a file name", path.as_ref()))?
+                .to_str()
+                .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file name", path.as_ref()))?
+                .to_owned();
+
+            template.set("name", name.as_str())?;
+
+            // static and styles
+            template.set("static", static_files.table.clone())?;
+            template.set("styles", styles.clone())?;
+
+            // TODO: find and findStatic
+
+            // make the environment
+            let env = clone_table(lua, lua.globals())?;
+            env.set("template", template)?;
+
             // load script to lua
             let script = lua
                 .load(script)
+                .set_environment(env)
                 .set_name(path.as_ref().join("index.lua").to_string_lossy().to_owned())
                 .into_function()?;
 
-            // read the directory
-            let colocated = Directory::load(path, lua, static_files.clone(), styles.clone())?;
-
-            Ok(Self {
-                script,
-                colocated,
-                static_files,
-                styles,
-            })
+            Ok(Self { script, name })
         }
     }
 
     /// run the script, and get the resulting page
-    pub(crate) fn run(&self, lua: &'lua Lua) -> Result<Page, anyhow::Error> {
-        // run with context
-        lua.scope(|scope| {
-            // make ourselves
-            let template = scope.create_nonstatic_userdata(self)?;
-
-            // insert ourselves into the template slot
-            lua.globals().set("template", template)?;
-
-            // run the script, get a page out if possible
-            self.script.call::<(), AnyUserData>(())?.take::<Page>()
-        })
-        .map_err(|x| x.into())
+    pub(crate) fn run(&self) -> Result<Page, anyhow::Error> {
+        // run the script, get a page out if possible
+        self.script
+            .call::<(), AnyUserData>(())?
+            .take::<Page>()
+            .map_err(|x| x.into())
     }
 }
 
-impl<'a> UserData for &Script<'a> {}
+fn clone_table<'lua>(lua: &'lua Lua, table: Table<'lua>) -> Result<Table<'lua>, anyhow::Error> {
+    let pairs = table.pairs::<Value, Value>().map(|x| {
+        let (k, v) = x.unwrap();
+        (k, v)
+    });
+
+    lua.create_table_from(pairs).map_err(|x| x.into())
+}

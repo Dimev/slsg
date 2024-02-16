@@ -71,36 +71,3 @@ div = mkEl("div")
 section = mkEl("section")
 article = mkEl("article")
 main = mkEl("main")
-
--- make a page
-function page() 
-	local pageInfo = {
-		type = "page",
-		meta = {},
-		html = "<!DOCTYPE html>",
-		subs = {},
-	}
-
-	function pageInfo:withHtml(node) 
-		self.html = self.html .. node:render()
-		return self
-	end
-
-	function pageInfo:withMeta(table)
-		-- concat 
-		for key, value in pairs(table) do 
-			self.meta[key] = value
-		end
-		return self
-	end
-
-	function pageInfo:withSubs(directories) 
-		-- concat
-		for key, value in pairs(directories) do 
-			self.subs[key] = value
-		end
-		return self
-	end
-
-	return pageInfo
-end

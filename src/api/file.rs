@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use mlua::UserData;
+
 /// File for the file tree
 #[derive(Clone, Debug)]
 pub(crate) enum File {
@@ -25,4 +27,8 @@ impl File {
         }
         .map_err(|x| x.into())
     }
+}
+
+impl UserData for File {
+    // TODO: the file loading funcs    
 }

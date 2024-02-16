@@ -1,10 +1,11 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use mlua::{FromLuaMulti, UserData};
+use mlua::UserData;
 
 use super::file::File;
 
 /// Generated page
+#[derive(Debug)]
 pub(crate) struct Page {
     /// files to add
     files: HashMap<String, File>,

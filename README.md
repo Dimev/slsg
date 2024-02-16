@@ -85,7 +85,7 @@ TODO
 
 # Config
 the `site.toml` file can be used for configuring.
-it is loaded into a table, and can be accessed via the `config` global 
+everything under the `[config]` section is loaded into the `config` global
 
 # Organization TODO:
 - create separate rust modules for these types

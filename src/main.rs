@@ -1,7 +1,6 @@
 mod api;
 
 use std::{
-    collections::HashMap,
     env::{current_dir, set_current_dir},
     fs::read_to_string,
     path::PathBuf,
@@ -11,6 +10,8 @@ use anyhow::anyhow;
 use api::{directory::Directory, script::Script};
 use clap::Parser;
 use mlua::Lua;
+
+use crate::api::globals::load_globals;
 
 #[derive(Parser)]
 struct Args {
@@ -37,7 +38,12 @@ fn main() -> Result<(), anyhow::Error> {
             Ok(dir
                 .ancestors()
                 .find(|x| x.join("site.toml").exists())
-                .ok_or_else(|| anyhow!("No site.toml found in the current directory or ancestors ({:?})", dir))?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "No site.toml found in the current directory or ancestors ({:?})",
+                        dir
+                    )
+                })?
                 .to_path_buf())
         })?
         .join("site.toml");
@@ -53,26 +59,28 @@ fn main() -> Result<(), anyhow::Error> {
 
     // load the config to the global scope
 
-    // load the library
-    lua.load(include_str!("lib.lua"))
-        .set_name("builtin://stdlib.lua")
-        .exec()?;
-
     // load the static files
-    let static_files = Directory::empty();
+    let static_files = Directory::load_static("static/", &lua)?;
 
     // load the styles
-    let styles = HashMap::new();
-
-    // load the root script
-    // TODO: make this load directly into lua tables
-    let script = Script::load(&"site/", &lua, static_files, styles)?;
+    // TODO: separate file for this
+    let styles = lua.create_table()?;
 
     // load the settings into the lua environment
     // TODO
 
+    // load the globals
+    load_globals(&lua)?;
+
+    // load the root script
+    // TODO: make this load directly into lua tables
+    let script = Script::load(&"site/", &lua, &static_files, &styles)?;
+
     // run the script
-    let page = script.run(&lua)?;
+    let page = script.run()?;
+
+    // print the pages
+    println!("{:?}", page);
 
     // store the tree
     page.write_to_directory("public/")?;

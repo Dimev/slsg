@@ -1,31 +1,18 @@
--- load the posts
-local posts = {}
-
-for key, value in pairs(colocatedFiles) do 
-  -- if it's a markdown post, keep it
-  if value.extention == "md" then 
-    -- load it
-
-    -- make the page
-    local post = page():withHtml(p():sub(txt("Hello")))
-
-    -- add it to the posts
-    posts[value.stem] = post
-  end
+print("=== from blog ===")
+print("-- files --")
+for key, val in pairs(template.colocated.files) do 
+  print(key, val)
 end
 
--- make the page
-local html = p():attrs({ class = "main" }):sub(
-  txt("Hello world!"),
-    div():sub(
-      txt("This is a div!"),
-      txt("With some text in it!")
-    )
-  )
+print("-- directories --")
+for key, val in pairs(template.colocated.directories) do 
+  print(key, val)
+end
 
--- return the rendered page
+print("-- scripts --")
+for key, val in pairs(template.colocated.scripts) do 
+  print(key, val)
+  val()
+end
+
 return page()
-  :withMeta({ x = 1 })
-  :withMeta({ y = 1})
-  :withHtml(html)
-  :withSubs(posts)

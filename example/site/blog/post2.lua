@@ -1,2 +1,3 @@
+print("=== From post2 ===")
+
 return page()
-	:withHtml(p():sub(txt("Sus mogus")))
