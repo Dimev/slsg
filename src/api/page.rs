@@ -29,6 +29,11 @@ impl Page {
 
     /// Render the page to a directory
     pub(crate) fn write_to_directory<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
+        // remove the previous contents
+        if path.as_ref().exists() {
+            fs::remove_dir_all(&path)?;
+        }
+
         // create the directory if needed
         fs::create_dir_all(&path)?;
 
