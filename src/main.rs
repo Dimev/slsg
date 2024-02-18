@@ -79,11 +79,21 @@ fn main() -> Result<(), anyhow::Error> {
     // run the script
     let page = script.run()?;
 
-    // print the pages
-    println!("{:?}", page);
+    // get the warnings
+    let warnings: Vec<String> = lua.globals().get("debugWarnings")?;
+
+    // print the warnings
+    for warning in warnings.into_iter() {
+        println!("warning: {}", warning);
+    }
 
     // store the tree
     page.write_to_directory("public/")?;
+
+    // print the pages
+    for (path, file) in page.to_hashmap("") {
+        println!("{:?} -> {:?}", path, file);
+    }
 
     Ok(())
 }

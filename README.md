@@ -62,6 +62,9 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `withHtml(html)`: adds html to the page. If no html is used, no index.html file is generated for the directory
 - `withPage(page)`: adds a subpage to the page
 
+# Other functions
+- `warn`: Accepts a single string, warnings will be shown in the terminal and error page
+
 # Rendering HTML
 Besides including these page and file searching functions, 
 there's also a small library for rendering html
@@ -87,11 +90,8 @@ TODO
 the `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global
 
-# Organization TODO:
-- create separate rust modules for these types
-
 # Current TODO:
-- rewrite the entire thing
+- add warning system, via a global table
 - don't load package lua stdlib, use our own require instead
 - code highlighting
 - subcommands for new, build, dev

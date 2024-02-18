@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use anyhow::anyhow;
 use clap::error::Result;
-use mlua::{AnyUserData, Function, Lua, Table, Value};
+use mlua::{Function, Lua, Table, Value};
 
 use super::{directory::Directory, page::Page};
 
@@ -112,10 +112,7 @@ impl<'lua> Script<'lua> {
     /// run the script, and get the resulting page
     pub(crate) fn run(&self) -> Result<Page, anyhow::Error> {
         // run the script, get a page out if possible
-        self.script
-            .call::<(), AnyUserData>(())?
-            .take::<Page>()
-            .map_err(|x| x.into())
+        self.script.call::<(), Page>(()).map_err(|x| x.into())
     }
 }
 

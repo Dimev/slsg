@@ -16,3 +16,4 @@ for key, val in pairs(template.colocated.scripts) do
 end
 
 return page()
+  :withHtml("pronto sbinotto")
