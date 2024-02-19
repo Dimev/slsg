@@ -26,30 +26,32 @@ impl<'lua> Directory<'lua> {
         // empty!
         let files = lua.create_table()?;
 
-        // load all files if needed
-        for item in fs::read_dir(&path)? {
-            // read
-            let item = item?;
+        // only fill if the directory exists
+        if path.as_ref().exists() {
+            // load all files if needed
+            for item in fs::read_dir(&path)? {
+                // read
+                let item = item?;
 
-            // normal file
-            if item.file_type()?.is_file() {
-                let name = item
-                    .file_name()
-                    .into_string()
-                    .map_err(|_| anyhow!("{:?} does not have a utf-8 file name", path.as_ref()))?;
+                // normal file
+                if item.file_type()?.is_file() {
+                    let name = item.file_name().into_string().map_err(|_| {
+                        anyhow!("{:?} does not have a utf-8 file name", path.as_ref())
+                    })?;
 
-                files.set(name, File::from_path(&item.path()))?;
-            }
-            // normal directory
-            else {
-                let dir = Directory::load_static(&item.path(), lua)?;
-                let name = item
-                    .file_name()
-                    .into_string()
-                    .map_err(|x| anyhow!("{:?} can't be converted to utf-8!", x))?;
+                    files.set(name, File::from_path(&item.path()))?;
+                }
+                // normal directory
+                else {
+                    let dir = Directory::load_static(&item.path(), lua)?;
+                    let name = item
+                        .file_name()
+                        .into_string()
+                        .map_err(|x| anyhow!("{:?} can't be converted to utf-8!", x))?;
 
-                // insert it
-                directories.set(name, dir.table)?;
+                    // insert it
+                    directories.set(name, dir.table)?;
+                }
             }
         }
 
