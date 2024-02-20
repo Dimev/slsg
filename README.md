@@ -31,13 +31,12 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `name`: stem of the `*.lua` file, or directory name if `index.lua`
 - `static`: `directory` for the static files
 - `styles`: return table of `file`s, for the style
-- `find(path)`: finds a `file` from the given path
-- `findStatic(path)`: find a static `file` from the given path
 
 `directory`:
 - `files`: table for all colocated files
 - `directories`: table for all colocated directories
 - `scripts`: table for all colocated scripts (`*.lua`, or `./index.lua`)
+- `find(path)`: finds a `file` from the given path
 
 `file`:
 - can be created with the `file(text)` function
@@ -46,9 +45,6 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `parseYaml()`:  parses the file as yaml, into a table
 - `parseToml()`: parses the file as toml, into a table
 - `parseTxt()`: loads the file as a string
-- `name`: full name
-- `stem`: file name without the extention
-- `extention`: extention only, if any, excluding the leading `.`
 
 `markdown`:
 - `front`: the front matter, parsed as toml
@@ -64,6 +60,9 @@ They also get access to the `config` table, which is loaded from `site.toml`
 
 # Other functions
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page
+- `escapeHtml`: escapes the given html string TODO
+- `unescapeHtml`: unescapes the given html string TODO
+- `parseMd`: parses the given string as markdown TODO
 
 # Rendering HTML
 Besides including these page and file searching functions, 

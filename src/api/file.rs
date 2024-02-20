@@ -3,7 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mlua::{AnyUserData, FromLua, Lua, UserData, Value};
+use mlua::{AnyUserData, FromLua, Lua, UserData, UserDataMethods, Value};
+
+use super::markdown::Markdown;
 
 /// File for the file tree
 #[derive(Clone, Debug)]
@@ -16,21 +18,33 @@ pub(crate) enum File {
 }
 
 impl File {
-    pub fn from_path<P: AsRef<Path>>(path: &P) -> Self {
+    pub(crate) fn from_path<P: AsRef<Path>>(path: &P) -> Self {
         Self::RelPath(path.as_ref().into())
     }
 
-    pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
+    pub(crate) fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), anyhow::Error> {
         match self {
             Self::RelPath(p) => fs::copy(p, path).map(|_| ()),
             Self::New(content) => fs::write(path, content).map(|_| ()),
         }
         .map_err(|x| x.into())
     }
+
+    fn get_string(&self) -> Result<String, mlua::Error> {
+        match self {
+            Self::RelPath(path) => fs::read_to_string(path).map_err(|x| mlua::Error::external(x)),
+            Self::New(str) => Ok(str.clone()),
+        }
+    }
 }
 
 impl UserData for File {
-    // TODO: the file loading funcs
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("parseMd", |_, this, ()| {
+            Markdown::from_str(&this.get_string()?).map_err(|x| mlua::Error::external(x))
+        });
+        methods.add_method("parseTxt", |_, this, ()| this.get_string());
+    }
 }
 
 impl<'lua> FromLua<'lua> for File {
