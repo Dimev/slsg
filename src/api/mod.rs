@@ -4,3 +4,4 @@ pub(crate) mod file;
 pub(crate) mod markdown;
 pub(crate) mod page;
 pub(crate) mod globals;
+pub(crate) mod styles;

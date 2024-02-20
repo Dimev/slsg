@@ -136,3 +136,8 @@ div = mkEl("div")
 section = mkEl("section")
 article = mkEl("article")
 main = mkEl("main")
+
+-- anchor
+a = function(href)
+	return el("a"):attrs({ href = href })
+end

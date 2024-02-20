@@ -8,10 +8,10 @@ use anyhow::anyhow;
 
 use mlua::Lua;
 
-use crate::api::directory::Directory;
 use crate::api::globals::load_globals;
 use crate::api::page::Page;
 use crate::api::script::Script;
+use crate::api::{directory::Directory, styles::load_styles};
 
 /// Entire generated site
 pub(crate) struct Site {
@@ -65,8 +65,7 @@ impl Site {
         let static_files = Directory::load_static(path.join("static/"), &lua)?;
 
         // load the styles
-        // TODO: separate file for this
-        let styles = lua.create_table()?;
+        let styles = load_styles(&lua, path.join("styles/"))?;
 
         // load the settings into the lua environment
         // TODO

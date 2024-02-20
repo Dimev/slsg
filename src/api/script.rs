@@ -46,8 +46,8 @@ impl<'lua> Script<'lua> {
             template.set("name", name.as_str())?;
 
             // static and styles
-            template.set("static", static_files.table.clone())?;
-            template.set("styles", styles.clone())?;
+            template.set("static", &static_files.table)?;
+            template.set("styles", styles)?;
 
             // TODO: find and findStatic
 

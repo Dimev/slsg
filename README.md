@@ -45,6 +45,9 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `parseYaml()`:  parses the file as yaml, into a table
 - `parseToml()`: parses the file as toml, into a table
 - `parseTxt()`: loads the file as a string
+- `stem`: file stem if any, or nil
+- `name`: file name if any, or nil
+- `extention`: file extention if any, or nil
 
 `markdown`:
 - `front`: the front matter, parsed as toml
