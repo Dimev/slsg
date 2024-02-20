@@ -2,7 +2,7 @@ mod api;
 mod cmd;
 
 use clap::Parser;
-use cmd::generate::Site;
+use cmd::{generate::Site, serve::serve};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -43,7 +43,9 @@ fn main() -> Result<(), anyhow::Error> {
 
             site.write_to_directory(output)?;
         }
-        Args::Dev { dir } => {}
+        Args::Dev { dir } => {
+            serve(dir)?;
+        }
         Args::Cookbook {} => {}
     }
 

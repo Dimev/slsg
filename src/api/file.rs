@@ -33,9 +33,9 @@ impl File {
     }
 
     /// Read the file to a string
-    fn get_string(&self) -> Result<String, mlua::Error> {
+    pub(crate) fn get_string(&self) -> Result<String, anyhow::Error> {
         match self {
-            Self::RelPath(path) => fs::read_to_string(path).map_err(|x| mlua::Error::external(x)),
+            Self::RelPath(path) => fs::read_to_string(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.clone()),
         }
     }
@@ -76,9 +76,12 @@ impl UserData for File {
 
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("parseMd", |_, this, ()| {
-            Markdown::from_str(&this.get_string()?).map_err(|x| mlua::Error::external(x))
+            Markdown::from_str(&this.get_string().map_err(|x| mlua::Error::external(x))?)
+                .map_err(|x| mlua::Error::external(x))
         });
-        methods.add_method("parseTxt", |_, this, ()| this.get_string());
+        methods.add_method("parseTxt", |_, this, ()| {
+            this.get_string().map_err(|x| mlua::Error::external(x))
+        });
     }
 }
 
