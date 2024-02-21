@@ -40,6 +40,14 @@ impl File {
         }
     }
 
+    /// Read the file to bytes
+    pub(crate) fn get_bytes(&self) -> Result<Vec<u8>, anyhow::Error> {
+        match self {
+            Self::RelPath(path) => fs::read(path).map_err(|x| x.into()),
+            Self::New(str) => Ok(str.as_bytes().to_owned()),
+        }
+    }
+
     /// Get the path used, if any
     fn get_path(&self) -> Option<&Path> {
         match self {
