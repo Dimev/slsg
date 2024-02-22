@@ -3,18 +3,23 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
+    time::Duration,
 };
 
-use notify::Watcher;
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
 use super::generate::Site;
+
+const RW_ERR: &str = "Cronch: lock was poissoned";
+const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
+const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
 /// Serve the files
 pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
     // load the site
-    let mut warnings = Vec::new();
-    let mut errors = String::new();
+    let warnings = Arc::new(RwLock::new(Vec::new()));
+    let errors = Arc::new(RwLock::new(String::new()));
     let site = Arc::new(RwLock::new(match Site::generate(path.clone()) {
         Ok(res) => {
             // throw all warnings
@@ -22,29 +27,37 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
                 println!("[WARN] {}", warning);
             }
 
-            warnings = res.warnings;
+            // give the warnings to the page
+            let mut warnings = warnings.write().expect(RW_ERR);
+            *warnings = res.warnings;
 
             res.page.to_hashmap("/")
         }
         Err(e) => {
             // failed to generate, so thow the error
             println!("[ERR] {:?}", e);
+
+            // give the errors to the page
+            let mut errors = errors.write().expect(RW_ERR);
+            *errors = format!("{:?}", e);
+
             HashMap::new()
         }
     }));
 
     // stream to notify when an update happens
-    let mut update_notify: Option<TcpStream> = None;
+    let update_notify = Arc::new(Mutex::new(None as Option<TcpStream>));
 
     // update the site if any file changed TODO
     let site_cloned = site.clone();
     let path_cloned = path.clone();
-    let mut watcher = notify::recommended_watcher(move |res| match res {
+    let update_notify_cloned = update_notify.clone();
+    let mut debouncer = new_debouncer(Duration::from_millis(500), move |res| match res {
         Ok(_) => {
             println!("Files changed, regenerating site...");
 
             // regenerate site
-            let mut site = site_cloned.write().expect("Cronch: rwlock was poissoned");
+            let mut site = site_cloned.write().expect(RW_ERR);
             *site = match Site::generate(path_cloned.clone()) {
                 Ok(res) => {
                     // throw all warnings
@@ -52,16 +65,32 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
                         println!("[WARN] {}", warning);
                     }
 
-                    // TODO warnings = res.warnings;
+                    // give the warnings to the page
+                    let mut warnings = warnings.write().expect(RW_ERR);
+                    *warnings = res.warnings;
 
                     res.page.to_hashmap("/")
                 }
                 Err(e) => {
                     // failed to generate, so thow the error
                     println!("[ERR] {:?}", e);
+
+                    // give the errors to the page
+                    let mut errors = errors.write().expect(RW_ERR);
+                    *errors = format!("{:?}", e);
+
                     HashMap::new()
                 }
             };
+
+            // notify the upate
+            let mut stream = update_notify_cloned.lock().expect(RW_ERR);
+            if let Some(s) = stream.as_mut() {
+                match s.write_all(b"data: update!\n\n").and_then(|_| s.flush()) {
+                    Ok(()) => println!("Notified site of update"),
+                    Err(e) => println!("Could not send update notification to site: {:?}", e),
+                }
+            }
 
             println!("... Done!")
         }
@@ -70,14 +99,19 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
     // watch the current dir
     if let Some(path) = &path {
-        watcher.watch(path, notify::RecursiveMode::Recursive)?;
+        debouncer.watcher().watch(path, RecursiveMode::Recursive)?;
     } else {
-        watcher.watch(Path::new("."), notify::RecursiveMode::Recursive)?;
+        debouncer
+            .watcher()
+            .watch(Path::new("."), RecursiveMode::Recursive)?;
     }
 
     // listen to incoming requests
+    // TODO: use hyper instead?
     let listener = TcpListener::bind("127.0.0.1:1111")?;
     println!("listening on http://127.0.0.1:1111");
+
+    // TODO: in this loop, don't crash if things go wrong (move to sep function?)
 
     for stream in listener.incoming() {
         let mut stream = stream?;
@@ -91,17 +125,35 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
             .trim();
 
         // try and get the file
-        let (content, status) = if let Some(file) = site.read().expect("Cronch: rwlock was poissoned").get(&PathBuf::from(file_path)) {
+        let (content, status) = if let Some(file) = site
+            .read()
+            .expect("Cronch: rwlock was poissoned")
+            .get(&PathBuf::from(file_path))
+        {
             // get the file content
             (file.get_bytes()?, "200 OK")
         }
         // try to see if this was an index.html file
-        else if let Some(file) = site.read().expect("Cronch: rwlock was poissoned").get(&PathBuf::from(file_path).join("index.html")) {
+        else if let Some(file) = site
+            .read()
+            .expect("Cronch: rwlock was poissoned")
+            .get(&PathBuf::from(file_path).join("index.html"))
+        {
             (file.get_bytes()?, "200 OK")
         }
         // if it's the update notifier, set the update stream
-        else if file_path == "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs" {
-            println!("TODO");
+        else if file_path == VERY_LONG_PATH {
+            // send the response
+            stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
+            )?;
+            stream.flush()?;
+
+            // set the event stream, as we have one now
+            let mut notifier = update_notify.lock().expect(RW_ERR);
+            *notifier = Some(stream);
+
+            // don't need to send more
             continue;
         }
         // see if we can get the 404 file
@@ -113,17 +165,20 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
         };
 
         // send the page back
-        let length = content.len();
+        let length = content.len() + UPDATE_NOTIFY_SCRIPT.len();
 
         // TODO: for html files, append the auto-update script
         // TODO: for html files, append the errors/warnings page
         // TODO: mime type
 
         // TODO: cram content type in here somewhere?
-        let response = format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\n\r\n");
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n\r\n"
+        );
 
         stream.write_all(response.as_bytes())?;
         stream.write_all(&content)?;
+        stream.write_all(UPDATE_NOTIFY_SCRIPT.as_bytes())?;
     }
 
     Ok(())

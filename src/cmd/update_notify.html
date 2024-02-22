@@ -1,0 +1,6 @@
+<!-- YASSG Update notifier, won't be included in final build -->
+<script>
+	"use strict";
+	const src = new EventSource("/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs");
+	src.onmessage = () => location.reload();
+</script>
