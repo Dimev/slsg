@@ -27,6 +27,12 @@ enum Args {
 
     /// List example scripts
     Cookbook {},
+
+    /// Create a new site
+    New {},
+
+    /// Init a site in the current directory
+    Init {},
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -46,7 +52,9 @@ fn main() -> Result<(), anyhow::Error> {
         Args::Dev { dir } => {
             serve(dir)?;
         }
-        Args::Cookbook {} => {}
+        Args::Cookbook {} => todo!(),
+        Args::New {} => todo!(),
+        Args::Init {} => todo!(),
     }
 
     Ok(())

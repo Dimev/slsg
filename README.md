@@ -7,12 +7,14 @@ Yet another static site generator
 
 # How to use it
 `yassg new [name]` to initialize a new project. This will create a directory with that name, 
-a `site.toml` file, the content directory, style, static and lib directory (TODO)
+a `site.toml` file, the content directory, style, static and lib directory
 
-content is for the site, lib is for lua scripts, style is for sass stylesheets, 
-static is for statically accessible files 
+`yassg init` initializes the current directory as a new site, if it's empty
 
-The completed website is output to `public/`
+`site/` is for the site, `lib/` is for lua scripts, `styles/` is for sass stylesheets, 
+`static/` is for statically accessible files
+
+The completed website is output to `public/`, or the folder specified by `-o` or `--output`
 
 `yassg build` builds the site by looking at the first found `site.toml` file in the current or any ancestor directories
 
@@ -93,9 +95,14 @@ the `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global
 
 # Current TODO:
-- add warning system, via a global table
+- use crossterm for colored text in terminal
+- clippy
 - don't load package lua stdlib, use our own require instead
 - code highlighting
-- subcommands for new, build, dev
-- dev server
+- subcommands for new, build, dev, cookbook
+- parsing of the document types
+- markdown
+- (bib)tex parsing
+- finish dev server (mime types, 404 page)
+- config (404 page, minify settings)
 - docs

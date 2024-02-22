@@ -46,7 +46,7 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
     }));
 
     // stream to notify when an update happens
-    let update_notify = Arc::new(Mutex::new(None as Option<TcpStream>));
+    let update_notify = Arc::new(Mutex::new(Vec::<TcpStream>::new()));
 
     // update the site if any file changed TODO
     let site_cloned = site.clone();
@@ -85,12 +85,12 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
             // notify the upate
             let mut stream = update_notify_cloned.lock().expect(RW_ERR);
-            if let Some(s) = stream.as_mut() {
-                match s.write_all(b"data: update!\n\n").and_then(|_| s.flush()) {
-                    Ok(()) => println!("Notified site of update"),
-                    Err(e) => println!("Could not send update notification to site: {:?}", e),
-                }
-            }
+            stream.retain_mut(
+                |s| match s.write_all(b"data: update\n\n").and_then(|_| s.flush()) {
+                    Ok(()) => true,
+                    Err(_) => false,
+                },
+            );
 
             println!("... Done!")
         }
@@ -143,15 +143,18 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
         }
         // if it's the update notifier, set the update stream
         else if file_path == VERY_LONG_PATH {
+            // we don't want to wait
+            stream.set_nodelay(true)?;
+
             // send the response
             stream.write_all(
                 b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
             )?;
+            stream.write_all(b"data: initial\n\n")?;
             stream.flush()?;
 
             // set the event stream, as we have one now
-            let mut notifier = update_notify.lock().expect(RW_ERR);
-            *notifier = Some(stream);
+            update_notify.lock().expect(RW_ERR).push(stream);
 
             // don't need to send more
             continue;
