@@ -1,3 +1,3 @@
 
 return page()
-  :withHtml("ello")
+  :withHtml("<!DOCTYPE html>ello")
