@@ -1,10 +1,12 @@
 mod api;
 mod cmd;
 mod pretty_print;
-
 use clap::Parser;
 use cmd::{generate::Site, serve::serve};
+use pretty_print::print_error;
 use std::path::PathBuf;
+
+use crate::pretty_print::print_warning;
 
 #[derive(Parser)]
 enum Args {
@@ -46,15 +48,18 @@ fn main() -> Result<(), anyhow::Error> {
 
     // run the command
     match args {
-        Args::Build { dir, output } => {
-            let site = Site::generate(dir)?;
+        Args::Build { dir, output } => match Site::generate(dir) {
+            Ok(site) => {
+                // success, print any warnings
+                for warning in site.warnings.iter() {
+                    print_warning(&warning);
+                }
 
-            for warning in site.warnings.iter() {
-                printwarn!("{}", warning);
+                site.write_to_directory(output)?;
             }
-
-            site.write_to_directory(output)?;
-        }
+            // Fail, print the errors
+            Err(e) => print_error(&format!("{:?}", e)),
+        },
         Args::Dev { dir, address } => {
             serve(dir, address)?;
         }

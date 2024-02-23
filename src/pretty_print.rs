@@ -1,86 +1,86 @@
-/// Print a warning, in yellow
-#[macro_export]
-macro_rules! printwarn {
-    ($($arg:tt)*) => {{
-        use std::io::stdout;
-        use crossterm::execute;
-        use crossterm::style::{Print, SetForegroundColor, ResetColor, SetAttribute, Attribute, Color};
+use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
+use html_escape::encode_safe;
+use std::io::stdout;
 
-        let string = format!($($arg)*);
-        let mut stdout = stdout();
-        execute!(
-            stdout,
-            SetForegroundColor(Color::Yellow),
-            SetAttribute(Attribute::Bold),
-            Print("[WARN] ".to_string()),
-            Print(string),
-            ResetColor,
-            SetAttribute(Attribute::Reset),
-            Print("\n".to_string()),
-
-        ).expect("failed to warn");
-    }};
+/// Print a warning to the terminal
+pub(crate) fn print_warning(str: &str) {
+    let mut stdout = stdout();
+    crossterm::execute!(
+        stdout,
+        SetForegroundColor(Color::Yellow),
+        SetAttribute(Attribute::Bold),
+        Print("[WARN] ".to_string()),
+        Print(str),
+        ResetColor,
+        SetAttribute(Attribute::Reset),
+        Print("\n".to_string()),
+    )
+    .expect("failed to warn");
 }
 
-/// print an error, in red
-#[macro_export]
-macro_rules! printerr {
-    ($($arg:tt)*) => {{
-        use std::io::stdout;
-        use crossterm::execute;
-        use crossterm::style::{Print, SetForegroundColor, ResetColor, SetAttribute, Attribute, Color};
-
-        let string = format!($($arg)*);
-        let mut stdout = stdout();
-        execute!(
-            stdout,
-            SetForegroundColor(Color::Red),
-            SetAttribute(Attribute::Bold),
-            Print("[ERR] ".to_string()),
-            Print(string),
-            ResetColor,
-            SetAttribute(Attribute::Reset),
-            Print("\n".to_string()),
-
-        ).expect("failed to warn");
-    }};
+/// Print an error to the terminal
+pub(crate) fn print_error(str: &str) {
+    let mut stdout = stdout();
+    crossterm::execute!(
+        stdout,
+        SetForegroundColor(Color::Red),
+        SetAttribute(Attribute::Bold),
+        Print("[ERR] ".to_string()),
+        Print(str),
+        ResetColor,
+        SetAttribute(Attribute::Reset),
+        Print("\n".to_string()),
+    )
+    .expect("failed to warn");
 }
 
 /// generate html to preview the errors
 pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String>) -> String {
     // styles to use
-    let warn_line = "font: monospace; color: yellow";
-    let warn_div = "";
+    let warn_div = "font: 16px monospace; color: #F5871F";
+    let err_div = "font: 16px monospace; color: #C82829";
 
-    let center_div = "display: flex; justify-content: center; align-items: center";
+    let center_div =
+        "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: absolute; top: 0px; left: 0px";
+    let inner_div =
+        "border-left: #4271AE 5px solid; max-width: 60%; max-height: 80%; padding: 10px";
 
+    // format the warnings
     let warns: String = warnings
         .iter()
         .map(|x| {
-            let lines: String = x
-                .lines()
-                .map(|x| format!(r#"<p style="{warn_line}">{x}</p>"#))
-                .collect();
-
-            format!(r#"<div style={warn_div}>{lines}</div>"#)
+            let lines = encode_safe(x);
+            format!(r#"<pre style="{warn_div}">{lines}</pre>"#)
         })
         .collect();
 
+    // only add them if there are warnings
+    let warns = if warns.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<p style="font: 16px monospace">Warnings:</p>{warns}"#)
+    };
+
+    // format the errors
     let errs: String = errors
         .iter()
         .map(|x| {
-            let lines: String = x
-                .lines()
-                .map(|x| format!(r#"<p style="{warn_line}">{x}</p>"#))
-                .collect();
-
-            format!(r#"<div style={warn_div}>{lines}</div>"#)
+            let lines = encode_safe(x);
+            format!(r#"<pre style="{err_div}">{lines}</pre>"#)
         })
         .collect();
 
+    // only add them if there are errors
+    let errs = if errs.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<p style="font: 16px monospace">Errors:</p>{errs}"#)
+    };
+
+    // only output a string if there were errors or warnings
     if warnings.is_empty() && errors.is_empty() {
         String::new()
     } else {
-        format!(r#"<div style="{center_div}">{errs}{warns}</div>"#)
+        format!(r#"<div style="{center_div}"><div style="{inner_div}">{errs}{warns}</div></div>"#)
     }
 }

@@ -7,11 +7,9 @@ use std::{
     time::Duration,
 };
 
-use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
-
-use crate::{pretty_print::warning_and_error_html, printerr, printwarn};
-
 use super::generate::Site;
+use crate::pretty_print::{print_error, print_warning, warning_and_error_html};
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
 const RW_ERR: &str = "Cronch: lock was poissoned";
 const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
@@ -21,12 +19,12 @@ const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), anyhow::Error> {
     // load the site
     let warnings = Arc::new(RwLock::new(Vec::new()));
-    let errors = Arc::new(RwLock::new(String::new()));
+    let errors = Arc::new(RwLock::new(Vec::new()));
     let site = Arc::new(RwLock::new(match Site::generate(path.clone()) {
         Ok(res) => {
             // throw all warnings
             for warning in res.warnings.iter() {
-                printwarn!("{}", warning);
+                print_warning(&warning);
             }
 
             // give the warnings to the page
@@ -37,11 +35,10 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
         }
         Err(e) => {
             // failed to generate, so thow the error
-            printerr!("{:?}", e);
+            print_error(&format!("{:?}", e));
 
             // give the errors to the page
-            let mut errors = errors.write().expect(RW_ERR);
-            *errors = format!("{:?}", e);
+            errors.write().expect(RW_ERR).push(format!("{:?}", e));
 
             HashMap::new()
         }
@@ -66,7 +63,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                 Ok(res) => {
                     // throw all warnings
                     for warning in res.warnings.iter() {
-                        printwarn!("{}", warning);
+                        print_warning(&warning);
                     }
 
                     // give the warnings to the page
@@ -80,11 +77,13 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                 }
                 Err(e) => {
                     // failed to generate, so thow the error
-                    printerr!("{:?}", e);
+                    print_error(&format!("{:?}", e));
 
                     // give the errors to the page
-                    let mut errors = errors_cloned.write().expect(RW_ERR);
-                    *errors = format!("{:?}", e);
+                    errors_cloned
+                        .write()
+                        .expect(RW_ERR)
+                        .push(format!("{:?}", e));
 
                     // clear warnings
                     warnings_cloned.write().expect(RW_ERR).clear();
@@ -104,7 +103,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
             println!("... Done!")
         }
-        Err(e) => printerr!("While watching files: {:?}", e),
+        Err(e) => print_error(&format!("While watching files: {:?}", e)),
     })?;
 
     // watch the current dir
@@ -177,8 +176,16 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
             )
         };
 
+        // get the warnings and errors sheet
+        let warns_and_errors = {
+            let warnings = warnings.read().expect(RW_ERR);
+            let errors = errors.read().expect(RW_ERR);
+
+            warning_and_error_html(&warnings, &errors)
+        };
+
         // send the page back
-        let length = content.len() + UPDATE_NOTIFY_SCRIPT.len();
+        let length = content.len() + UPDATE_NOTIFY_SCRIPT.len() + warns_and_errors.len();
 
         // TODO: for html files, append the auto-update script
         // TODO: for html files, append the errors/warnings page
@@ -189,16 +196,11 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
             "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n\r\n"
         );
 
-        // get the warnings and errors sheet
-        let warns_and_errors = {
-            let warnings = warnings.read().expect(RW_ERR);
-            let errors = errors.read().expect(RW_ERR);
-
-            warning_and_error_html(&warnings, &vec![errors.clone()])
-        };
-
+        // write response and page content
         stream.write_all(response.as_bytes())?;
         stream.write_all(&content)?;
+
+        // write optional warnings and auto-update script
         stream.write_all(warns_and_errors.as_bytes())?;
         stream.write_all(UPDATE_NOTIFY_SCRIPT.as_bytes())?;
     }
