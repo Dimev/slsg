@@ -1,5 +1,5 @@
 use std::{
-    env::{current_dir},
+    env::current_dir,
     fs::read_to_string,
     path::{Path, PathBuf},
 };

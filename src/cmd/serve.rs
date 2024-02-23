@@ -9,6 +9,8 @@ use std::{
 
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
+use crate::{pretty_print::warning_and_error_html, printerr, printwarn};
+
 use super::generate::Site;
 
 const RW_ERR: &str = "Cronch: lock was poissoned";
@@ -16,7 +18,7 @@ const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-upd
 const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
 /// Serve the files
-pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
+pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), anyhow::Error> {
     // load the site
     let warnings = Arc::new(RwLock::new(Vec::new()));
     let errors = Arc::new(RwLock::new(String::new()));
@@ -24,7 +26,7 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
         Ok(res) => {
             // throw all warnings
             for warning in res.warnings.iter() {
-                println!("[WARN] {}", warning);
+                printwarn!("{}", warning);
             }
 
             // give the warnings to the page
@@ -35,7 +37,7 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
         }
         Err(e) => {
             // failed to generate, so thow the error
-            println!("[ERR] {:?}", e);
+            printerr!("{:?}", e);
 
             // give the errors to the page
             let mut errors = errors.write().expect(RW_ERR);
@@ -51,6 +53,8 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
     // update the site if any file changed TODO
     let site_cloned = site.clone();
     let path_cloned = path.clone();
+    let warnings_cloned = warnings.clone();
+    let errors_cloned = errors.clone();
     let update_notify_cloned = update_notify.clone();
     let mut debouncer = new_debouncer(Duration::from_millis(500), move |res| match res {
         Ok(_) => {
@@ -62,22 +66,28 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
                 Ok(res) => {
                     // throw all warnings
                     for warning in res.warnings.iter() {
-                        println!("[WARN] {}", warning);
+                        printwarn!("{}", warning);
                     }
 
                     // give the warnings to the page
-                    let mut warnings = warnings.write().expect(RW_ERR);
+                    let mut warnings = warnings_cloned.write().expect(RW_ERR);
                     *warnings = res.warnings;
+
+                    // clear errors
+                    errors_cloned.write().expect(RW_ERR).clear();
 
                     res.page.to_hashmap("/")
                 }
                 Err(e) => {
                     // failed to generate, so thow the error
-                    println!("[ERR] {:?}", e);
+                    printerr!("{:?}", e);
 
                     // give the errors to the page
-                    let mut errors = errors.write().expect(RW_ERR);
+                    let mut errors = errors_cloned.write().expect(RW_ERR);
                     *errors = format!("{:?}", e);
+
+                    // clear warnings
+                    warnings_cloned.write().expect(RW_ERR).clear();
 
                     HashMap::new()
                 }
@@ -94,7 +104,7 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
             println!("... Done!")
         }
-        Err(e) => println!("Error watching files: {:?}", e),
+        Err(e) => printerr!("While watching files: {:?}", e),
     })?;
 
     // watch the current dir
@@ -108,7 +118,7 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
     // listen to incoming requests
     // TODO: use hyper instead?
-    let listener = TcpListener::bind("127.0.0.1:1111")?;
+    let listener = TcpListener::bind(addr.unwrap_or("127.0.0.1:1111".to_string()))?;
     println!("listening on http://127.0.0.1:1111");
 
     // TODO: in this loop, don't crash if things go wrong (move to sep function?)
@@ -179,8 +189,17 @@ pub(crate) fn serve(path: Option<PathBuf>) -> Result<(), anyhow::Error> {
             "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n\r\n"
         );
 
+        // get the warnings and errors sheet
+        let warns_and_errors = {
+            let warnings = warnings.read().expect(RW_ERR);
+            let errors = errors.read().expect(RW_ERR);
+
+            warning_and_error_html(&warnings, &vec![errors.clone()])
+        };
+
         stream.write_all(response.as_bytes())?;
         stream.write_all(&content)?;
+        stream.write_all(warns_and_errors.as_bytes())?;
         stream.write_all(UPDATE_NOTIFY_SCRIPT.as_bytes())?;
     }
 
