@@ -52,10 +52,10 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `extention`: file extention if any, or nil
 
 `markdown`:
-- `front`: the front matter, parsed as toml
+- `front`: the front matter as a table, or nil if none. --- is parsed as yaml, +++ is parsed as toml
 - `raw`: the raw markdown
 - `html`: the markdown as html
-- TODO
+- `events`: table of all events in the markdown stream
 
 `page`:
 - can be created with the `page(name)` function
@@ -95,14 +95,14 @@ the `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global
 
 # Current TODO:
-- use crossterm for colored text in terminal
+- Relavive paths for the lua file names
+- load config properly
 - clippy
 - don't load package lua stdlib, use our own require instead
 - code highlighting
 - subcommands for new, build, dev, cookbook
-- parsing of the document types
+- parsing of the document types (json, yaml, toml, bibtex) into lua tables
 - markdown
-- (bib)tex parsing
 - finish dev server (mime types, 404 page)
 - config (404 page, minify settings)
 - docs

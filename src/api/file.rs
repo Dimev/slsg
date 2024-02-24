@@ -84,8 +84,9 @@ impl UserData for File {
 
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("parseMd", |_, this, ()| {
-            Markdown::from_str(&this.get_string().map_err(|x| mlua::Error::external(x))?)
-                .map_err(|x| mlua::Error::external(x))
+            Ok(Markdown::from_str(
+                &this.get_string().map_err(|x| mlua::Error::external(x))?,
+            ))
         });
         methods.add_method("parseTxt", |_, this, ()| {
             this.get_string().map_err(|x| mlua::Error::external(x))

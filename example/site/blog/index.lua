@@ -18,7 +18,7 @@ for key, val in pairs(template.colocated.files) do
       ),
       p():sub(
         -- the actual post
-        txt(val:parseMd().raw)
+        txt(val:parseMd().html)
       )
     ):render()
 
