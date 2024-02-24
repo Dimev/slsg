@@ -3,9 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mlua::{AnyUserData, FromLua, Lua, UserData, UserDataFields, UserDataMethods, Value};
+use mlua::{
+    AnyUserData, FromLua, Lua, LuaSerdeExt, UserData, UserDataFields, UserDataMethods, Value,
+};
 
 use super::markdown::Markdown;
+use anyhow::anyhow;
 
 /// File for the file tree
 #[derive(Clone, Debug)]
@@ -91,6 +94,32 @@ impl UserData for File {
         methods.add_method("parseTxt", |_, this, ()| {
             this.get_string().map_err(|x| mlua::Error::external(x))
         });
+        methods.add_method("parseJson", |lua, this, ()| {
+            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let json: serde_json::Value =
+                serde_json::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+            lua.to_value(&json)
+        });
+        methods.add_method("parseYaml", |lua, this, ()| {
+            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let yaml: serde_yaml::Value =
+                serde_yaml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+            lua.to_value(&yaml)
+        });
+        methods.add_method("parseToml", |lua, this, ()| {
+            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let toml: toml::Value =
+                toml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+            lua.to_value(&toml)
+        });
+        methods.add_method("parseBibtex", |lua, this, ()| {
+            // TODO: better parser here
+            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let bibtex: biblatex::Bibliography =
+                biblatex::Bibliography::parse(&str).map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
+            lua.to_value(&bibtex)
+        });
+
     }
 }
 

@@ -7,11 +7,37 @@ use std::{
 use anyhow::anyhow;
 
 use mlua::Lua;
+use mlua::LuaSerdeExt;
+use serde::Deserialize;
 
 use crate::api::globals::load_globals;
 use crate::api::page::Page;
 use crate::api::script::Script;
 use crate::api::{directory::Directory, styles::load_styles};
+
+/// Site config
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct SiteConfig {
+    /// Whether to minify HTML (.html), defaults to false
+    #[serde(default)]
+    minify_html: bool,
+
+    /// Whether to minify javascript (.js, .mjs), defaults to false
+    #[serde(default)]
+    minify_js: bool,
+
+    /// Whether to minify css (.css), defaults to false
+    /// Note that this is already done for the sass, scss and css in the style directory
+    #[serde(default)]
+    minify_css: bool,
+
+    /// The optional 404 page to use when running the dev server
+    dev_404: Option<PathBuf>,
+
+    /// All extra config
+    config: toml::Value,
+}
 
 /// Entire generated site
 pub(crate) struct Site {
@@ -23,6 +49,9 @@ pub(crate) struct Site {
 
     /// Path the site was generated at
     pub(crate) path: PathBuf,
+
+    /// The optional 404 page to use
+    pub(crate) dev_404: Option<PathBuf>,
 }
 
 impl Site {
@@ -51,6 +80,9 @@ impl Site {
         // load the config
         let config = read_to_string(&path)?;
 
+        // parse the config
+        let config: SiteConfig = toml::from_str(&config)?;
+
         // path of the directory of where the site is
         let path = path
             .parent()
@@ -60,6 +92,7 @@ impl Site {
         let lua = Lua::new();
 
         // load the config to the global scope
+        lua.globals().set("config", lua.to_value(&config.config)?)?;
 
         // load the static files
         let static_files = Directory::load_static(path.join("static/"), &lua)?;
@@ -68,7 +101,6 @@ impl Site {
         let styles = load_styles(&lua, path.join("styles/"))?;
 
         // load the settings into the lua environment
-        // TODO
 
         // load the globals
         load_globals(&lua)?;
@@ -87,6 +119,7 @@ impl Site {
             page,
             warnings,
             path: path.into(),
+            dev_404: config.dev_404,
         })
     }
 

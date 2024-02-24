@@ -47,6 +47,7 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `parseYaml()`:  parses the file as yaml, into a table
 - `parseToml()`: parses the file as toml, into a table
 - `parseTxt()`: loads the file as a string
+- `parseBibtex()`: loads the file as bibtex, into a table
 - `stem`: file stem if any, or nil
 - `name`: file name if any, or nil
 - `extention`: file extention if any, or nil
@@ -95,14 +96,18 @@ the `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global
 
 # Current TODO:
+- have example site also serve as short intro to yassg
 - Relavive paths for the lua file names
-- load config properly
 - clippy
 - don't load package lua stdlib, use our own require instead
 - code highlighting
-- subcommands for new, build, dev, cookbook
-- parsing of the document types (json, yaml, toml, bibtex) into lua tables
-- markdown
+- latex math to mathml(?)
+- subcommands for new, init, cookbook
+- better bibtex parsing
+- markdown (maybe easymark?)
+- tex (as in, parse a subset of latex)
 - finish dev server (mime types, 404 page)
-- config (404 page, minify settings)
+- config (actually implement 404 page, minify settings)
+- minification
 - docs
+- Image resizing
