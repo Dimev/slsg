@@ -80,10 +80,12 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                     print_error(&format!("{:?}", e));
 
                     // give the errors to the page
-                    errors_cloned
+                    let mut errors = errors_cloned
                         .write()
-                        .expect(RW_ERR)
-                        .push(format!("{:?}", e));
+                        .expect(RW_ERR);
+
+                    errors.clear();
+                    errors.push(format!("{:?}", e));
 
                     // clear warnings
                     warnings_cloned.write().expect(RW_ERR).clear();
