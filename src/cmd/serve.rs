@@ -20,7 +20,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
     // load the site
     let warnings = Arc::new(RwLock::new(Vec::new()));
     let errors = Arc::new(RwLock::new(Vec::new()));
-    let site = Arc::new(RwLock::new(match Site::generate(path.clone()) {
+    let site = Arc::new(RwLock::new(match Site::generate(path.clone(), true) {
         Ok(res) => {
             // throw all warnings
             for warning in res.warnings.iter() {
@@ -56,10 +56,11 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
     let mut debouncer = new_debouncer(Duration::from_millis(500), move |res| match res {
         Ok(_) => {
             println!("Files changed, regenerating site...");
+            let start = std::time::Instant::now();
 
             // regenerate site
             let mut site = site_cloned.write().expect(RW_ERR);
-            *site = match Site::generate(path_cloned.clone()) {
+            *site = match Site::generate(path_cloned.clone(), true) {
                 Ok(res) => {
                     // throw all warnings
                     for warning in res.warnings.iter() {
@@ -80,9 +81,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                     print_error(&format!("{:?}", e));
 
                     // give the errors to the page
-                    let mut errors = errors_cloned
-                        .write()
-                        .expect(RW_ERR);
+                    let mut errors = errors_cloned.write().expect(RW_ERR);
 
                     errors.clear();
                     errors.push(format!("{:?}", e));
@@ -103,7 +102,8 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                 },
             );
 
-            println!("... Done!")
+            let duration = start.elapsed().as_millis();
+            println!("... Done! ({}ms)", duration);
         }
         Err(e) => print_error(&format!("While watching files: {:?}", e)),
     })?;
@@ -119,8 +119,9 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
     // listen to incoming requests
     // TODO: use hyper instead?
-    let listener = TcpListener::bind(addr.unwrap_or("127.0.0.1:1111".to_string()))?;
-    println!("listening on http://127.0.0.1:1111");
+    let addr = addr.unwrap_or("127.0.0.1:1111".to_string());
+    let listener = TcpListener::bind(&addr)?;
+    println!("listening on {}", addr);
 
     // TODO: in this loop, don't crash if things go wrong (move to sep function?)
 

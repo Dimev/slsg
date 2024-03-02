@@ -4,7 +4,7 @@ mod pretty_print;
 use clap::Parser;
 use cmd::{generate::Site, serve::serve};
 use pretty_print::print_error;
-use std::path::PathBuf;
+use std::{env, fs, path::PathBuf};
 
 use crate::pretty_print::print_warning;
 
@@ -33,11 +33,11 @@ enum Args {
         address: Option<String>,
     },
 
-    /// List example scripts
+    /// Lookup an included example script
     Cookbook {},
 
     /// Create a new site
-    New {},
+    New { path: PathBuf },
 
     /// Init a site in the current directory
     Init {},
@@ -48,7 +48,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // run the command
     match args {
-        Args::Build { dir, output } => match Site::generate(dir) {
+        Args::Build { dir, output } => match Site::generate(dir, false) {
             Ok(site) => {
                 // success, print any warnings
                 for warning in site.warnings.iter() {
@@ -64,8 +64,46 @@ fn main() -> Result<(), anyhow::Error> {
             serve(dir, address)?;
         }
         Args::Cookbook {} => todo!(),
-        Args::New {} => todo!(),
-        Args::Init {} => todo!(),
+        Args::New { path } => {
+            // check if the directory is empty
+            if !path.read_dir()?.next().is_none() {
+                println!("{:?} is not empty!", path);
+            }
+
+            // make the directory
+            fs::create_dir_all(&path)?;
+
+            // create the site directories
+            fs::File::create(path.join("site.toml"))?;
+
+            // TODO: create example site (single hello world page)
+            fs::create_dir(path.join("site"))?;
+
+            // TODO: create example logo (single yassg logo)
+            fs::create_dir(path.join("static"))?;
+
+            // TODO: create example style (center the hello world text)
+            fs::create_dir(path.join("styles"))?;
+            
+            // TODO: dump cookbook scripts here
+            fs::create_dir(path.join("scripts"))?;
+
+            println!("site created at {:?}", path);
+        }
+        Args::Init {} => {
+            // check if the directory is empty
+            if !env::current_dir()?.read_dir()?.next().is_none() {
+                println!("Current directory is not empty!");
+            }
+            // create the site directories
+            fs::File::create(PathBuf::from("site.toml"))?;
+            fs::create_dir(PathBuf::from("site"))?;
+            fs::create_dir(PathBuf::from("static"))?;
+            fs::create_dir(PathBuf::from("styles"))?;
+            fs::create_dir(PathBuf::from("scripts"))?;
+
+            println!("site created in current directory");
+        }
     }
 
     Ok(())

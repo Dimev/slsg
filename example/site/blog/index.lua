@@ -8,8 +8,6 @@ local links = {}
 for key, val in pairs(template.colocated.files) do 
   -- only work on markdown 
   if val.extention == "md" then 
-    local md = val:parseMd()
-
     -- make the page
     local html = div():sub(
       h1():sub(

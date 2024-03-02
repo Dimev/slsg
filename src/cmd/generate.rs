@@ -56,7 +56,7 @@ pub(crate) struct Site {
 
 impl Site {
     /// Generate the site
-    pub(crate) fn generate(path: Option<PathBuf>) -> Result<Self, anyhow::Error> {
+    pub(crate) fn generate(path: Option<PathBuf>, debug: bool) -> Result<Self, anyhow::Error> {
         // path to load from
         let path = path
             .map(|x| Ok(x) as Result<PathBuf, anyhow::Error>)
@@ -103,7 +103,7 @@ impl Site {
         // load the settings into the lua environment
 
         // load the globals
-        load_globals(&lua)?;
+        load_globals(&lua, debug)?;
 
         // load the root script
         // TODO: make this load directly into lua tables

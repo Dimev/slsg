@@ -66,9 +66,12 @@ They also get access to the `config` table, which is loaded from `site.toml`
 
 # Other functions
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page
+
+# Yassg library
+- These are available under the yassg global table
+- `debug`: bool, true if the site is built from the `serve` command
 - `escapeHtml`: escapes the given html string TODO
 - `unescapeHtml`: unescapes the given html string TODO
-- `parseMd`: parses the given string as markdown TODO
 
 # Rendering HTML
 Besides including these page and file searching functions, 
@@ -111,3 +114,10 @@ everything under the `[config]` section is loaded into the `config` global
 - minification
 - docs
 - Image resizing
+
+# Cookbook TODO:
+- manual markdown rendering
+- code highlighting
+- svgbob
+- markdown based blog
+- bibtex bibliography
