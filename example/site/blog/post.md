@@ -8,7 +8,7 @@ and this is some stuff!
 
 and more stuff!
 
-```rs
+```rust
 // Here we have some rust code!
 fn main() {
     println!("Hello yassg!");
