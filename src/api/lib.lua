@@ -90,8 +90,13 @@ function el(ty)
 		return self
 	end
 
+	-- render ourselves for internal use
+	function element:render()
+		return "<!DOCTYPE html>" .. self:renderself()
+	end
+
 	-- render ourselves
-	function element:render()			
+	function element:renderself()			
 		return "<" .. self.tag .. self.attributes .. ">" 
 			.. self.content 
 			.. "</" .. self.tag .. ">"

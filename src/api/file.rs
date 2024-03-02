@@ -108,18 +108,16 @@ impl UserData for File {
         });
         methods.add_method("parseToml", |lua, this, ()| {
             let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
-            let toml: toml::Value =
-                toml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+            let toml: toml::Value = toml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
             lua.to_value(&toml)
         });
         methods.add_method("parseBibtex", |lua, this, ()| {
             // TODO: better parser here
             let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
-            let bibtex: biblatex::Bibliography =
-                biblatex::Bibliography::parse(&str).map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
+            let bibtex: biblatex::Bibliography = biblatex::Bibliography::parse(&str)
+                .map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
             lua.to_value(&bibtex)
         });
-
     }
 }
 

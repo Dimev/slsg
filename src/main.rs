@@ -84,7 +84,7 @@ fn main() -> Result<(), anyhow::Error> {
 
             // TODO: create example style (center the hello world text)
             fs::create_dir(path.join("styles"))?;
-            
+
             // TODO: dump cookbook scripts here
             fs::create_dir(path.join("scripts"))?;
 

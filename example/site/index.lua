@@ -9,19 +9,21 @@ end
 -- add the bibliography
 local bib = template.colocated.files["references.bib"]:parseBibtex()
 
--- render it out to text 
-local function table2string(table)
+-- convert a table to a string
+local function table2string(table, ident)
   if type(table) ~= "table" then
     return tostring(table)
   end
 
   local str = ""
   for key, value in pairs(table) do
-    str = str .. key .. " = " .. table2string(value) .. ",\n"
+    str = str .. string.rep("  ", ident or 0) .. key .. " = " .. table2string(value, (ident or 0) + 1) .. ",\n"
   end
 
-  return "{" .. str .. "}"
+  return "{\n" .. str .. " \n" .. string.rep("  ", ident or 0) .. "}"
 end
+
+-- render out like this for now
 local citations = table2string(bib)
 
 -- the html index
