@@ -1,14 +1,6 @@
 -- Builtin functions
 -- functionality for making pages and html
 
--- globally accesssible warnings
-debugWarnings = {}
-
--- add a warning
-function warn(text)
-	table.insert(debugWarnings, text)
-end
-
 -- make a page
 function page() 
 	local table = {
@@ -21,7 +13,7 @@ function page()
  	-- set the html
 	function table:withHtml(html) 
 		-- check if it's a string
-		if type(html) ~= "string" then 
+		if type(html) ~= "string" then
 			warn("The provided html is not a string, did you forget to call `:render()` ?")
 		else		
 			self.html = html

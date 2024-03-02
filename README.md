@@ -64,7 +64,7 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `withHtml(html)`: adds html to the page. If no html is used, no index.html file is generated for the directory
 - `withPage(page)`: adds a subpage to the page
 
-# Other functions
+# Other globals
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page
 
 # Yassg library
@@ -100,14 +100,12 @@ everything under the `[config]` section is loaded into the `config` global
 
 # Current TODO:
 - have example site also serve as short intro to yassg
-- Relavive paths for the lua file names
 - clippy
-- don't load package lua stdlib, use our own require instead
+- don't load package lua stdlib, use our own require instead (also load own stdlib that way?)
 - code highlighting
 - latex math to mathml(?)
 - subcommands for new, init, cookbook
 - better bibtex parsing
-- markdown (maybe easymark?)
 - tex (as in, parse a subset of latex)
 - finish dev server (mime types, 404 page)
 - config (actually implement 404 page, minify settings)
@@ -118,6 +116,5 @@ everything under the `[config]` section is loaded into the `config` global
 # Cookbook TODO:
 - manual markdown rendering
 - code highlighting
-- svgbob
 - markdown based blog
 - bibtex bibliography

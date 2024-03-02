@@ -1,4 +1,9 @@
-use std::{fs, path::Path};
+use std::{
+    cell::RefCell,
+    fs,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use anyhow::{anyhow, Result};
 use mlua::{Lua, Table};
@@ -14,8 +19,9 @@ pub(crate) struct Directory<'lua> {
 
 impl<'lua> Directory<'lua> {
     /// Load a static directory, assuming no scripts
-    pub(crate) fn load_static<P: AsRef<Path>>(
-        path: P,
+    pub(crate) fn load_static(
+        base: impl AsRef<Path>,
+        path: impl AsRef<Path>,
         lua: &'lua Lua,
     ) -> Result<Self, anyhow::Error> {
         // tables
@@ -43,7 +49,11 @@ impl<'lua> Directory<'lua> {
                 }
                 // normal directory
                 else {
-                    let dir = Directory::load_static(&item.path(), lua)?;
+                    let dir = Directory::load_static(
+                        base.as_ref().join(item.file_name()),
+                        &item.path(),
+                        lua,
+                    )?;
                     let name = item
                         .file_name()
                         .into_string()
@@ -65,8 +75,10 @@ impl<'lua> Directory<'lua> {
         Ok(Self { table: res })
     }
 
-    pub(crate) fn load<P: AsRef<Path>>(
-        path: P,
+    pub(crate) fn load(
+        base: impl AsRef<Path>,
+        path: impl AsRef<Path>,
+        warnings: Rc<RefCell<Vec<String>>>,
         lua: &'lua Lua,
         static_files: &Directory<'lua>,
         styles: &Table<'lua>,
@@ -96,7 +108,14 @@ impl<'lua> Directory<'lua> {
             if item.file_type()?.is_file()
                 && item.path().extension().map(|x| x == "lua").unwrap_or(false)
             {
-                let script = Script::load(&item.path(), lua, static_files, styles)?;
+                let script = Script::load(
+                    &base.as_ref().join(item.file_name()),
+                    &item.path(),
+                    warnings.clone(),
+                    lua,
+                    static_files,
+                    styles,
+                )?;
 
                 // insert it
                 scripts.set(script.name, script.script)?;
@@ -112,14 +131,28 @@ impl<'lua> Directory<'lua> {
             }
             // if it's a directory with an index.lua file, load a script
             else if item.file_type()?.is_dir() && item.path().join("index.lua").exists() {
-                let script = Script::load(&item.path(), lua, static_files, styles)?;
+                let script = Script::load(
+                    &base.as_ref().join(item.file_name()),
+                    &item.path(),
+                    warnings.clone(),
+                    lua,
+                    static_files,
+                    styles,
+                )?;
 
                 // insert it
                 scripts.set(script.name, script.script)?;
             }
             // normal directory, load it
             else {
-                let dir = Directory::load(&item.path(), lua, static_files, styles)?;
+                let dir = Directory::load(
+                    &base.as_ref().join(item.file_name()),
+                    &item.path(),
+                    warnings.clone(),
+                    lua,
+                    static_files,
+                    styles,
+                )?;
                 let name = item.file_name().into_string().map_err(|_| {
                     anyhow!("{:?} does not have a utf-8 directory name", path.as_ref())
                 })?;

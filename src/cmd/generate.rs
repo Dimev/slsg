@@ -6,8 +6,8 @@ use std::{
 
 use anyhow::anyhow;
 
-use mlua::Lua;
 use mlua::LuaSerdeExt;
+use mlua::{Lua, LuaOptions, StdLib};
 use serde::Deserialize;
 
 use crate::api::globals::load_globals;
@@ -89,13 +89,17 @@ impl Site {
             .ok_or_else(|| anyhow!("site.toml file was not in a folder!"))?;
 
         // start lua
-        let lua = Lua::new();
+        let lua = Lua::new_with(
+            StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH,
+            LuaOptions::new().catch_rust_panics(true),
+        )?;
 
         // load the config to the global scope
         lua.globals().set("config", lua.to_value(&config.config)?)?;
 
         // load the static files
-        let static_files = Directory::load_static(path.join("static/"), &lua)?;
+        let static_files =
+            Directory::load_static(PathBuf::from("static/"), path.join("static/"), &lua)?;
 
         // load the styles
         let styles = load_styles(&lua, path.join("styles/"))?;
@@ -103,17 +107,24 @@ impl Site {
         // load the settings into the lua environment
 
         // load the globals
-        load_globals(&lua, debug)?;
+        let warnings = load_globals(&lua, debug)?;
 
         // load the root script
         // TODO: make this load directly into lua tables
-        let script = Script::load(&path.join("site/"), &lua, &static_files, &styles)?;
+        let script = Script::load(
+            &PathBuf::from("site/"),
+            &path.join("site/"),
+            warnings.clone(),
+            &lua,
+            &static_files,
+            &styles,
+        )?;
 
         // run the script
         let page = script.run()?;
 
         // get the warnings
-        let warnings: Vec<String> = lua.globals().get("debugWarnings")?;
+        let warnings = warnings.borrow().clone();
 
         Ok(Site {
             page,
