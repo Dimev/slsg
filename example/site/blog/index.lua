@@ -7,16 +7,19 @@ local links = {}
 -- load all markdown files 
 for key, val in pairs(template.colocated.files) do 
   -- only work on markdown 
-  if val.extention == "md" then 
+  if val.extention == "md" then
+    local md = val:parseMd()
+    local front = md.front
+    local mdhtml = md.html
     -- make the page
     local html = div():sub(
       h1():sub(
         -- name of the post
-        txt("Post: " .. val.stem)
+        txt("Post: " .. front.title)
       ),
       p():sub(
         -- the actual post
-        txt(val:parseMd().html)
+        txt(mdhtml)
       )
     ):render()
 

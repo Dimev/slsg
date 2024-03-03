@@ -42,4 +42,5 @@ local html = div():sub(
 return page()
   :withHtml(html)
   :withManyPages(pages)
+  :withFile("404.html", yassg.file(p():sub(txt("Not found!")):render()))
   :withFile("style.css", template.styles.style)

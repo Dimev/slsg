@@ -24,13 +24,21 @@ function page()
 
 	-- add a file
 	function table:withFile(path, file)
+		if type(file) ~= "userdata" then
+			warn("The provided file is not userdata, are you sure you picked the right file?")
+		end
+		
 		self.files[path] = file
 				
 		return self
 	end
 
 	-- add a page
-	function table:withPage(path, page) 
+	function table:withPage(path, page)
+		if type(page) == "string" then
+			warn("The provided page is not a table, did you forget to make a page?")
+		end
+		
 		self.pages[path] = page
 		
 		return self

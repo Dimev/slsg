@@ -91,7 +91,7 @@ all top-level at the root of the directory is available under the styles
 
 # Minification
 all html passed in via withHtml is minified, as well as all stylesheets under `style/`
-the `minifyHtml`, `minifyCss` and `minifyJs` functions can be used to minify html, css and javascript respectively
+the `minifyhtml`, `minifycss` and `minifyjs` functions can be used to minify html, css and javascript respectively
 TODO
 
 # Config

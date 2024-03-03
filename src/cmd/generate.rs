@@ -16,7 +16,7 @@ use crate::api::script::Script;
 use crate::api::{directory::Directory, styles::load_styles};
 
 /// Site config
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct SiteConfig {
     /// Whether to minify HTML (.html), defaults to false
@@ -107,7 +107,7 @@ impl Site {
         // load the settings into the lua environment
 
         // load the globals
-        let warnings = load_globals(&lua, debug)?;
+        let warnings = load_globals(&lua, path, debug)?;
 
         // load the root script
         // TODO: make this load directly into lua tables
