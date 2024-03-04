@@ -1,5 +1,6 @@
 -- Builtin functions
 -- functionality for making pages and html
+-- This is reloaded for every script, so that warnings work mostly correctly
 
 -- make a page
 function page() 

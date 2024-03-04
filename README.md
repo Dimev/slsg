@@ -98,14 +98,16 @@ TODO
 the `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global
 
+# Known bugs:
+- Syntax highlighting currently leaks memory if a prefix string is given, 
+  due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static
+
 # Current TODO:
 - have example site also serve as short intro to yassg
 - clippy
-- don't load package lua stdlib, use our own require instead (also load own stdlib that way?)
 - code highlighting
 - latex math to mathml(?)
-- subcommands for new, init, cookbook
-- better bibtex parsing
+- cookbook
 - tex (as in, parse a subset of latex)
 - finish dev server (mime types, 404 page)
 - config (actually implement 404 page, minify settings)

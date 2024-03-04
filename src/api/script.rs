@@ -21,7 +21,7 @@ impl<'lua> Script<'lua> {
     pub(crate) fn load(
         base: &impl AsRef<Path>,
         path: &impl AsRef<Path>,
-        warnings: Rc<RefCell<Vec<String>>>,
+        warnings: Rc<RefCell<Vec<String>>>, // TODO replace with lua buildin warning function, and a global table trickery to set the current script, see lua debug lib
         lua: &'lua Lua,
         static_files: &Directory<'lua>,
         styles: &Table<'lua>,

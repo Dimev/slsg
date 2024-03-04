@@ -49,9 +49,16 @@ for key, val in pairs(links) do
   )
 end
 
+local code = [[
+-- I have no IO monad and I must scream
+scream :: String -> String
+scream s = seq a $ unsafePerformIO a 
+]]
+
 -- index page for this
 local index = div():sub(
-  table.unpack(pageLinks)
+  table.unpack(pageLinks),
+  el("pre"):sub(txt(yassg.highlight(code, "haskell", "susmogus")))
 ):render()
 
 -- add our own page

@@ -4,8 +4,9 @@ use std::{
 };
 
 use mlua::{
-    AnyUserData, FromLua, Lua, LuaSerdeExt, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, FromLua, Lua, LuaSerdeExt, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
+use nom_bibtex::Bibtex;
 
 use super::markdown::Markdown;
 use anyhow::anyhow;
@@ -112,13 +113,31 @@ impl UserData for File {
             lua.to_value(&toml)
         });
         methods.add_method("parseBibtex", |lua, this, ()| {
-            // TODO: better parser here
             let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
-            let bibtex: biblatex::Bibliography = biblatex::Bibliography::parse(&str)
+            let bibtex: Bibtex = Bibtex::parse(&str)
                 .map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
-            lua.to_value(&bibtex)
+            biblatex_to_table(lua, bibtex)
         });
     }
+}
+
+fn biblatex_to_table(lua: &Lua, bib: Bibtex) -> Result<Table, mlua::Error> {
+    let table = lua.create_table()?;
+    table.set("comments", bib.comments())?;
+    table.set("variables", bib.variables().clone())?;
+
+    // add all entries
+    let bibliographies = lua.create_table()?;
+    for biblio in bib.bibliographies() {
+        let entry = lua.create_table()?;
+        entry.set("type", biblio.entry_type())?;
+        entry.set("tags", biblio.tags().clone())?;
+        bibliographies.set(biblio.citation_key(), entry)?;
+    }
+
+    table.set("bibliographies", bibliographies)?;
+
+    Ok(table)
 }
 
 impl<'lua> FromLua<'lua> for File {
