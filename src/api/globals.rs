@@ -1,11 +1,6 @@
-use std::{
-    cell::RefCell,
-    fs::{self},
-    path::Path,
-    rc::Rc,
-};
+use std::{cell::RefCell, fs, path::Path, rc::Rc};
 
-use mlua::Lua;
+use mlua::{Lua, Value};
 use syntect::{
     html::{ClassStyle, ClassedHTMLGenerator},
     parsing::SyntaxSet,
@@ -63,16 +58,41 @@ pub(crate) fn load_globals(
     )?;
 
     // warn function
-    let warnings = Rc::new(RefCell::new(Vec::new()));
+    let warnings = Rc::new(RefCell::new(Vec::<String>::new()));
+    let warnings_cloned = warnings.clone();
+    lua.set_warning_function(move |lua, text, _| {
+        // Get the stack trace
+        let mut trace = Vec::new();
+        for frame in (1..).map_while(|i| lua.inspect_stack(i)) {
+            let name = frame.source().short_src.unwrap_or("?".into());
+            let what = frame.names().name_what;
+            let func = frame.names().name.unwrap_or("?".into());
+            let line = frame.curr_line();
+            let line = if line < 0 {
+                format!("")
+            } else {
+                format!(":{}", line)
+            };
+            if let Some(what) = what {
+                trace.push(format!("    {}{}: in {} '{}'", name, line, what, func));
+            } else {
+                trace.push(format!("    {}{}: in {}", name, line, func));
+            }
+        }
+
+        // give the stack trace to the warnings
+        let warning = format!("runtime warning: {}\nstack traceback:\n{}", text, trace.join("\n"));
+        warnings_cloned.borrow_mut().push(warning);
+        Ok(())
+    });
 
     // require function
     let path_owned = path.as_ref().to_owned();
     let require = lua.create_function(move |lua, script: String| {
         let path = path_owned.join("scripts").join(&script);
         let code = fs::read_to_string(path).map_err(mlua::Error::external)?;
-        lua.load(code)
-            .set_name(format!("scripts/{}", script))
-            .exec()
+        let function = lua.load(code).into_function()?;
+        lua.load_from_function::<Value>(&format!("scripts/{script}"), function)
     })?;
 
     // load

@@ -78,7 +78,6 @@ impl<'lua> Directory<'lua> {
     pub(crate) fn load(
         base: impl AsRef<Path>,
         path: impl AsRef<Path>,
-        warnings: Rc<RefCell<Vec<String>>>,
         lua: &'lua Lua,
         static_files: &Directory<'lua>,
         styles: &Table<'lua>,
@@ -111,7 +110,6 @@ impl<'lua> Directory<'lua> {
                 let script = Script::load(
                     &base.as_ref().join(item.file_name()),
                     &item.path(),
-                    warnings.clone(),
                     lua,
                     static_files,
                     styles,
@@ -134,7 +132,6 @@ impl<'lua> Directory<'lua> {
                 let script = Script::load(
                     &base.as_ref().join(item.file_name()),
                     &item.path(),
-                    warnings.clone(),
                     lua,
                     static_files,
                     styles,
@@ -148,7 +145,6 @@ impl<'lua> Directory<'lua> {
                 let dir = Directory::load(
                     &base.as_ref().join(item.file_name()),
                     &item.path(),
-                    warnings.clone(),
                     lua,
                     static_files,
                     styles,

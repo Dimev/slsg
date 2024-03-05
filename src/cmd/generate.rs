@@ -54,6 +54,25 @@ pub(crate) struct Site {
     pub(crate) dev_404: Option<PathBuf>,
 }
 
+pub(crate) struct GenerateError {
+    /// warnings emitted
+    warnings: Vec<String>,
+
+    /// Actual error
+    error: anyhow::Error,
+}
+
+// TODO
+impl GenerateError {
+    /// No warnings
+    fn now(error: anyhow::Error) -> Self {
+        Self {
+            warnings: Vec::new(),
+            error,
+        }
+    }
+}
+
 impl Site {
     /// Generate the site
     pub(crate) fn generate(path: Option<PathBuf>, debug: bool) -> Result<Self, anyhow::Error> {
@@ -114,7 +133,6 @@ impl Site {
         let script = Script::load(
             &PathBuf::from("site/"),
             &path.join("site/"),
-            warnings.clone(),
             &lua,
             &static_files,
             &styles,

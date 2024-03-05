@@ -21,7 +21,6 @@ impl<'lua> Script<'lua> {
     pub(crate) fn load(
         base: &impl AsRef<Path>,
         path: &impl AsRef<Path>,
-        warnings: Rc<RefCell<Vec<String>>>, // TODO replace with lua buildin warning function, and a global table trickery to set the current script, see lua debug lib
         lua: &'lua Lua,
         static_files: &Directory<'lua>,
         styles: &Table<'lua>,
@@ -64,17 +63,6 @@ impl<'lua> Script<'lua> {
             let env = clone_table(lua, lua.globals())?;
             env.set("template", template)?;
 
-            // add warning func into the environment
-            let warnings_cloned = warnings.clone();
-            let warn = lua.create_function(move |_, text: String| {
-                (*warnings_cloned)
-                    .borrow_mut()
-                    .push(format!("[{}]: {}", rel_path, text));
-                Ok(())
-            })?;
-
-            env.set("warn", warn.clone())?;
-
             // standard lib
             lua.load(include_str!("lib.lua"))
                 .set_environment(env.clone())
@@ -96,7 +84,7 @@ impl<'lua> Script<'lua> {
 
             // read the directory
             let colocated =
-                Directory::load(base, path, warnings.clone(), lua, static_files, styles)?;
+                Directory::load(base, path, lua, static_files, styles)?;
 
             // set load the environment script
             let template = lua.create_table()?;
@@ -132,17 +120,6 @@ impl<'lua> Script<'lua> {
             // make the environment
             let env = clone_table(lua, lua.globals())?;
             env.set("template", template)?;
-
-            // add warning func into the environment
-            let warnings_cloned = warnings.clone();
-            let warn = lua.create_function(move |_, text: String| {
-                (*warnings_cloned)
-                    .borrow_mut()
-                    .push(format!("[{}]: {}", rel_path, text));
-                Ok(())
-            })?;
-
-            env.set("warn", warn.clone())?;
 
             // standard lib
             lua.load(include_str!("lib.lua"))
