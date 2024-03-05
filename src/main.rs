@@ -2,7 +2,10 @@ mod api;
 mod cmd;
 mod pretty_print;
 use clap::Parser;
-use cmd::{generate::Site, serve::serve};
+use cmd::{
+    generate::{GenerateError, Site},
+    serve::serve,
+};
 use pretty_print::print_error;
 use std::{env, fs, path::PathBuf};
 
@@ -58,7 +61,12 @@ fn main() -> Result<(), anyhow::Error> {
                 site.write_to_directory(output)?;
             }
             // Fail, print the errors
-            Err(e) => print_error(&format!("{:?}", e)),
+            Err(GenerateError { warnings, error }) => {
+                print_error(&format!("{:?}", error));
+                for warning in warnings {
+                    print_warning(&warning);
+                }
+            }
         },
         Args::Dev { dir, address } => {
             serve(dir, address)?;

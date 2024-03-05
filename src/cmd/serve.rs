@@ -3,7 +3,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    rc::Rc,
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
@@ -11,6 +10,7 @@ use std::{
 use super::generate::Site;
 use crate::{
     api::file::File,
+    cmd::generate::GenerateError,
     pretty_print::{print_error, print_warning, warning_and_error_html},
 };
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
@@ -46,12 +46,23 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
             pages
         }
-        Err(e) => {
+        Err(GenerateError {
+            warnings: page_warnings,
+            error,
+        }) => {
             // failed to generate, so thow the error
-            print_error(&format!("{:?}", e));
+            print_error(&format!("{:?}", error));
+
+            // print warnings
+            for warning in &page_warnings {
+                print_warning(&warning);
+            }
 
             // give the errors to the page
-            errors.write().expect(RW_ERR).push(format!("{:?}", e));
+            errors.write().expect(RW_ERR).push(format!("{:?}", error));
+
+            // give the warnings to the page
+            warnings.write().expect(RW_ERR).extend(page_warnings);
 
             HashMap::new()
         }
@@ -98,18 +109,26 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
                     pages
                 }
-                Err(e) => {
+
+                Err(GenerateError {
+                    warnings: page_warnings,
+                    error,
+                }) => {
                     // failed to generate, so thow the error
-                    print_error(&format!("{:?}", e));
+                    print_error(&format!("{:?}", error));
 
-                    // give the errors to the page
+                    // print warnings
+                    for warning in &page_warnings {
+                        print_warning(&warning);
+                    }
+
+                    // clear errors and warnings
                     let mut errors = errors_cloned.write().expect(RW_ERR);
+                    let mut warnings = warnings_cloned.write().expect(RW_ERR);
 
-                    errors.clear();
-                    errors.push(format!("{:?}", e));
-
-                    // clear warnings
-                    warnings_cloned.write().expect(RW_ERR).clear();
+                    // give them to the page
+                    *errors = vec![format!("{:?}", error)];
+                    *warnings = page_warnings;
 
                     HashMap::new()
                 }

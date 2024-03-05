@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    fs,
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::{fs, path::Path};
 
 use anyhow::{anyhow, Result};
 use mlua::{Lua, Table};

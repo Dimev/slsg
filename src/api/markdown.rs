@@ -1,6 +1,6 @@
 use markdown::{
-    mdast::{AlignKind, Node, ReferenceKind, Root, Toml},
-    to_html, to_html_with_options, to_mdast, CompileOptions, Constructs, Options, ParseOptions,
+    mdast::{AlignKind, Node, ReferenceKind, Root},
+    to_html_with_options, to_mdast, Constructs, Options, ParseOptions,
 };
 use mlua::{Error, Lua, LuaSerdeExt, Table, UserData, UserDataFields};
 
