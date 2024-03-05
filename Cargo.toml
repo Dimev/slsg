@@ -20,3 +20,4 @@ serde_yaml = "0.9"
 nom-bibtex = "0.5"
 serde = { version = "1.0.197", features = ["derive"] }
 syntect = "5.2.0"
+latex2mathml = "0.2.3"

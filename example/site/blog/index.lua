@@ -55,13 +55,16 @@ scream :: String -> String
 scream s = seq a $ unsafePerformIO a 
 ]]
 
+local math = "\\erf ( x ) = \\frac{ 2 }{ \\sqrt{ \\pi } } \\int_0^x e^{- t^2} \\, dt"
+
 -- index page for this
 local index = div():sub(
   table.unpack(pageLinks)
 ):sub(
   el("pre"):sub(
     txt(yassg.highlight(code, "haskell", "code-"))
-  )
+  ),
+  rawHtml(yassg.latextomathml(math, true))
 ):render()
 
 -- add our own page

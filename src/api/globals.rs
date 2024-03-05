@@ -1,5 +1,6 @@
 use std::{cell::RefCell, fs, path::Path, rc::Rc};
 
+use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{Lua, Value};
 use syntect::{
     html::{ClassStyle, ClassedHTMLGenerator},
@@ -20,9 +21,23 @@ pub(crate) fn load_globals(
 
     // escape html
     // TODO let html_escape = lua.create_function(|_, text: String| Ok())?;
+    // TODO: maybe do in lib.lua?
+
+    // convert tex math to mathml
+    let mathml = lua.create_function(|_, (text, inline): (String, Option<bool>)| {
+        latex_to_mathml(
+            &text,
+            if inline.unwrap_or(false) {
+                DisplayStyle::Inline
+            } else {
+                DisplayStyle::Block
+            },
+        )
+        .map_err(mlua::Error::external)
+    })?;
 
     // syntax highlighting
-
+    // TODO fix
     let path_owned = path.as_ref().to_owned();
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {
@@ -81,7 +96,11 @@ pub(crate) fn load_globals(
         }
 
         // give the stack trace to the warnings
-        let warning = format!("runtime warning: {}\nstack traceback:\n{}", text, trace.join("\n"));
+        let warning = format!(
+            "runtime warning: {}\nstack traceback:\n{}",
+            text,
+            trace.join("\n")
+        );
         warnings_cloned.borrow_mut().push(warning);
         Ok(())
     });
@@ -100,6 +119,7 @@ pub(crate) fn load_globals(
     table.set("file", file)?;
     table.set("debug", debug)?;
     table.set("highlight", highlight)?;
+    table.set("latextomathml", mathml)?;
     lua.globals().set("yassg", table)?;
     lua.globals().set("require", require)?;
 

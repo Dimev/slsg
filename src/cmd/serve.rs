@@ -261,7 +261,7 @@ fn handle_connection(
 
     // TODO: cram content type in here somewhere?
     let response =
-        format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n\r\n");
+        format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\nContent-Type: text/html; charset=utf8\r\n\r\n");
 
     // write response and page content
     stream.write_all(response.as_bytes())?;
