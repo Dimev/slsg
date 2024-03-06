@@ -78,7 +78,7 @@ pub(crate) fn load_globals(
     lua.set_warning_function(move |lua, text, _| {
         // Get the stack trace
         let mut trace = Vec::new();
-        for frame in (1..).map_while(|i| lua.inspect_stack(i)) {
+        for frame in (0..).map_while(|i| lua.inspect_stack(i)) {
             let name = frame.source().short_src.unwrap_or("?".into());
             let what = frame.names().name_what;
             let func = frame.names().name.unwrap_or("?".into());
