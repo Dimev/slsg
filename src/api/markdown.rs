@@ -1,5 +1,5 @@
 use markdown::{
-    mdast::{AlignKind, Node, ReferenceKind, Root},
+    mdast::{AlignKind, AttributeContent, AttributeValue, Node, ReferenceKind, Root},
     to_html_with_options, to_mdast, Constructs, Options, ParseOptions,
 };
 use mlua::{Error, Lua, LuaSerdeExt, Table, UserData, UserDataFields};
@@ -47,8 +47,8 @@ const OPTIONS: ParseOptions = ParseOptions {
         math_flow: true,
         math_text: true,
         mdx_esm: false,
-        mdx_expression_flow: false,
-        mdx_expression_text: false,
+        mdx_expression_flow: true,
+        mdx_expression_text: true,
         mdx_jsx_flow: false,
         mdx_jsx_text: false,
         thematic_break: true,
@@ -118,11 +118,12 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("label", x.label)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
-        /*Node::MdxJsxFlowElement(x) => {
+        Node::MdxJsxFlowElement(x) => {
             table.set("type", "mdxjsxflowelement")?;
             table.set("name", x.name)?;
-            table.set("attributes", x.attributes)?;
-        }*/
+            table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
+            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+        }
         Node::List(x) => {
             table.set("type", "list")?;
             table.set("ordered", x.ordered)?;
@@ -163,7 +164,14 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("type", "emphasis")?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
-        /* Node::MdxTextExpression */
+        Node::MdxTextExpression(x) => {
+            table.set("type", "mdxtextexpression")?;
+            table.set("value", x.value)?;
+        }
+        Node::MdxjsEsm(x) => {
+            table.set("type", "mxdjsesm")?;
+            table.set("value", x.value)?;
+        }
         Node::FootnoteReference(x) => {
             table.set("type", "footnotereference")?;
             table.set("identifier", x.identifier)?;
@@ -193,7 +201,12 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
                 },
             )?;
         }
-        /* Node::MdxJsxTextElement */
+        Node::MdxJsxTextElement(x) => {
+            table.set("type", "mdxjsxtextelement")?;
+            table.set("name", x.name)?;
+            table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
+            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+        }
         Node::Link(x) => {
             table.set("type", "link")?;
             table.set("url", x.url)?;
@@ -233,7 +246,10 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("vale", x.value)?;
             table.set("meta", x.meta)?;
         }
-        /*Node::MdxFlowExpression()*/
+        Node::MdxFlowExpression(x) => {
+            table.set("type", "mdxflowexpression")?;
+            table.set("value", x.value)?;
+        }
         Node::Heading(x) => {
             table.set("type", "heading")?;
             table.set("depth", x.depth)?;
@@ -283,7 +299,6 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
         }
-        x => todo!("Still need to implement {:?}", x),
     }
 
     // return the built table
@@ -298,4 +313,36 @@ fn many_ast_to_lua(lua: &Lua, ast: Vec<Node>) -> Result<Table, Error> {
     }
 
     Ok(table)
+}
+
+// create an attributes table
+fn mdx_jsx_attrs_to_lua(lua: &Lua, ast: Vec<AttributeContent>) -> Result<Table, Error> {
+    let attrs = lua.create_table()?;
+    for attr in ast {
+        let att = lua.create_table()?;
+        match attr {
+            AttributeContent::Expression { value, .. } => {
+                att.set("type", "expression")?;
+                att.set("value", value)?;
+            }
+            AttributeContent::Property(x) => {
+                att.set("type", "attribute")?;
+                att.set("name", x.name)?;
+                match x.value {
+                    Some(AttributeValue::Expression(x)) => {
+                        att.set("valuetype", "expression")?;
+                        att.set("value", x.value)?;
+                    }
+                    Some(AttributeValue::Literal(x)) => {
+                        att.set("valuetype", "literal")?;
+                        att.set("value", x)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        attrs.push(att)?;
+    }
+
+    Ok(attrs)
 }

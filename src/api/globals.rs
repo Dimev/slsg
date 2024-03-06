@@ -2,11 +2,6 @@ use std::{cell::RefCell, fs, path::Path, rc::Rc};
 
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{Lua, Value};
-use syntect::{
-    html::{ClassStyle, ClassedHTMLGenerator},
-    parsing::SyntaxSet,
-    util::LinesWithEndings,
-};
 
 use super::file::File;
 
@@ -41,34 +36,8 @@ pub(crate) fn load_globals(
     let path_owned = path.as_ref().to_owned();
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {
-            // let mut syntax = SyntaxSet::load_defaults_newlines().into_builder();
-            /*syntax
-                            .add_from_folder(&path_owned.join("highligts"), true)
-                            .map_err(mlua::Error::external)?;
-            */
-            let syntax = SyntaxSet::load_defaults_newlines();
-
-            // can't find syntax, return no highlight
-            if let Some(language) = syntax.find_syntax_by_token(&language) {
-                let mut generator = ClassedHTMLGenerator::new_with_class_style(
-                    language,
-                    &syntax,
-                    // SYNTECT WHY
-                    // this is dumb, why does prefix need to be static
-                    // TODO: find some way to reclaim the memory here
-                    class_prefix
-                        .map(|x| ClassStyle::SpacedPrefixed { prefix: x.leak() })
-                        .unwrap_or(ClassStyle::Spaced),
-                );
-                for line in LinesWithEndings::from(&text) {
-                    generator
-                        .parse_html_for_line_which_includes_newline(line)
-                        .map_err(mlua::Error::external)?;
-                }
-                Ok(Some(generator.finalize()))
-            } else {
-                Ok(None)
-            }
+            // TODO: synoptic
+            Ok(text)
         },
     )?;
 
