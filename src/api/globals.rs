@@ -50,7 +50,14 @@ pub(crate) fn load_globals(
         for frame in (0..).map_while(|i| lua.inspect_stack(i)) {
             let name = frame.source().short_src.unwrap_or("?".into());
             let what = frame.names().name_what;
-            let func = frame.names().name.unwrap_or("?".into());
+            let func = frame
+                .names()
+                .name
+                .unwrap_or(if frame.source().what == "main" {
+                    "main chunk".into()
+                } else {
+                    "?".into()
+                });
             let line = frame.curr_line();
             let line = if line < 0 {
                 format!("")
@@ -58,9 +65,9 @@ pub(crate) fn load_globals(
                 format!(":{}", line)
             };
             if let Some(what) = what {
-                trace.push(format!("    {}{}: in {} '{}'", name, line, what, func));
+                trace.push(format!("\t{}{}: in {} '{}'", name, line, what, func));
             } else {
-                trace.push(format!("    {}{}: in {}", name, line, func));
+                trace.push(format!("\t{}{}: in {}", name, line, func));
             }
         }
 

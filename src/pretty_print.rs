@@ -43,7 +43,7 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
     let center_div =
         "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: fixed; top: 0px; left: 0px";
     let inner_div =
-        "border-left: #4271AE 5px solid; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll";
+        "border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll";
 
     // format the warnings
     let warns: String = warnings
