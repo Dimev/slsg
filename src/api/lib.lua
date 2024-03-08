@@ -139,7 +139,7 @@ end
 -- fragment
 function fragment(...)
 	local html = ""
-	for _, value in ipairs(...) do
+	for _, value in ipairs({...}) do
 		html = html .. value:render()
 	end
 

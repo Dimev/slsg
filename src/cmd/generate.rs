@@ -180,6 +180,6 @@ impl Site {
         self.page.write_to_directory(
             path.map(|x| x.as_ref().into())
                 .unwrap_or(self.path.join("public/")),
-        )
+        ).context("Could not write to the output directory")
     }
 }

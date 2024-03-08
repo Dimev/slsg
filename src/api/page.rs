@@ -46,6 +46,7 @@ impl Page {
 
         // write all subpages to it
         for (name, page) in self.pages.iter() {
+            // TODO: make this not use join to avoid absolute paths
             page.write_to_directory(path.as_ref().join(name))?;
         }
 

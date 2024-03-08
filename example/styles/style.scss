@@ -1,7 +1,57 @@
+$navy: #1D2951;
+
 * {
 	box-sizing: border-box;
 }
 
-html { 
+html {
 	font-family: sans-serif;
+	display: flex;
+	justify-content: center;
+	background: white;
+}
+
+.titlebar {
+	display: flex;
+	flex-direction: row;
+	background: $navy;
+	border-top-left-radius: 10px;
+	border-top-right-radius: 10px;
+}
+
+.titlelink {
+	padding: 15px;
+	color: white;
+	text-decoration: none;
+	font-weight: bold;
+}
+
+.titlelink:hover {
+	color: $navy;
+	background: white;
+}
+
+.content {
+	padding: 15px;
+}
+
+body {
+	width: 100%;
+	max-width: 800px;
+	margin: 30px;
+	border-radius: 10px;
+	background: white;
+	box-shadow: 2px 2px 60px #0005;
+}
+
+@media only screen and (max-width: 800px) {
+	body {
+		margin: 0px;
+		box-shadow: none;
+		border-radius: 0px;
+	}
+
+	.titlebar {
+		border-radius: 0px;
+	}
 }

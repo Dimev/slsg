@@ -8,15 +8,9 @@ for key, value in pairs(template.colocated.files) do
     local front = value:parseMd().front
     
     -- link to the page
-    table.insert(pagelinks, 
-      h.a()
-        :attrs({ href = "/" .. value.stem})
-        :sub(front.title))  
+    pagelinks["/" .. value.stem] = front.title 
   end
 end
-
--- links to other pages
-local links = h.nav():sub(table.unpack(pagelinks))
 
 -- load all colocated markdown files
 local markdown = {}
@@ -30,17 +24,17 @@ for key, value in pairs(template.colocated.files) do
     local front = md.front
 
     -- render out
-    local html = components.page(front.title, "", "/style.css", links, rawHtml(md.html))
+    local html = components.page(front.title, "", "/style.css", pagelinks, rawHtml(md.html))
 
     -- and the actual page file
-    markdown["/" .. value.stem] = page()
+    markdown[value.stem] = page()
       :withHtml(html:renderHtml())
   end
 end
 
 -- index page
 local html = components.page(
-  "YASSG", "", "/style.css", links, 
+  "YASSG", "", "/style.css", pagelinks, 
   h.main():sub("Hello <$> world!")
 ):renderHtml()
 
