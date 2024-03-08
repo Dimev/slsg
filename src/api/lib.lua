@@ -86,7 +86,7 @@ function el(ty)
 	-- add content
 	function element:sub(...)
 		for i, value in ipairs({ ... }) do 
-			self.content = self.content .. value:render() 
+			self.content = self.content .. value:renderself() 
 		end
 		return self
 	end
@@ -115,6 +115,7 @@ end
 -- TODO: escaping
 function txt(text) 
 	return {
+		renderself = function() return text end,
 		render = function() return text end
 	}
 end
@@ -123,7 +124,22 @@ end
 -- TODO: compression/minification
 function rawHtml(text) 
 	return {
+		renderself = function() return text end,
 		render = function() return text end
+	}
+end
+
+-- fragment
+-- TODO
+function fragment(...)
+	local html = ""
+	for _, value in ipairs(...) do
+		html = html .. value:renderself()
+	end
+
+	return {
+		renderself = function() return html end,
+		render = function() return html end
 	}
 end
 

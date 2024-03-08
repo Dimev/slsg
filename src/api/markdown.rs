@@ -47,15 +47,15 @@ const OPTIONS: ParseOptions = ParseOptions {
         math_flow: true,
         math_text: true,
         mdx_esm: false,
-        mdx_expression_flow: true,
-        mdx_expression_text: true,
+        mdx_expression_flow: false,
+        mdx_expression_text: false,
         mdx_jsx_flow: false,
         mdx_jsx_text: false,
         thematic_break: true,
     },
     mdx_expression_parse: None,
     mdx_esm_parse: None,
-    gfm_strikethrough_single_tilde: true,
+    gfm_strikethrough_single_tilde: false,
     math_text_single_dollar: true,
 };
 
