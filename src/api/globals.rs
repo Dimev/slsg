@@ -90,12 +90,17 @@ pub(crate) fn load_globals(
         lua.load_from_function::<Value>(&format!("scripts/{script}"), function)
     })?;
 
+    // standard lib
+    lua.load(include_str!("lib.lua"))
+        .set_name("builtin://stdlib.lua")
+        .exec()?;
+
     // load
     let table = lua.create_table()?;
     table.set("file", file)?;
     table.set("debug", debug)?;
     table.set("highlight", highlight)?;
-    table.set("latextomathml", mathml)?;
+    table.set("latexToMathml", mathml)?;
     lua.globals().set("yassg", table)?;
     lua.globals().set("require", require)?;
 

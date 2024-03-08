@@ -1,46 +1,50 @@
--- all subpages
-local pages = {}
+local components = require('components.lua')
 
--- run the script for the page
-for key, val in pairs(template.colocated.scripts) do
-  pages[key] = val() 
+-- get all index pages
+local pagelinks = {}
+for key, value in pairs(template.colocated.files) do
+  -- if it's markdown, and not the index page, include it
+  if value.extention == "md" and value.stem ~= "index" then 
+    local front = value:parseMd().front
+    
+    -- link to the page
+    table.insert(pagelinks, 
+      h.a()
+        :attrs({ href = "/" .. value.stem})
+        :sub(front.title))  
+  end
 end
 
--- add the bibliography
-local bib = template.colocated.files["references.bib"]:parseBibtex()
+-- links to other pages
+local links = h.nav():sub(table.unpack(pagelinks))
 
--- convert a table to a string
-local function table2string(table, ident)
-  if type(table) ~= "table" then
-    return tostring(table)
+-- load all colocated markdown files
+local markdown = {}
+for key, value in pairs(template.colocated.files) do
+  -- if it's markdown, and not the index page, include it
+  if value.extention == "md" and value.stem ~= "index" then
+    -- render it to html
+    local md = value:parseMd()
+
+    -- get the front matter for the title of the page
+    local front = md.front
+
+    -- render out
+    local html = components.page(front.title, "", "/style.css", links, rawHtml(md.html))
+
+    -- and the actual page file
+    markdown["/" .. value.stem] = page()
+      :withHtml(html:renderHtml())
   end
-
-  local str = ""
-  for key, value in pairs(table) do
-    str = str .. string.rep("  ", ident or 0) .. key .. " = " .. table2string(value, (ident or 0) + 1) .. ",\n"
-  end
-
-  return "{\n" .. str .. " \n" .. string.rep("  ", ident or 0) .. "}"
 end
 
--- render out like this for now
-local citations = table2string(bib)
-
--- the html index
-local html = div():sub(
-  h1():sub(
-    txt("Hello world!")
-  ),
-  p():sub(txt("Welcome to " .. config.name)),
-  a("blog/"):sub(
-    -- we only have this as page
-    txt("Blog posts")
-  ),
-  el("pre"):sub(txt("citations: " .. citations))
-):render()
+-- index page
+local html = components.page(
+  "YASSG", "", "/style.css", links, 
+  h.main():sub("Hello <$> world!")
+):renderHtml()
 
 return page()
   :withHtml(html)
-  :withManyPages(pages)
-  :withFile("404.html", yassg.file(p():sub(txt("Not found!")):render()))
+  :withManyPages(markdown)
   :withFile("style.css", template.styles.style)

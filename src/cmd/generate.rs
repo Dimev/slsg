@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 
 use mlua::LuaSerdeExt;
 use mlua::{Lua, LuaOptions, StdLib};
@@ -137,10 +137,12 @@ impl Site {
 
         // load the static files
         let static_files =
-            Directory::load_static(PathBuf::from("static/"), path.join("static/"), &lua)?;
+            Directory::load_static(PathBuf::from("static/"), path.join("static/"), &lua)
+                .context("Could not load static files directory")?;
 
         // load the styles
-        let styles = load_styles(&lua, path.join("styles/"))?;
+        let styles =
+            load_styles(&lua, path.join("styles/")).context("Could not load styles directory")?;
 
         // load the globals
         let warnings = load_globals(&lua, path, debug)?;

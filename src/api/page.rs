@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mlua::{FromLua, Lua, Table, Value};
+use mlua::{ErrorContext, FromLua, Lua, Table, Value};
 
 use super::file::File;
 
@@ -82,7 +82,8 @@ impl Page {
 impl<'lua> FromLua<'lua> for Page {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
         // it's a table
-        let table = Table::from_lua(value, lua)?;
+        let table = Table::from_lua(value, lua)
+            .context("Page needs to be a table with an optional html string, a files table, and a pages table")?;
 
         // get the tables from the table
         let html: Option<String> = table.get("html")?;

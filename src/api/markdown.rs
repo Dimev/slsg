@@ -113,13 +113,13 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::FootnoteDefinition(x) => {
-            table.set("type", "footnotedefinition")?;
+            table.set("type", "footnoteDefinition")?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::MdxJsxFlowElement(x) => {
-            table.set("type", "mdxjsxflowelement")?;
+            table.set("type", "mdxJsxFlowElement")?;
             table.set("name", x.name)?;
             table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
@@ -149,11 +149,11 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("type", "break")?;
         }
         Node::InlineCode(x) => {
-            table.set("type", "inlinecode")?;
+            table.set("type", "inlineCode")?;
             table.set("value", x.value)?;
         }
         Node::InlineMath(x) => {
-            table.set("type", "inlinemath")?;
+            table.set("type", "inlineMath")?;
             table.set("value", x.value)?;
         }
         Node::Delete(x) => {
@@ -165,15 +165,15 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::MdxTextExpression(x) => {
-            table.set("type", "mdxtextexpression")?;
+            table.set("type", "mdxTextExpression")?;
             table.set("value", x.value)?;
         }
         Node::MdxjsEsm(x) => {
-            table.set("type", "mxdjsesm")?;
+            table.set("type", "mxdJsEsm")?;
             table.set("value", x.value)?;
         }
         Node::FootnoteReference(x) => {
-            table.set("type", "footnotereference")?;
+            table.set("type", "footnoteReference")?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
         }
@@ -188,12 +188,12 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("title", x.title)?;
         }
         Node::ImageReference(x) => {
-            table.set("type", "imagereference")?;
+            table.set("type", "imageReference")?;
             table.set("alt", x.alt)?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
             table.set(
-                "referencekind",
+                "referenceKind",
                 match x.reference_kind {
                     ReferenceKind::Shortcut => "shortcut",
                     ReferenceKind::Collapsed => "collapsed",
@@ -202,7 +202,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             )?;
         }
         Node::MdxJsxTextElement(x) => {
-            table.set("type", "mdxjsxtextelement")?;
+            table.set("type", "mdxJsxTextElement")?;
             table.set("name", x.name)?;
             table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
@@ -214,12 +214,12 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::LinkReference(x) => {
-            table.set("type", "linkreference")?;
+            table.set("type", "linkReference")?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
             table.set(
-                "referencekind",
+                "referenceKind",
                 match x.reference_kind {
                     ReferenceKind::Shortcut => "shortcut",
                     ReferenceKind::Collapsed => "collapsed",
@@ -247,7 +247,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             table.set("meta", x.meta)?;
         }
         Node::MdxFlowExpression(x) => {
-            table.set("type", "mdxflowexpression")?;
+            table.set("type", "mdxFlowExpression")?;
             table.set("value", x.value)?;
         }
         Node::Heading(x) => {
@@ -272,18 +272,18 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
             )?;
         }
         Node::ThematicBreak(_) => {
-            table.set("type", "thematicbreak")?;
+            table.set("type", "thematicBreak")?;
         }
         Node::TableRow(x) => {
-            table.set("type", "tablerow")?;
+            table.set("type", "tableRow")?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::TableCell(x) => {
-            table.set("type", "tablecell")?;
+            table.set("type", "tableCell")?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
         }
         Node::ListItem(x) => {
-            table.set("type", "listitem")?;
+            table.set("type", "listItem")?;
             table.set("spread", x.spread)?;
             table.set("checked", x.checked)?;
             table.set("children", many_ast_to_lua(&lua, x.children)?)?;
@@ -330,11 +330,11 @@ fn mdx_jsx_attrs_to_lua(lua: &Lua, ast: Vec<AttributeContent>) -> Result<Table, 
                 att.set("name", x.name)?;
                 match x.value {
                     Some(AttributeValue::Expression(x)) => {
-                        att.set("valuetype", "expression")?;
+                        att.set("valueType", "expression")?;
                         att.set("value", x.value)?;
                     }
                     Some(AttributeValue::Literal(x)) => {
-                        att.set("valuetype", "literal")?;
+                        att.set("valueType", "literal")?;
                         att.set("value", x)?;
                     }
                     _ => {}

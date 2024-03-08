@@ -1,4 +1,4 @@
-use std::{ fs, path::Path};
+use std::{fs, path::Path};
 
 use anyhow::anyhow;
 use clap::error::Result;
@@ -63,12 +63,6 @@ impl<'lua> Script<'lua> {
             let env = clone_table(lua, lua.globals())?;
             env.set("template", template)?;
 
-            // standard lib
-            lua.load(include_str!("lib.lua"))
-                .set_environment(env.clone())
-                .set_name("builtin://stdlib.lua")
-                .exec()?;
-
             // load script to lua
             let script = lua
                 .load(script)
@@ -83,8 +77,7 @@ impl<'lua> Script<'lua> {
             let script = fs::read_to_string(path.as_ref().join("index.lua"))?;
 
             // read the directory
-            let colocated =
-                Directory::load(base, path, lua, static_files, styles)?;
+            let colocated = Directory::load(base, path, lua, static_files, styles)?;
 
             // set load the environment script
             let template = lua.create_table()?;
@@ -120,12 +113,6 @@ impl<'lua> Script<'lua> {
             // make the environment
             let env = clone_table(lua, lua.globals())?;
             env.set("template", template)?;
-
-            // standard lib
-            lua.load(include_str!("lib.lua"))
-                .set_environment(env.clone())
-                .set_name("builtin://stdlib.lua")
-                .exec()?;
 
             // load script to lua
             let script = lua
