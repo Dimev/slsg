@@ -20,3 +20,4 @@ nom-bibtex = "0.5"
 serde = { version = "1.0.197", features = ["derive"] }
 latex2mathml = "0.2.3"
 regex = "1.10.3"
+serde-tuple-vec-map = "1.0.1"

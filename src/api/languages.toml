@@ -1,6 +1,8 @@
 [rust]
 extentions = ["rs"]
-keywords = "pub|crate|fun|struct|impl|use|trait|enum"
+keywords = "[pub|crate|fn|struct|impl|use|trait|enum]"
+symbols = "[{|}]"
+fun = "fn"
 
 [haskell]
 extentions = ["hs", "lhs"]

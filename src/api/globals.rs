@@ -3,7 +3,7 @@ use std::{cell::RefCell, fs, path::Path, rc::Rc};
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{Lua, Value};
 
-use super::file::File;
+use super::{file::File, highlight::Languages};
 
 /// Load all program globals into the lua globals
 pub(crate) fn load_globals(
@@ -33,11 +33,12 @@ pub(crate) fn load_globals(
 
     // syntax highlighting
     // TODO fix
-    let path_owned = path.as_ref().to_owned();
+    let highlights = Languages::load(&path.as_ref().join("highlighting/"))?;
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {
-            // TODO: synoptic
-            Ok(text)
+            highlights
+                .highlight_html(&text, &language, class_prefix)
+                .map_err(mlua::Error::external)
         },
     )?;
 
