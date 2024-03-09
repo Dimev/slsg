@@ -35,7 +35,16 @@ end
 -- index page
 local html = components.page(
   "YASSG", "", "/style.css", pagelinks, 
-  h.main():sub("Hello <$> world!", rawHtml(yassg.highlight("fn main() { println!('hello'); }", "rust", "code--")))
+  h.main():sub(
+    "Hello <$> world!", 
+    h.pre():sub(
+      rawHtml(
+        yassg.highlight([[fn main() { 
+  println!("hello"); 
+}]], "rust", "code--")
+      )
+    )
+  )
 ):renderHtml()
 
 return page()

@@ -192,11 +192,11 @@ fn handle_connection(
         .trim();
 
     // try and get the file
-    let (content, status) = if let Some(file) =
+    let (content, status, is_html) = if let Some(file) =
         site.read().expect(RW_ERR).get(&PathBuf::from(file_path))
     {
         // get the file content
-        (file.get_bytes()?, "200 OK")
+        (file.get_bytes()?, "200 OK", file_path.ends_with(".html"))
     }
     // try to see if this was an index.html file
     else if let Some(file) = site
@@ -204,7 +204,7 @@ fn handle_connection(
         .expect(RW_ERR)
         .get(&PathBuf::from(file_path).join("index.html"))
     {
-        (file.get_bytes()?, "200 OK")
+        (file.get_bytes()?, "200 OK", true)
     }
     // if it's the update notifier, set the update stream
     else if file_path == VERY_LONG_PATH {
@@ -230,7 +230,7 @@ fn handle_connection(
         .expect(RW_ERR)
         .get(&PathBuf::from("dev-server-404-error-page.rs"))
     {
-        (file.get_bytes()?, "404 NOT FOUND")
+        (file.get_bytes()?, "404 NOT FOUND", true)
     }
     // otherwise use the default 404
     else {
@@ -241,8 +241,12 @@ fn handle_connection(
             )
             .into_bytes(),
             "404 NOT FOUND",
+            true,
         )
     };
+
+    // update notify script
+    let update_notify = if is_html { UPDATE_NOTIFY_SCRIPT } else { "" };
 
     // get the warnings and errors sheet
     let warns_and_errors = {
@@ -253,13 +257,7 @@ fn handle_connection(
     };
 
     // send the page back
-    let length = content.len() + UPDATE_NOTIFY_SCRIPT.len() + warns_and_errors.len();
-
-    // TODO: for html files, append the auto-update script
-    // TODO: for html files, append the errors/warnings page
-    // TODO: mime type
-
-    // TODO: cram content type in here somewhere?
+    let length = content.len() + update_notify.len() + warns_and_errors.len();
     let response =
         format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n\r\n");
 

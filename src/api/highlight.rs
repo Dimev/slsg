@@ -97,7 +97,7 @@ impl Languages {
             // advance all styles no longer in the range
             for range in matches.iter_mut() {
                 if range.peek().map(|x| start >= x.end()).unwrap_or(false) {
-                    println!("{:?}", range.next().map(|x| x.as_str()));
+                    range.next();
                 }
             }
 
@@ -138,8 +138,6 @@ impl Languages {
             });
         }
 
-        println!("{:?}", highlights);
-
         Ok(highlights)
     }
 
@@ -155,7 +153,7 @@ impl Languages {
             .into_iter()
             .map(|x| {
                 format!(
-                    r#"<p class="{}{}">{}</p>"#,
+                    r#"<span class="{}{}">{}</span>"#,
                     class_prefix.as_ref().unwrap_or(&String::new()),
                     escape_html(&x.style),
                     escape_html(&x.text)
