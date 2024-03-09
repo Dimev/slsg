@@ -1,0 +1,11 @@
+[rust]
+extentions = ["rs"]
+keywords = "pub|crate|fun|struct|impl|use|trait|enum"
+
+[haskell]
+extentions = ["hs", "lhs"]
+keywords = "import"
+
+[javascript]
+extentions = ["js", "mjs", "jsx"]
+keywords = "function|class|import"

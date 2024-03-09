@@ -11,7 +11,7 @@ function escapeHtml(html)
     ["<"] = "&lt;",
     [">"] = "&gt;",
   }	
-	local escaped = string.gsub(html, "[<&>]", subst)
+	local escaped = string.gsub(html, ".", subst)
 	return escaped
 end
 

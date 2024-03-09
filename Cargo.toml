@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.79"
 clap = { version = "4.4.18", features = ["derive"] }
-html-escape = "0.2.13"
 crossterm = "0.27.0"
 markdown = "=1.0.0-alpha.16"
 mlua = { version = "0.9.5", features = ["lua54", "serialize"] }
@@ -20,3 +19,4 @@ serde_yaml = "0.9"
 nom-bibtex = "0.5"
 serde = { version = "1.0.197", features = ["derive"] }
 latex2mathml = "0.2.3"
+regex = "1.10.3"

@@ -1,6 +1,14 @@
 use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
-use html_escape::encode_safe;
 use std::io::stdout;
+
+fn escape_html(string: &str) -> String {
+    string
+        .replace("&", "&amp;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+}
 
 /// Print a warning to the terminal
 pub(crate) fn print_warning(str: &str) {
@@ -49,7 +57,7 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
     let warns: String = warnings
         .iter()
         .map(|x| {
-            let lines = encode_safe(x);
+            let lines = escape_html(x);
             format!(r#"<pre style="{warn_div}">{lines}</pre>"#)
         })
         .collect();
@@ -65,7 +73,7 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
     let errs: String = errors
         .iter()
         .map(|x| {
-            let lines = encode_safe(x);
+            let lines = escape_html(x);
             format!(r#"<pre style="{err_div}">{lines}</pre>"#)
         })
         .collect();
