@@ -32,8 +32,8 @@ pub(crate) fn load_globals(
     })?;
 
     // syntax highlighting
-    // TODO fix
     let highlights = Languages::load(&path.as_ref().join("highlighting/"))?;
+    let highlights_cloned = highlights.clone();
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {
             highlights
@@ -42,6 +42,22 @@ pub(crate) fn load_globals(
         },
     )?;
 
+    let highlight_ast = lua.create_function(move |lua, (text, language): (String, String)| {
+        let ranges = highlights_cloned
+            .highlight(&text, &language)
+            .map_err(mlua::Error::external)?;
+
+        let table = lua.create_table()?;
+
+        for range in ranges {
+            let t = lua.create_table()?;
+            t.set("text", range.text)?;
+            t.set("style", range.style)?;
+            table.push(t)?;
+        }
+
+        Ok(table)
+    })?;
     // warn function
     let warnings = Rc::new(RefCell::new(Vec::<String>::new()));
     let warnings_cloned = warnings.clone();
@@ -100,7 +116,8 @@ pub(crate) fn load_globals(
     let table = lua.create_table()?;
     table.set("file", file)?;
     table.set("debug", debug)?;
-    table.set("highlight", highlight)?;
+    table.set("highlightCodeHtml", highlight)?;
+    table.set("highlightCodeAst", highlight_ast)?;
     table.set("latexToMathml", mathml)?;
     lua.globals().set("yassg", table)?;
     lua.globals().set("require", require)?;

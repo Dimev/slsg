@@ -1,5 +1,19 @@
 $navy: #1D2951;
 
+$red: #C82829;
+$orange: #F5871F;
+$yellow: #EAB700;
+$green: #718C00;
+$aqua: #3E999F;
+$blue: #4271AE;
+$purple: #8959A8;
+
+$background: #FFFFFF;
+$current_line: #EFEFEF;
+$selection: #D6D6D6;
+$foreground: #4D4D4C;
+$comment: #8E908C;
+
 * {
 	box-sizing: border-box;
 }
@@ -56,6 +70,30 @@ body {
 	}
 }
 
-.code--fun {
-	color: red;
+.code {
+	font-size: 16px;
+}
+
+.code--comment {
+	color: $comment;
+}
+
+.code--keyword {
+	color: $red;
+}
+
+.code--macro {
+	color: $purple;
+}
+
+.code--constant {
+	color: $blue;
+}
+
+.code--type {
+	color: $purple;
+}
+
+.code--string {
+	color: $green;
 }

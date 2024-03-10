@@ -37,9 +37,10 @@ local html = components.page(
   "YASSG", "", "/style.css", pagelinks, 
   h.main():sub(
     "Hello <$> world!", 
-    h.pre():sub(
+    h.pre():attrs({ class = "code" }):sub(
       rawHtml(
-        yassg.highlight([[fn main() { 
+        yassg.highlightCodeHtml([[fn main() { 
+  // say hello world!
   println!("hello"); 
 }]], "rust", "code--")
       )

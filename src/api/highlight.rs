@@ -5,7 +5,7 @@ use regex::{Matches, Regex};
 use serde::Deserialize;
 
 /// Single set of regex rules
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Language {
     /// file extentions
     extentions: Vec<String>,
@@ -16,17 +16,17 @@ struct Language {
 }
 
 /// Set of highlighter
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub(crate) struct Languages(HashMap<String, Language>);
 
 /// Highlighting range
 #[derive(Debug)]
 pub(crate) struct HighlightRange {
     /// Part of the code
-    text: String,
+    pub(crate) text: String,
 
     /// Style to use
-    style: String,
+    pub(crate) style: String,
 }
 
 impl Languages {
@@ -103,8 +103,13 @@ impl Languages {
 
             // find the index of the last style that matches
             let style = matches.iter_mut().enumerate().rev().find_map(|(i, x)| {
-                x.peek()
-                    .and_then(|x| if start < x.end() { Some(i) } else { None })
+                x.peek().and_then(|x| {
+                    if start >= x.start() && start < x.end() {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
             });
 
             // if they are different, push the current string
