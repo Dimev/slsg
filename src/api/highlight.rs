@@ -1,12 +1,12 @@
 use std::{collections::HashMap, fs, iter::Peekable, path::Path};
 
 use anyhow::anyhow;
-use regex::{Matches, Regex};
+use regex::{Matches, Regex, RegexBuilder};
 use serde::Deserialize;
 
-/// Single set of regex rules
-#[derive(Deserialize, Clone)]
-struct Language {
+/// Single set of regex rules, as strings
+#[derive(Deserialize)]
+struct LanguageRaw {
     /// file extentions
     extentions: Vec<String>,
 
@@ -15,8 +15,18 @@ struct Language {
     rules: Vec<(String, String)>,
 }
 
+/// Single set of regex rules
+#[derive(Clone)]
+struct Language {
+    /// file extentions
+    extentions: Vec<String>,
+
+    /// Regex rules
+    rules: Vec<(String, Regex)>,
+}
+
 /// Set of highlighter
-#[derive(Deserialize, Clone)]
+#[derive(Clone)]
 pub(crate) struct Languages(HashMap<String, Language>);
 
 /// Highlighting range
@@ -32,7 +42,24 @@ pub(crate) struct HighlightRange {
 impl Languages {
     /// Parse a language set from a string
     pub(crate) fn from_str(string: &str) -> Result<Self, anyhow::Error> {
-        toml::from_str::<Self>(string).map_err(|x| x.into())
+        let raw = toml::from_str::<HashMap<String, LanguageRaw>>(string)?;
+        let mut languages = HashMap::with_capacity(raw.len());
+
+        for (name, language) in raw {
+            let mut rules = Vec::with_capacity(language.rules.len());
+            for (style, rule) in language.rules {
+                rules.push((style, RegexBuilder::new(&rule).multi_line(true).build()?));
+            }
+            languages.insert(
+                name,
+                Language {
+                    extentions: language.extentions,
+                    rules,
+                },
+            );
+        }
+
+        Ok(Languages(languages))
     }
 
     /// Load all languages
@@ -79,14 +106,11 @@ impl Languages {
             })
             .ok_or(anyhow!("Could not find language {language}"))?;
 
-        // highlight
-        let mut rules: Vec<Regex> = Vec::with_capacity(language.rules.len());
-        for (_, rule) in language.rules.iter() {
-            rules.push(Regex::new(&rule)?);
-        }
-
-        let mut matches: Vec<Peekable<Matches>> =
-            rules.iter().map(|x| x.find_iter(code).peekable()).collect();
+        let mut matches: Vec<Peekable<Matches>> = language
+            .rules
+            .iter()
+            .map(|x| x.1.find_iter(code).peekable())
+            .collect();
 
         // highlight the code
         let mut cur_chunk = String::new();
@@ -102,7 +126,7 @@ impl Languages {
             }
 
             // find the index of the last style that matches
-            let style = matches.iter_mut().enumerate().rev().find_map(|(i, x)| {
+            let style = matches.iter_mut().enumerate().find_map(|(i, x)| {
                 x.peek().and_then(|x| {
                     if start >= x.start() && start < x.end() {
                         Some(i)

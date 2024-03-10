@@ -32,6 +32,12 @@ for key, value in pairs(template.colocated.files) do
   end
 end
 
+local hs = yassg.highlightCodeHtml([[
+-- I have no IO monad and I must scream
+ree :: a -> a
+ree = seq $ unsafePerformIO "REEEEE"
+]], "hs", "code--")
+
 -- index page
 local html = components.page(
   "YASSG", "", "/style.css", pagelinks, 
@@ -44,7 +50,8 @@ local html = components.page(
   println!("hello"); 
 }]], "rust", "code--")
       )
-    )
+    ),
+    h.pre():attrs({ class = "code "}):sub(rawHtml(hs))
   )
 ):renderHtml()
 
