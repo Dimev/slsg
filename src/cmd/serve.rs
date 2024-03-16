@@ -28,14 +28,14 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
         Ok(res) => {
             // throw all warnings
             for warning in res.warnings.iter() {
-                print_warning(&warning);
+                print_warning(warning);
             }
 
             // give the warnings to the page
             let mut warnings = warnings.write().expect(RW_ERR);
             *warnings = res.warnings;
 
-            let mut pages = res.page.to_hashmap("/");
+            let mut pages = res.page.into_hashmap("/");
 
             // set the 404 error page
             if let Some(dev_404) = res.dev_404 {
@@ -55,7 +55,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
             // print warnings
             for warning in &page_warnings {
-                print_warning(&warning);
+                print_warning(warning);
             }
 
             // give the errors to the page
@@ -88,7 +88,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                 Ok(res) => {
                     // throw all warnings
                     for warning in res.warnings.iter() {
-                        print_warning(&warning);
+                        print_warning(warning);
                     }
 
                     // give the warnings to the page
@@ -98,7 +98,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                     // clear errors
                     errors_cloned.write().expect(RW_ERR).clear();
 
-                    let mut pages = res.page.to_hashmap("/");
+                    let mut pages = res.page.into_hashmap("/");
 
                     // set the 404 error page
                     if let Some(dev_404) = res.dev_404 {
@@ -119,7 +119,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
                     // print warnings
                     for warning in &page_warnings {
-                        print_warning(&warning);
+                        print_warning(warning);
                     }
 
                     // clear errors and warnings

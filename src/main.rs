@@ -10,7 +10,7 @@ use cmd::{
 };
 use cookbook::lookup;
 use pretty_print::{print_entry, print_error};
-use std::{collections::HashMap, env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 use crate::{cookbook::entries, pretty_print::print_warning};
 
@@ -58,7 +58,7 @@ fn main() -> Result<(), anyhow::Error> {
             Ok(site) => {
                 // success, print any warnings
                 for warning in site.warnings.iter() {
-                    print_warning(&warning);
+                    print_warning(warning);
                 }
 
                 site.write_to_directory(output)?;
@@ -86,7 +86,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
         Args::New { path } => {
             // check if the directory is empty
-            if !path.read_dir()?.next().is_none() {
+            if path.read_dir()?.next().is_some() {
                 println!("{:?} is not empty!", path);
             }
 
@@ -112,7 +112,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
         Args::Init {} => {
             // check if the directory is empty
-            if !env::current_dir()?.read_dir()?.next().is_none() {
+            if env::current_dir()?.read_dir()?.next().is_some() {
                 println!("Current directory is not empty!");
             }
             // create the site directories

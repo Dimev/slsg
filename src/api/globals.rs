@@ -77,7 +77,7 @@ pub(crate) fn load_globals(
                 });
             let line = frame.curr_line();
             let line = if line < 0 {
-                format!("")
+                String::new()
             } else {
                 format!(":{}", line)
             };

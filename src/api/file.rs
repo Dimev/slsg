@@ -89,31 +89,31 @@ impl UserData for File {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("parseMd", |_, this, ()| {
             Ok(Markdown::from_str(
-                &this.get_string().map_err(|x| mlua::Error::external(x))?,
+                &this.get_string().map_err(mlua::Error::external)?,
             ))
         });
         methods.add_method("parseTxt", |_, this, ()| {
-            this.get_string().map_err(|x| mlua::Error::external(x))
+            this.get_string().map_err(mlua::Error::external)
         });
         methods.add_method("parseJson", |lua, this, ()| {
-            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let str = this.get_string().map_err(mlua::Error::external)?;
             let json: serde_json::Value =
-                serde_json::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+                serde_json::from_str(&str).map_err(mlua::Error::external)?;
             lua.to_value(&json)
         });
         methods.add_method("parseYaml", |lua, this, ()| {
-            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let str = this.get_string().map_err(mlua::Error::external)?;
             let yaml: serde_yaml::Value =
-                serde_yaml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+                serde_yaml::from_str(&str).map_err(mlua::Error::external)?;
             lua.to_value(&yaml)
         });
         methods.add_method("parseToml", |lua, this, ()| {
-            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
-            let toml: toml::Value = toml::from_str(&str).map_err(|x| mlua::Error::external(x))?;
+            let str = this.get_string().map_err(mlua::Error::external)?;
+            let toml: toml::Value = toml::from_str(&str).map_err(mlua::Error::external)?;
             lua.to_value(&toml)
         });
         methods.add_method("parseBibtex", |lua, this, ()| {
-            let str = this.get_string().map_err(|x| mlua::Error::external(x))?;
+            let str = this.get_string().map_err(mlua::Error::external)?;
             let bibtex: Bibtex = Bibtex::parse(&str)
                 .map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
             biblatex_to_table(lua, bibtex)

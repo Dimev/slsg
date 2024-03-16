@@ -75,12 +75,12 @@ impl UserData for Markdown {
         });
         fields.add_field_method_get("ast", |lua, this| {
             // convert to the abstract syntax tree
-            let md = to_mdast(&this.raw, &OPTIONS).map_err(|x| Error::external(x))?;
+            let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
             let table = ast_to_lua(lua, md)?;
             Ok(table)
         });
         fields.add_field_method_get("front", |lua, this| {
-            let md = to_mdast(&this.raw, &OPTIONS).map_err(|x| Error::external(x))?;
+            let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
             // first toml or yaml is the front matter
             if let Node::Root(Root { children, .. }) = md {
                 if let [Node::Toml(x), ..] = children.as_slice() {
@@ -106,42 +106,42 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
     match ast {
         Node::Root(x) => {
             table.set("type", "root")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::BlockQuote(x) => {
             table.set("type", "blockquote")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::FootnoteDefinition(x) => {
             table.set("type", "footnoteDefinition")?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::MdxJsxFlowElement(x) => {
             table.set("type", "mdxJsxFlowElement")?;
             table.set("name", x.name)?;
-            table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("attributes", mdx_jsx_attrs_to_lua(lua, x.attributes)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::List(x) => {
             table.set("type", "list")?;
             table.set("ordered", x.ordered)?;
             table.set("start", x.start)?;
             table.set("spread", x.spread)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Toml(x) => {
             table.set("type", "toml")?;
             let toml: toml::Value =
-                toml::from_str(&x.value).map_err(|x| mlua::Error::external(x))?;
+                toml::from_str(&x.value).map_err(mlua::Error::external)?;
             table.set("data", lua.to_value(&toml)?)?;
             table.set("value", x.value)?;
         }
         Node::Yaml(x) => {
             table.set("type", "yaml")?;
             let yaml: serde_yaml::Value =
-                serde_yaml::from_str(&x.value).map_err(|x| mlua::Error::external(x))?;
+                serde_yaml::from_str(&x.value).map_err(mlua::Error::external)?;
             table.set("data", lua.to_value(&yaml)?)?;
             table.set("value", x.value)?;
         }
@@ -158,11 +158,11 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         }
         Node::Delete(x) => {
             table.set("type", "delete")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Emphasis(x) => {
             table.set("type", "emphasis")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::MdxTextExpression(x) => {
             table.set("type", "mdxTextExpression")?;
@@ -204,20 +204,20 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         Node::MdxJsxTextElement(x) => {
             table.set("type", "mdxJsxTextElement")?;
             table.set("name", x.name)?;
-            table.set("attributes", mdx_jsx_attrs_to_lua(&lua, x.attributes)?)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("attributes", mdx_jsx_attrs_to_lua(lua, x.attributes)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Link(x) => {
             table.set("type", "link")?;
             table.set("url", x.url)?;
             table.set("title", x.title)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::LinkReference(x) => {
             table.set("type", "linkReference")?;
             table.set("identifier", x.identifier)?;
             table.set("label", x.label)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
             table.set(
                 "referenceKind",
                 match x.reference_kind {
@@ -229,7 +229,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         }
         Node::Strong(x) => {
             table.set("type", "strong")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Text(x) => {
             table.set("type", "text")?;
@@ -253,11 +253,11 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         Node::Heading(x) => {
             table.set("type", "heading")?;
             table.set("depth", x.depth)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Table(x) => {
             table.set("type", "table")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
             table.set(
                 "align",
                 x.align
@@ -276,21 +276,21 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         }
         Node::TableRow(x) => {
             table.set("type", "tableRow")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::TableCell(x) => {
             table.set("type", "tableCell")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::ListItem(x) => {
             table.set("type", "listItem")?;
             table.set("spread", x.spread)?;
             table.set("checked", x.checked)?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Paragraph(x) => {
             table.set("type", "paragraph")?;
-            table.set("children", many_ast_to_lua(&lua, x.children)?)?;
+            table.set("children", many_ast_to_lua(lua, x.children)?)?;
         }
         Node::Definition(x) => {
             table.set("type", "definition")?;
@@ -309,7 +309,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
 fn many_ast_to_lua(lua: &Lua, ast: Vec<Node>) -> Result<Table, Error> {
     let table = lua.create_table()?;
     for node in ast {
-        table.push(ast_to_lua(&lua, node)?)?;
+        table.push(ast_to_lua(lua, node)?)?;
     }
 
     Ok(table)

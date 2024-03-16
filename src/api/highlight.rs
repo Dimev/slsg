@@ -68,7 +68,7 @@ impl Languages {
 
         // load the included languages
         let included = include_str!("languages.toml");
-        languages.extend(Self::from_str(included)?.0.into_iter());
+        languages.extend(Self::from_str(included)?.0);
 
         // load the on-disk languages
         if let Ok(dir) = fs::read_dir(path) {
@@ -93,11 +93,7 @@ impl Languages {
             .get(language)
             .or_else(|| {
                 self.0.iter().find_map(|(_, x)| {
-                    if x.extentions
-                        .iter()
-                        .find(|x| x.as_str() == language)
-                        .is_some()
-                    {
+                    if x.extentions.iter().any(|x| x.as_str() == language) {
                         Some(x)
                     } else {
                         None
@@ -193,23 +189,22 @@ impl Languages {
         Ok(self
             .highlight(code, language)?
             .into_iter()
-            .map(|x| {
+            .fold(String::new(), |acc, x| {
                 format!(
-                    r#"<span class="{}{}">{}</span>"#,
+                    r#"{acc}<span class="{}{}">{}</span>"#,
                     class_prefix.as_ref().unwrap_or(&String::new()),
                     escape_html(&x.style),
                     escape_html(&x.text)
                 )
-            })
-            .collect())
+            }))
     }
 }
 
 fn escape_html(string: &str) -> String {
     string
-        .replace("&", "&amp;")
-        .replace("\"", "&quot;")
-        .replace("'", "&apos;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
+        .replace('&', "&amp;")
+        .replace('\"', "&quot;")
+        .replace('\'', "&apos;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }

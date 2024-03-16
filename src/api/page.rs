@@ -55,7 +55,7 @@ impl Page {
     }
 
     /// Render the page to a hashmap
-    pub(crate) fn to_hashmap<P: AsRef<Path>>(self, root: P) -> HashMap<PathBuf, File> {
+    pub(crate) fn into_hashmap<P: AsRef<Path>>(self, root: P) -> HashMap<PathBuf, File> {
         let mut map = HashMap::new();
 
         // add the index.html, if any
@@ -70,7 +70,7 @@ impl Page {
 
         // add the subpages
         for (name, page) in self.pages.into_iter() {
-            let sub = page.to_hashmap(root.as_ref().join(name));
+            let sub = page.into_hashmap(root.as_ref().join(name));
 
             // write out all the subfiles
             map.extend(sub.into_iter());

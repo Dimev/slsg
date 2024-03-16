@@ -42,13 +42,13 @@ impl<'lua> Script<'lua> {
                 .ok_or_else(|| anyhow!("{:?} does not have a file stem", path.as_ref()))?
                 .to_str()
                 .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file stem", path.as_ref()))?
-                .to_owned();
+                .to_string();
 
             let rel_path = base
                 .as_ref()
                 .to_str()
                 .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file name", base.as_ref()))?
-                .to_owned();
+                .to_string();
 
             template.set("name", name.as_str())?;
             template.set("path", rel_path.clone())?;
@@ -67,7 +67,7 @@ impl<'lua> Script<'lua> {
             let script = lua
                 .load(script)
                 .set_environment(env)
-                .set_name(base.as_ref().to_string_lossy().to_owned())
+                .set_name(base.as_ref().to_string_lossy().into_owned())
                 .into_function()?;
 
             // went ok
@@ -92,14 +92,14 @@ impl<'lua> Script<'lua> {
                 .ok_or_else(|| anyhow!("{:?} does not have a file name", path.as_ref()))?
                 .to_str()
                 .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file name", path.as_ref()))?
-                .to_owned();
+                .to_string();
 
             let rel_path = base
                 .as_ref()
                 .join("index.lua")
                 .to_str()
                 .ok_or_else(|| anyhow!("{:?} does not have a utf-8 file name", base.as_ref()))?
-                .to_owned();
+                .to_string();
 
             template.set("name", name.as_str())?;
             template.set("path", rel_path.clone())?;
@@ -118,7 +118,12 @@ impl<'lua> Script<'lua> {
             let script = lua
                 .load(script)
                 .set_environment(env)
-                .set_name(base.as_ref().join("index.lua").to_string_lossy().to_owned())
+                .set_name(
+                    base.as_ref()
+                        .join("index.lua")
+                        .to_string_lossy()
+                        .into_owned(),
+                )
                 .into_function()?;
 
             Ok(Self { script, name })

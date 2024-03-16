@@ -8,11 +8,11 @@ use crate::{api::highlight::Languages, cookbook::Entry};
 
 fn escape_html(string: &str) -> String {
     string
-        .replace("&", "&amp;")
-        .replace("\"", "&quot;")
-        .replace("'", "&apos;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
+        .replace('&', "&amp;")
+        .replace('\"', "&quot;")
+        .replace('\'', "&apos;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Print a warning to the terminal
@@ -48,7 +48,7 @@ pub(crate) fn print_error(str: &str) {
 }
 
 /// generate html to preview the errors
-pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String>) -> String {
+pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> String {
     // styles to use
     let warn_div = "font: 16px monospace; color: #F5871F";
     let err_div = "font: 16px monospace; color: #C82829";
@@ -59,13 +59,10 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
         "border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll";
 
     // format the warnings
-    let warns: String = warnings
-        .iter()
-        .map(|x| {
-            let lines = escape_html(x);
-            format!(r#"<pre style="{warn_div}">{lines}</pre>"#)
-        })
-        .collect();
+    let warns: String = warnings.iter().fold(String::new(), |acc, x| {
+        let lines = escape_html(x);
+        format!(r#"{acc}<pre style="{warn_div}">{lines}</pre>"#)
+    });
 
     // only add them if there are warnings
     let warns = if warns.is_empty() {
@@ -75,13 +72,10 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
     };
 
     // format the errors
-    let errs: String = errors
-        .iter()
-        .map(|x| {
-            let lines = escape_html(x);
-            format!(r#"<pre style="{err_div}">{lines}</pre>"#)
-        })
-        .collect();
+    let errs: String = errors.iter().fold(String::new(), |acc, x| {
+        let lines = escape_html(x);
+        format!(r#"{acc}<pre style="{err_div}">{lines}</pre>"#)
+    });
 
     // only add them if there are errors
     let errs = if errs.is_empty() {
@@ -110,11 +104,11 @@ pub(crate) fn print_entry(entry: Entry) {
     .expect("Failed to print entry");
 
     for line in entry.tutorial.lines() {
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             queue!(
                 stdout,
                 SetAttribute(Attribute::Bold),
-                Print(line.trim_start_matches("#").trim()),
+                Print(line.trim_start_matches('#').trim()),
                 Print("\n"),
                 SetAttribute(Attribute::Reset),
             )
@@ -122,7 +116,7 @@ pub(crate) fn print_entry(entry: Entry) {
         } else {
             queue!(
                 stdout,
-                Print(line.trim_start_matches("#").trim()),
+                Print(line.trim_start_matches('#').trim()),
                 Print("\n"),
             )
             .expect("Failed to print entry");
