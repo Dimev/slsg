@@ -138,7 +138,7 @@ impl Languages {
             {
                 cur_style
             } else {
-                matches.iter_mut().rev().enumerate().find_map(|(i, x)| {
+                matches.iter_mut().enumerate().find_map(|(i, x)| {
                     x.peek().and_then(|x| {
                         if start >= x.start() && start < x.end() {
                             Some(i)
