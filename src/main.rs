@@ -1,15 +1,18 @@
 mod api;
 mod cmd;
+mod cookbook;
 mod pretty_print;
+
 use clap::Parser;
 use cmd::{
     generate::{GenerateError, Site},
     serve::serve,
 };
-use pretty_print::print_error;
-use std::{env, fs, path::PathBuf};
+use cookbook::lookup;
+use pretty_print::{print_entry, print_error};
+use std::{collections::HashMap, env, fs, path::PathBuf};
 
-use crate::pretty_print::print_warning;
+use crate::{cookbook::entries, pretty_print::print_warning};
 
 #[derive(Parser)]
 enum Args {
@@ -37,7 +40,7 @@ enum Args {
     },
 
     /// Lookup an included example script
-    Cookbook {},
+    Cookbook { name: Option<String> },
 
     /// Create a new site
     New { path: PathBuf },
@@ -71,7 +74,16 @@ fn main() -> Result<(), anyhow::Error> {
         Args::Dev { dir, address } => {
             serve(dir, address)?;
         }
-        Args::Cookbook {} => todo!(),
+        Args::Cookbook { name } => {
+            if let Some(entry) = name.and_then(|x| lookup(&x)) {
+                print_entry(entry);
+            } else {
+                println!("Could not find the given entry. Available entries are:");
+                for (i, entry) in entries().into_iter().enumerate() {
+                    println!("  {}. {} -- {}", i, entry.name, entry.description);
+                }
+            }
+        }
         Args::New { path } => {
             // check if the directory is empty
             if !path.read_dir()?.next().is_none() {

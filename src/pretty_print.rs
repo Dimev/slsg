@@ -1,5 +1,10 @@
-use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
+use crossterm::{
+    execute, queue,
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+};
 use std::io::stdout;
+
+use crate::{api::highlight::Languages, cookbook::Entry};
 
 fn escape_html(string: &str) -> String {
     string
@@ -13,7 +18,7 @@ fn escape_html(string: &str) -> String {
 /// Print a warning to the terminal
 pub(crate) fn print_warning(str: &str) {
     let mut stdout = stdout();
-    crossterm::execute!(
+    execute!(
         stdout,
         SetForegroundColor(Color::Yellow),
         SetAttribute(Attribute::Bold),
@@ -29,7 +34,7 @@ pub(crate) fn print_warning(str: &str) {
 /// Print an error to the terminal
 pub(crate) fn print_error(str: &str) {
     let mut stdout = stdout();
-    crossterm::execute!(
+    execute!(
         stdout,
         SetForegroundColor(Color::Red),
         SetAttribute(Attribute::Bold),
@@ -91,4 +96,63 @@ pub(crate) fn warning_and_error_html(warnings: &Vec<String>, errors: &Vec<String
     } else {
         format!(r#"<div style="{center_div}"><div style="{inner_div}">{errs}{warns}</div></div>"#)
     }
+}
+
+pub(crate) fn print_entry(entry: Entry) {
+    let mut stdout = stdout();
+    queue!(
+        stdout,
+        SetAttribute(Attribute::Bold),
+        Print(entry.description),
+        Print("\n\n"),
+        SetAttribute(Attribute::Reset),
+    )
+    .expect("Failed to print entry");
+
+    for line in entry.tutorial.lines() {
+        if line.starts_with("#") {
+            queue!(
+                stdout,
+                SetAttribute(Attribute::Bold),
+                Print(line.trim_start_matches("#").trim()),
+                Print("\n"),
+                SetAttribute(Attribute::Reset),
+            )
+            .expect("Failed to print entry");
+        } else {
+            queue!(
+                stdout,
+                Print(line.trim_start_matches("#").trim()),
+                Print("\n"),
+            )
+            .expect("Failed to print entry");
+        }
+    }
+
+    queue!(stdout, Print("\n")).expect("Failed to print entry");
+
+    let languages =
+        Languages::from_str(include_str!("api/languages.toml")).expect("Failed to parse languages");
+
+    for range in languages
+        .highlight(entry.code, "lua")
+        .expect("Failed to highlight language")
+    {
+        let color = match range.style.as_str() {
+            "comment" => Color::Cyan,
+            "keyword" => Color::Yellow,
+            "string" => Color::Green,
+            _ => Color::White,
+        };
+
+        queue!(
+            stdout,
+            SetForegroundColor(color),
+            Print(range.text),
+            ResetColor
+        )
+        .expect("Failed to write entry");
+    }
+
+    execute!(stdout, Print("\n\n")).expect("Failed to write entry");
 }

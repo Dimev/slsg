@@ -1,6 +1,8 @@
 [lua]
 extentions = ["lua"]
 keyword = '\<(do|end|while|repeat|until|if|elseif|then|else|for|in|function|local|return)\>'
+string = '"(.|\n)*"'
+comment = '--.*|\{-(.|\n)*-\}'
 
 [rust]
 extentions = ["rs"]
