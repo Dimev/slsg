@@ -79,8 +79,8 @@ fn main() -> Result<(), anyhow::Error> {
                 print_entry(entry);
             } else {
                 println!("Could not find the given entry. Available entries are:");
-                for (i, entry) in entries().into_iter().enumerate() {
-                    println!("  {}. {} -- {}", i, entry.name, entry.description);
+                for entry in entries() {
+                    println!(" - {}: {}", entry.name, entry.description);
                 }
             }
         }
@@ -99,7 +99,7 @@ fn main() -> Result<(), anyhow::Error> {
             // TODO: create example site (single hello world page)
             fs::create_dir(path.join("site"))?;
 
-            // TODO: create example logo (single yassg logo)
+            // TODO: create example logo (single lssg logo)
             fs::create_dir(path.join("static"))?;
 
             // TODO: create example style (center the hello world text)

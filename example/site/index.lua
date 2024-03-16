@@ -2,7 +2,7 @@ local components = require('components.lua')
 
 -- get all index pages
 local pagelinks = {}
-for key, value in pairs(template.colocated.files) do
+for key, value in pairs(script.colocated.files) do
   -- if it's markdown, and not the index page, include it
   if value.extention == "md" and value.stem ~= "index" then 
     local front = value:parseMd().front
@@ -14,7 +14,7 @@ end
 
 -- load all colocated markdown files
 local markdown = {}
-for key, value in pairs(template.colocated.files) do
+for key, value in pairs(script.colocated.files) do
   -- if it's markdown, and not the index page, include it
   if value.extention == "md" and value.stem ~= "index" then
     -- render it to html
@@ -32,7 +32,7 @@ for key, value in pairs(template.colocated.files) do
   end
 end
 
-local hs = yassg.highlightCodeHtml([[
+local hs = site.highlightCodeHtml([[
 -- I have no IO monad and I must scream
 ree :: a -> a
 ree = seq $ unsafePerformIO "REEEEE"
@@ -47,12 +47,12 @@ main = do
 
 -- index page
 local html = components.page(
-  "YASSG", "", "/style.css", pagelinks, 
+  "LSSG", "", "/style.css", pagelinks, 
   h.main():sub(
     "Hello <$> world!", 
     h.pre():attrs({ class = "code" }):sub(
       rawHtml(
-        yassg.highlightCodeHtml([[fn main() { 
+        site.highlightCodeHtml([[fn main() { 
   // say hello world!
   println!("hello"); 
 }]], "rust", "code--")
@@ -62,8 +62,8 @@ local html = components.page(
   )
 ):renderHtml()
 
-local notFoundPage = yassg.file(components.page(
-  "YASSG - Not found", "", "/style.css", pagelinks,
+local notFoundPage = site.file(components.page(
+  "LSSG - Not found", "", "/style.css", pagelinks,
   h.main():sub(
     h.h1():sub("404!"),
     h.p():sub("Page not found!")
@@ -73,5 +73,5 @@ local notFoundPage = yassg.file(components.page(
 return page()
   :withHtml(html)
   :withManyPages(markdown)
-  :withFile("style.css", template.styles.style)
+  :withFile("style.css", script.styles.style)
   :withFile("404.html", notFoundPage)

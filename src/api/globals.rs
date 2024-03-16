@@ -119,7 +119,7 @@ pub(crate) fn load_globals(
     table.set("highlightCodeHtml", highlight)?;
     table.set("highlightCodeAst", highlight_ast)?;
     table.set("latexToMathml", mathml)?;
-    lua.globals().set("yassg", table)?;
+    lua.globals().set("site", table)?;
     lua.globals().set("require", require)?;
 
     Ok(warnings)

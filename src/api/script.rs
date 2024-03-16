@@ -61,7 +61,7 @@ impl<'lua> Script<'lua> {
 
             // make the environment
             let env = clone_table(lua, lua.globals())?;
-            env.set("template", template)?;
+            env.set("script", template)?;
 
             // load script to lua
             let script = lua
@@ -112,7 +112,7 @@ impl<'lua> Script<'lua> {
 
             // make the environment
             let env = clone_table(lua, lua.globals())?;
-            env.set("template", template)?;
+            env.set("script", template)?;
 
             // load script to lua
             let script = lua

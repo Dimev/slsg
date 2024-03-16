@@ -1,34 +1,36 @@
-# YASSG
-Yet another static site generator
+# LSSG
+Lua Static Site Generator
 
 # How does this differ from other site generators?
-- YASSG uses lua as it's scripting and templating language, allowing for more advanced logic for generating sites
-- YASSG allows pages to be made from lua, thus allowing to generate a different file structure than the defined one
+- lssg uses lua as it's scripting and templating language, allowing for more complex logic with less boilerplate for generating sites
+- lssg allows pages to be made from lua, thus allowing to generate a different file structure than the defined one in the file system
 
 # How to use it
-`yassg new [name]` to initialize a new project. This will create a directory with that name, 
+`lssg new [name]` to initialize a new project. This will create a directory with that name, 
 a `site.toml` file, the content directory, style, static and lib directory
 
-`yassg init` initializes the current directory as a new site, if it's empty
+`lssg init` initializes the current directory as a new site, if it's empty
 
 `site/` is for the site, `lib/` is for lua scripts, `styles/` is for sass stylesheets, 
 `static/` is for statically accessible files
 
 The completed website is output to `public/`, or the folder specified by `-o` or `--output`
 
-`yassg build` builds the site by looking at the first found `site.toml` file in the current or any ancestor directories
+`lssg build` builds the site by looking at the first found `site.toml` file in the current or any ancestor directories.
+
+`lssg cookbook [name]` shows a script that may be useful when making a site. Run without name to see the full list.
 
 # How to use:
-yassg runs the `site/index.lua` file, which is expected to return a page
+lssg runs the `site/index.lua` file, which is expected to return a page
 this page is then converted into a website
 
 The final returned item of this script is expected to be a page
 
-`index.lua`, as well as all other scripts found in `site/` or subdirectories
-get access to a global named `template`, which is a `template`
+`index.lua`, as well as all other scripts found in `site/` or subdirectories get access to a global named `script`.
+This serves as the main way to interact with the file system
 They also get access to the `config` table, which is loaded from `site.toml`
 
-`template`:
+`script`:
 - `colocated`: `directory` for the colocated files, if this was an `index.lua` file, otherwise an empty directory
 - `name`: stem of the `*.lua` file, or directory name if `index.lua`
 - `static`: `directory` for the static files
@@ -67,8 +69,8 @@ They also get access to the `config` table, which is loaded from `site.toml`
 # Other globals
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page
 
-# Yassg library
-- These are available under the yassg global table
+# lssg library
+- These are available under the `site` global table
 - `debug`: bool, true if the site is built from the `serve` command
 - `escapeHtml`: escapes the given html string TODO
 - `unescapeHtml`: unescapes the given html string TODO
@@ -103,14 +105,10 @@ everything under the `[config]` section is loaded into the `config` global
   due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static
 
 # Current TODO:
-- have example site also serve as short intro to yassg
+- have example site also serve as short intro to lssg
 - clippy
-- code highlighting
-- latex math to mathml(?)
-- cookbook
+- code highlighting rules for common language set
 - tex (as in, parse a subset of latex)
-- finish dev server (mime types, 404 page)
-- config (actually implement 404 page, minify settings)
 - minification
 - docs
 - Image resizing

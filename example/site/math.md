@@ -1,9 +1,9 @@
 +++
-title = "Math in YASSG"
+title = "Math"
 +++
 
-# Math in YASSG
-Yassg includes an extention to commonmark to allow writing math!
+# Math in LSSG
+lssg includes an extention to commonmark to allow writing math!
 
 Any text between `$` and `$$` is interpreted as inline and block math respectively
 By default, this won't render to mathml. Instead, it has to be passed to the function latexToMathml

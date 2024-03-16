@@ -18,12 +18,12 @@ pub(crate) fn entries() -> Vec<Entry> {
         name: "markdown",
         description: "Custom markdown rendering",
         tutorial: "By default, markdown is rendered straight to HTML. The following script allows custom rendering of markdown",
-        code: r#"local x = "markdown" -- TODO"#
+        code: include_str!("manual_markdown.lua")
     },
     Entry {
         name: "highlighting",
         description: "Syntax highlighting",
-        tutorial: "Yassg can do syntax highlighting",
+        tutorial: "lssg can do syntax highlighting",
         code: r#"local x = "None yet""#,    
     }]
 }

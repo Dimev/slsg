@@ -14,7 +14,7 @@ function titlebar(links)
   return h.nav():attrs({ class = "titlebar" }):sub(
     h.a()
       :attrs({ class = "titlelink", href = "/" })
-      :sub("YASSG"),
+      :sub("LSSG"),
     fragment(table.unpack(pagelinks))
   )
 end

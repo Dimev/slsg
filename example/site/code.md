@@ -1,9 +1,9 @@
 +++
-title = "Code in YASSG"
+title = "Code"
 +++
 
-# Code in YASSG
-YASSG can highlight codeblocks using a simple set of regex rules
+# Code in LSSG
+LSSG can highlight codeblocks using a simple set of regex rules
 For a number of languages, these are included, but you can also add your own.
 
 For highlighting to be used, you need to use a custom markdown parser that can highlight the codeblocks.
