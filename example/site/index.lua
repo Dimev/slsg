@@ -36,6 +36,13 @@ local hs = yassg.highlightCodeHtml([[
 -- I have no IO monad and I must scream
 ree :: a -> a
 ree = seq $ unsafePerformIO "REEEEE"
+
+-- but now we have one, we can scream again
+main :: IO ()
+main = do 
+  putStrLn "sus mogus"
+  putStrLn "multiline
+    strings!"
 ]], "hs", "code--")
 
 -- index page
@@ -55,7 +62,16 @@ local html = components.page(
   )
 ):renderHtml()
 
+local notFoundPage = yassg.file(components.page(
+  "YASSG - Not found", "", "/style.css", pagelinks,
+  h.main():sub(
+    h.h1():sub("404!"),
+    h.p():sub("Page not found!")
+  )
+):renderHtml())
+
 return page()
   :withHtml(html)
   :withManyPages(markdown)
   :withFile("style.css", template.styles.style)
+  :withFile("404.html", notFoundPage)

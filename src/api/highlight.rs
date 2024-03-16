@@ -126,15 +126,28 @@ impl Languages {
             }
 
             // find the index of the last style that matches
-            let style = matches.iter_mut().enumerate().find_map(|(i, x)| {
-                x.peek().and_then(|x| {
-                    if start >= x.start() && start < x.end() {
-                        Some(i)
-                    } else {
-                        None
-                    }
+            // keep the current item if it still matches
+            let style = if cur_style
+                .map(|i| {
+                    (&mut matches[i] as &mut Peekable<Matches>)
+                        .peek()
+                        .map(|x| start >= x.start() && start < x.end())
+                        .unwrap_or(false)
                 })
-            });
+                .unwrap_or(false)
+            {
+                cur_style
+            } else {
+                matches.iter_mut().rev().enumerate().find_map(|(i, x)| {
+                    x.peek().and_then(|x| {
+                        if start >= x.start() && start < x.end() {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    })
+                })
+            };
 
             // if they are different, push the current string
             if cur_style != style {

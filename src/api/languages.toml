@@ -1,7 +1,11 @@
+[lua]
+extentions = ["lua"]
+keyword = '\<(do|end|while|repeat|until|if|elseif|then|else|for|in|function|local|return)\>'
+
 [rust]
 extentions = ["rs"]
 comment = '\/\/.*|\/\*(.|\n)*\*\/'
-keyword = 'abstract|alignof|as|become|box|break|const|continue|crate|do|else|enum|extern|false|final|fn|for|if|impl|in|let|loop|macro|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|struct|super|true|trait|type|typeof|unsafe|unsized|use|virtual|where|while|yield'
+keyword = '\<(abstract|alignof|as|become|box|break|const|continue|crate|do|else|enum|extern|false|final|fn|for|if|impl|in|let|loop|macro|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|struct|super|true|trait|type|typeof|unsafe|unsized|use|virtual|where|while|yield)\>'
 macro = '(\w|_)(\w|\d|_)*!'
 constant = '[A-Z][A-Z_]*'
 type = '[A-Z]\w*'
@@ -10,9 +14,9 @@ string = '"(.|\n)*"'
 [haskell]
 extentions = ["hs", "lhs"]
 comment = '--.*|\{-(.|\n)*-\}'
-keywords = "as|case|of|class|data|default|deriving|do|forall|foreign|hiding|if|then|else|import|infix|infixl|infixr|instance|let|in|mdo|module|newtype|qualified|type|where"
-type = '[A-Z]\w*'
-string = '"(.|\n)*"'
+keyword = '\<(as|case|of|class|data|default|deriving|do|forall|foreign|hiding|if|then|else|import|infix|infixl|infixr|instance|let|in|mdo|module|newtype|qualified|type|where)\>'
+type = '\<([A-Z]\w*)\>'
+string = '"([^\"]|\\.)*"'
 
 [javascript]
 extentions = ["js", "mjs", "jsx"]
