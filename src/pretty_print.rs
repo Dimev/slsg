@@ -54,9 +54,9 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
     let err_div = "font: 16px monospace; color: #C82829";
 
     let center_div =
-        "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: fixed; top: 0px; left: 0px";
+        "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: fixed; top: 0px; left: 0px; pointer-events: none";
     let inner_div =
-        "border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll";
+        "border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll; box-shadow: 2px 2px 60px #0005; pointer-events: auto";
 
     // format the warnings
     let warns: String = warnings.iter().fold(String::new(), |acc, x| {
