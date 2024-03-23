@@ -62,24 +62,10 @@ const OPTIONS: ParseOptions = ParseOptions {
 impl UserData for Markdown {
     fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("raw", |_, this| Ok(this.raw.clone()));
-        fields.add_field_method_get("html", |_, this| {
-            // convert to html
-            to_html_with_options(
-                &this.raw,
-                &Options {
-                    parse: OPTIONS,
-                    compile: Default::default(),
-                },
-            )
-            .map_err(Error::external)
-        });
-        fields.add_field_method_get("ast", |lua, this| {
-            // convert to the abstract syntax tree
-            let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
-            let table = ast_to_lua(lua, md)?;
-            Ok(table)
-        });
-        fields.add_field_method_get("front", |lua, this| {
+    }
+
+    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("front", |lua, this, ()| {
             let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
             // first toml or yaml is the front matter
             if let Node::Root(Root { children, .. }) = md {
@@ -96,6 +82,32 @@ impl UserData for Markdown {
             } else {
                 Ok(None)
             }
+        });
+
+        methods.add_method("html", |_, this, mdx_flow: Option<bool>| {
+            // convert to html
+            to_html_with_options(
+                &this.raw,
+                &Options {
+                    parse: ParseOptions {
+                        constructs: Constructs {
+                            mdx_expression_flow: mdx_flow.unwrap_or(false),
+                            mdx_expression_text: mdx_flow.unwrap_or(false),
+                            ..OPTIONS.constructs
+                        },
+                        ..OPTIONS
+                    },
+                    compile: Default::default(),
+                },
+            )
+            .map_err(Error::external)
+        });
+
+        methods.add_method("ast", |lua, this, ()| {
+            // convert to the abstract syntax tree
+            let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
+            let table = ast_to_lua(lua, md)?;
+            Ok(table)
         });
     }
 }
@@ -133,8 +145,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         }
         Node::Toml(x) => {
             table.set("type", "toml")?;
-            let toml: toml::Value =
-                toml::from_str(&x.value).map_err(mlua::Error::external)?;
+            let toml: toml::Value = toml::from_str(&x.value).map_err(mlua::Error::external)?;
             table.set("data", lua.to_value(&toml)?)?;
             table.set("value", x.value)?;
         }

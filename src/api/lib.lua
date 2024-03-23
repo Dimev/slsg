@@ -140,10 +140,15 @@ end
 function fragment(...)
 	local html = ""
 	for _, value in ipairs({...}) do
-		html = html .. value:render()
+		if type(value) == "string" then
+		  html = html .. value
+		else
+			html = html .. value:render()
+		end
 	end
 
 	return {
+		renderHtml = function() return "<!DOCTYPE html>" .. html end,
 		renderself = function() return html end,
 		render = function() return html end
 	}

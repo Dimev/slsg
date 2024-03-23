@@ -15,8 +15,6 @@ latexToMathml("V = \\frac{4}{3} \\pi r^3")
 
 Which results in
 
-$$
-V = \frac{4}{3} \pi r^3
-$$
+$$V = \frac{4}{3} \pi r^3$$
 
 See the cookbook with the custom markdown renderer to see how to parse markdown manually, in order to do this step

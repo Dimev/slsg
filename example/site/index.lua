@@ -1,11 +1,12 @@
 local components = require('components.lua')
+local markdown = require('markdown.lua')
 
 -- get all index pages
 local pagelinks = {}
 for key, value in pairs(script.colocated.files) do
   -- if it's markdown, and not the index page, include it
   if value.extention == "md" and value.stem ~= "index" then 
-    local front = value:parseMd().front
+    local front = value:parseMd():front()
     
     -- link to the page
     pagelinks["/" .. value.stem] = front.title 
@@ -13,21 +14,22 @@ for key, value in pairs(script.colocated.files) do
 end
 
 -- load all colocated markdown files
-local markdown = {}
+local mdPages = {}
 for key, value in pairs(script.colocated.files) do
   -- if it's markdown, and not the index page, include it
   if value.extention == "md" and value.stem ~= "index" then
-    -- render it to html
+    -- parse the markdown
     local md = value:parseMd()
 
     -- get the front matter for the title of the page
-    local front = md.front
+    local front = md:front()
 
     -- render out
-    local html = components.page(front.title, "", "/style.css", pagelinks, rawHtml(md.html))
+    local mdHtml = markdown.compileMd(md:ast(), {}):renderHtml()
+    local html = components.page(front.title, "", "/style.css", pagelinks, rawHtml(mdHtml))
 
     -- and the actual page file
-    markdown[value.stem] = page()
+    mdPages[value.stem] = page()
       :withHtml(html:renderHtml())
   end
 end
@@ -72,6 +74,6 @@ local notFoundPage = site.file(components.page(
 
 return page()
   :withHtml(html)
-  :withManyPages(markdown)
+  :withManyPages(mdPages)
   :withFile("style.css", script.styles.style)
   :withFile("404.html", notFoundPage)
