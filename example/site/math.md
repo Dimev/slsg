@@ -17,4 +17,13 @@ Which results in
 
 $$V = \frac{4}{3} \pi r^3$$
 
+And
+```lua
+site.latexToMathml("\\int_0^1 x dx")
+```
+
+results in
+
+$$\int_0^1 x dx$$
+
 See the cookbook with the custom markdown renderer to see how to parse markdown manually, in order to do this step
