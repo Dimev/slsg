@@ -13,6 +13,7 @@ use crate::{
     cmd::generate::GenerateError,
     pretty_print::{print_error, print_warning, warning_and_error_html},
 };
+
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
 const RW_ERR: &str = "Cronch: lock was poissoned";
@@ -20,53 +21,63 @@ const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-upd
 const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
 /// Serve the files
-pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), anyhow::Error> {
+pub(crate) fn serve(
+    path: Option<PathBuf>,
+    addr: Option<String>,
+    standalone: bool,
+) -> Result<(), anyhow::Error> {
     // load the site
     let warnings = Arc::new(RwLock::new(Vec::new()));
     let errors = Arc::new(RwLock::new(Vec::new()));
-    let site = Arc::new(RwLock::new(match Site::generate(path.clone(), true) {
-        Ok(res) => {
-            // throw all warnings
-            for warning in res.warnings.iter() {
-                print_warning(warning);
-            }
-
-            // give the warnings to the page
-            let mut warnings = warnings.write().expect(RW_ERR);
-            *warnings = res.warnings;
-
-            let mut pages = res.page.into_hashmap("/");
-
-            // set the 404 error page
-            if let Some(dev_404) = res.dev_404 {
-                if let Some(file) = pages.get(&PathBuf::from("/").join(dev_404)).cloned() {
-                    pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
+    let site = Arc::new(RwLock::new(
+        match if standalone {
+            Site::generate_standalone(path.clone(), false)
+        } else {
+            Site::generate(path.clone(), false)
+        } {
+            Ok(res) => {
+                // throw all warnings
+                for warning in res.warnings.iter() {
+                    print_warning(warning);
                 }
+
+                // give the warnings to the page
+                let mut warnings = warnings.write().expect(RW_ERR);
+                *warnings = res.warnings;
+
+                let mut pages = res.page.into_hashmap("/");
+
+                // set the 404 error page
+                if let Some(dev_404) = res.dev_404 {
+                    if let Some(file) = pages.get(&PathBuf::from("/").join(dev_404)).cloned() {
+                        pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
+                    }
+                }
+
+                pages
             }
+            Err(GenerateError {
+                warnings: page_warnings,
+                error,
+            }) => {
+                // failed to generate, so thow the error
+                print_error(&format!("{:?}", error));
 
-            pages
-        }
-        Err(GenerateError {
-            warnings: page_warnings,
-            error,
-        }) => {
-            // failed to generate, so thow the error
-            print_error(&format!("{:?}", error));
+                // print warnings
+                for warning in &page_warnings {
+                    print_warning(warning);
+                }
 
-            // print warnings
-            for warning in &page_warnings {
-                print_warning(warning);
+                // give the errors to the page
+                errors.write().expect(RW_ERR).push(format!("{:?}", error));
+
+                // give the warnings to the page
+                warnings.write().expect(RW_ERR).extend(page_warnings);
+
+                HashMap::new()
             }
-
-            // give the errors to the page
-            errors.write().expect(RW_ERR).push(format!("{:?}", error));
-
-            // give the warnings to the page
-            warnings.write().expect(RW_ERR).extend(page_warnings);
-
-            HashMap::new()
-        }
-    }));
+        },
+    ));
 
     // stream to notify when an update happens
     let update_notify = Arc::new(Mutex::new(Vec::<TcpStream>::new()));
@@ -84,7 +95,11 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
             // regenerate site
             let mut site = site_cloned.write().expect(RW_ERR);
-            *site = match Site::generate(path_cloned.clone(), true) {
+            *site = match if standalone {
+                Site::generate_standalone(path_cloned.clone(), false)
+            } else {
+                Site::generate(path_cloned.clone(), false)
+            } {
                 Ok(res) => {
                     // throw all warnings
                     for warning in res.warnings.iter() {

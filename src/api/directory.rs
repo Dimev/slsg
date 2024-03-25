@@ -13,6 +13,13 @@ pub(crate) struct Directory<'lua> {
 }
 
 impl<'lua> Directory<'lua> {
+    /// create an empty directory
+    pub(crate) fn empty(lua: &'lua Lua) -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            table: lua.create_table()?,
+        })
+    }
+
     /// Load a static directory, assuming no scripts
     pub(crate) fn load_static(
         base: impl AsRef<Path>,

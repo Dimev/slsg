@@ -11,10 +11,7 @@ See how this is done in the cookbook.
 
 Below is a simple example of this for a non-existent functional language
 
-{sus mogus!}
-
-```rust
-toml
+```toml
 [funlang]
 extentions = ["fn", "fnl"]
 keywords = 'def|import|let|in||match'
@@ -22,8 +19,7 @@ keywords = 'def|import|let|in||match'
 
 With these, the language looks like this
 
-```rust
-funlang
+```funlang
 def fibbonachi n:
   match n:
     0: 0
@@ -44,7 +40,7 @@ fn main() {
 ## Haskell
 ```haskell
 -- print hello world
-main :: IO {}
+main :: IO ()
 main = putStrLn "Hello world!"
 ```
 

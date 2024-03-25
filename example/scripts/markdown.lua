@@ -1,47 +1,76 @@
 local mod = {}
 
--- default handelers
-local defaults = {
-  root = function(c) return fragment(table.unpack(c)) end,
-  blockquote = function(c) return fragment(c) end,
-  toml = function() return fragment() end,
-  yaml = function() return fragment() end,
-  ["break"] = function() return h.hr() end,
-  inlineCode = function(c) return h.pre():sub(c) end,
-  heading = function(c) return h.h1():sub(table.unpack(c)) end,
-  paragraph = function(c) return h.div():sub(table.unpack(c)) end,
-  text = function(c) return h.p():sub(c) end,
-  code = function(c, lang) return h.pre():sub(rawHtml(site.highlightCodeHtml(c, lang, "code--"))) end,
-  math = function(c) return rawHtml(site.latexToMathml(tostring(c))) end,
-  inlineMath = function(c) return rawHtml(site.latexToMathml(tostring(c))) end,
-}
-
--- Parse and compile markdown, with custom functions
-function mod.compileMd(ast, funcs)
-  -- run a function with children
-  function runWith(children, ...)
-    return (funcs[ast.type] 
-      or defaults[ast.type] 
-      or warn("Missing " .. ast.type))(compileMany(ast.children, funcs), ...)
-  end
-
-  -- compile the markdown
-  -- if it has children, look up the type, and run the function
-  if ast.children then 
-    return runWith(children)
+-- render one node, the defaults
+local defaults = {}
+function defaults.root(c) return fragment(table.unpack(c)) end
+function defaults.blockquote(c) return fragment(table.unpack(c)) end
+function defaults.footnoteDefinition(c) return fragment(table.unpack(c)) end
+function defaults.mdxJsxFlowElement(c) return fragment(table.unpack(c)) end
+function defaults.list(c, ast)
+  if ast.ordered then
+    return h.ol():sub(table.unpack(c))
   else
-    return (funcs[ast.type] or defaults[ast.type] or warn("Missing " .. ast.type))(ast.value, ast.language)
+    return h.ul():sub(table.unpack(c))
   end
 end
+function defaults.toml() return fragment() end
+function defaults.yaml() return fragment() end
+defaults["break"] = function() return h.hr() end
+function defaults.inlineCode(ast) return h.code():sub(ast.value) end
+function defaults.inlineMath(ast) return rawHtml(site.latexToMathml(ast.value, true)) end
+function defaults.delete(c) return h.strikethrough():sub(c) end
+function defaults.emphasis(c) return h.em():sub(c) end
+function defaults.mdxTextExpression() return fragment(c.value) end
+function defaults.mdxJsEsm() return fragment() end
+function defaults.footnoteReference(ast) return fragment() end
+function defaults.html(ast) return rawHtml(ast.value) end
+function defaults.image(ast) return h.img():attrs({ alt = ast.alt, url = ast.url }) end
+function defaults.imageReference(ast) return fragment() end
+function defaults.mdxJsxTextElement(ast) return fragment() end
+function defaults.link(c, ast) return h.a():attrs({ href = ast.url }):sub(title):sub(table.unpack(c)) end
+function defaults.linkReference(ast) return fragment() end
+function defaults.strong(c) return h.strong():sub(table.unpack(c)) end
+function defaults.text(ast) return fragment(ast.value) end
+function defaults.code(ast) return h.code():sub(h.pre():sub(ast.value)) end
+function defaults.math(ast) return rawHtml(site.latexToMathml(ast.value, false)) end
+function defaults.mdxFlowExpression() return fragment() end
+function defaults.heading(c, ast) 
+  local headings = { h.h1, h.h2, h.h3, h.h4, h.h5 }
+  return (headings[ast.depth] or h.h6)():sub(table.unpack(c)) 
+end
+function defaults.table(c, ast) return fragment() end
+function defaults.thematicBreak() return h.hr() end
+function defaults.tableRow(c) return fragment() end
+function defaults.tableCell(c) return fragment() end
+function defaults.listItem(c, ast) return h.li():sub(table.unpack(c)) end
+function defaults.paragraph(c) return h.p():sub(table.unpack(c)) end
+function defaults.definition(c) return fragment() end
 
 -- compile many markdown nodes
-function compileMany(ast, funcs)
+function compileMany(children, funcs)
   local res = {}
-  for i, value in ipairs(ast) do
+  for i, value in ipairs(children) do
     table.insert(res, mod.compileMd(value, funcs))
   end
 
   return res
+end
+
+-- Parse and compile markdown, with custom functions
+function mod.compileMd(ast, funcs)
+  -- compile the markdown
+  -- if we have children, pass those in as special
+  if ast.children then 
+    return (funcs[ast.type] 
+      or defaults[ast.type] 
+      or warn("Missing " .. ast.type)
+    )(compileMany(ast.children, funcs), ast)
+  else
+    return (funcs[ast.type] 
+      or defaults[ast.type] 
+      or warn("Missing " .. ast.type)
+    )(ast)
+  end
 end
 
 return mod

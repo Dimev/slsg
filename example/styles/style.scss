@@ -14,6 +14,16 @@ $selection: #D6D6D6;
 $foreground: #4D4D4C;
 $comment: #8E908C;
 
+@font-face {
+	font-family: "STIXMath";
+	src: url("STIXTwoMath-Regular.ttf");
+}
+
+math {
+ 	font-size: 24px;
+	font-family: STIXMath;
+}
+
 * {
 	box-sizing: border-box;
 }

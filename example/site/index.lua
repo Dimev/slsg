@@ -13,6 +13,8 @@ for key, value in pairs(script.colocated.files) do
   end
 end
 
+table.sort(pagelinks)
+
 -- load all colocated markdown files
 local mdPages = {}
 for key, value in pairs(script.colocated.files) do
@@ -24,8 +26,19 @@ for key, value in pairs(script.colocated.files) do
     -- get the front matter for the title of the page
     local front = md:front()
 
+    -- code highlighing
+    function code(ast)
+      if ast.language and site.highlightExists(ast.language) then
+        local html = site.highlightCodeHtml(ast.value, ast.language, "code--")
+        return h.pre():attrs({ class = "code" }):sub(rawHtml(html))
+      else
+        warn("no language " .. ast.language .. " to highlight")
+        return h.pre():attrs({ class = "code"}):sub(ast.value)
+      end
+    end
+
     -- render out
-    local mdHtml = markdown.compileMd(md:ast(), {}):renderHtml()
+    local mdHtml = markdown.compileMd(md:ast(), { code = code }):renderHtml()
     local html = components.page(front.title, "", "/style.css", pagelinks, rawHtml(mdHtml))
 
     -- and the actual page file
@@ -76,4 +89,5 @@ return page()
   :withHtml(html)
   :withManyPages(mdPages)
   :withFile("style.css", script.styles.style)
+  :withFile("STIXTwoMath-Regular.ttf", script.static.files["STIXTwoMath-Regular.ttf"])
   :withFile("404.html", notFoundPage)

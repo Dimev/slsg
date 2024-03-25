@@ -52,6 +52,8 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
     // styles to use
     let warn_div = "font: 16px monospace; color: #F5871F";
     let err_div = "font: 16px monospace; color: #C82829";
+    let button_style = "float: right; font: 16px monospace; border: none; padding: 8px";
+    let close_button = format!(r#"<button onclick="document.getElementById(&quot;long-warning-box-remove-name&quot;).remove()" style="{button_style}">Close</button>"#);
 
     let center_div =
         "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: fixed; top: 0px; left: 0px; pointer-events: none";
@@ -88,7 +90,7 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
     if warnings.is_empty() && errors.is_empty() {
         String::new()
     } else {
-        format!(r#"<div style="{center_div}"><div style="{inner_div}">{errs}{warns}</div></div>"#)
+        format!(r#"<div id="long-warning-box-remove-name" style="{center_div}"><div style="{inner_div}">{close_button}{errs}{warns}</div></div>"#)
     }
 }
 

@@ -14,10 +14,6 @@ pub(crate) fn load_globals(
     // create a new file
     let file = lua.create_function(|_, text: String| Ok(File::New(text)))?;
 
-    // escape html
-    // TODO let html_escape = lua.create_function(|_, text: String| Ok())?;
-    // TODO: maybe do in lib.lua?
-
     // convert tex math to mathml
     let mathml = lua.create_function(|_, (text, inline): (String, Option<bool>)| {
         latex_to_mathml(
@@ -33,6 +29,8 @@ pub(crate) fn load_globals(
 
     // syntax highlighting
     let highlights = Languages::load(&path.as_ref().join("highlighting/"))?;
+    let highlights_cloned = highlights.clone();
+    let has_lang = lua.create_function(move |_, language: String| Ok(highlights_cloned.exists(&language)))?;
     let highlights_cloned = highlights.clone();
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {
@@ -103,7 +101,10 @@ pub(crate) fn load_globals(
     let require = lua.create_function(move |lua, script: String| {
         let path = path_owned.join("scripts").join(&script);
         let code = fs::read_to_string(path).map_err(mlua::Error::external)?;
-        let function = lua.load(code).into_function()?;
+        let function = lua
+            .load(code)
+            .set_name(format!("scripts/{script}"))
+            .into_function()?;
         lua.load_from_function::<Value>(&format!("scripts/{script}"), function)
     })?;
 
@@ -118,6 +119,7 @@ pub(crate) fn load_globals(
     table.set("debug", debug)?;
     table.set("highlightCodeHtml", highlight)?;
     table.set("highlightCodeAst", highlight_ast)?;
+    table.set("highlightExists", has_lang)?;
     table.set("latexToMathml", mathml)?;
     lua.globals().set("site", table)?;
     lua.globals().set("require", require)?;

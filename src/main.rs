@@ -19,24 +19,30 @@ enum Args {
     /// Build the site, from the site.toml file in the current or given directory
     Build {
         /// directory to the site.toml file of the site to build, current working directory by default
-        #[clap(short, long)]
         dir: Option<PathBuf>,
 
         /// directory to write the resulting site to, public/ by default
         #[clap(short, long)]
         output: Option<PathBuf>,
+
+        /// Whether we want to render a standalone lua file
+        #[clap(short, long, action)]
+        standalone: bool,
     },
 
     /// Serve the site locally, for development
     /// Automatically reloads the site preview when a file in either the current directory, or given directory changes
     Dev {
         /// directory to the site.toml file of the site to build, current working directory by default
-        #[clap(short, long)]
         dir: Option<PathBuf>,
 
         /// Adress to listen on for connections, defaults to 127.0.0.1:1111
         #[clap(short, long)]
         address: Option<String>,
+
+        /// Whether we want to render a standalone lua file
+        #[clap(short, long, action)]
+        standalone: bool,
     },
 
     /// Lookup an included example script
@@ -54,7 +60,15 @@ fn main() -> Result<(), anyhow::Error> {
 
     // run the command
     match args {
-        Args::Build { dir, output } => match Site::generate(dir, false) {
+        Args::Build {
+            dir,
+            output,
+            standalone,
+        } => match if standalone {
+            Site::generate_standalone(dir, false)
+        } else {
+            Site::generate(dir, false)
+        } {
             Ok(site) => {
                 // success, print any warnings
                 for warning in site.warnings.iter() {
@@ -71,8 +85,12 @@ fn main() -> Result<(), anyhow::Error> {
                 }
             }
         },
-        Args::Dev { dir, address } => {
-            serve(dir, address)?;
+        Args::Dev {
+            dir,
+            address,
+            standalone,
+        } => {
+            serve(dir, address, standalone)?;
         }
         Args::Cookbook { name } => {
             if let Some(entry) = name.and_then(|x| lookup(&x)) {

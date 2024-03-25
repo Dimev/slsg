@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use clap::error::Result;
 use mlua::{Function, Lua, Table, Value};
 
@@ -27,7 +27,7 @@ impl<'lua> Script<'lua> {
     ) -> Result<Self, anyhow::Error> {
         // if this is a file, simply load it, rest is empty
         if path.as_ref().is_file() {
-            let script = fs::read_to_string(path)?;
+            let script = fs::read_to_string(path).context("Failed to load script file")?;
 
             // set load the environment script
             let template = lua.create_table()?;
@@ -74,7 +74,8 @@ impl<'lua> Script<'lua> {
             Ok(Self { script, name })
         } else {
             // find and read the index.lua
-            let script = fs::read_to_string(path.as_ref().join("index.lua"))?;
+            let script = fs::read_to_string(path.as_ref().join("index.lua"))
+                .context("Failed to load script file in directory")?;
 
             // read the directory
             let colocated = Directory::load(base, path, lua, static_files, styles)?;

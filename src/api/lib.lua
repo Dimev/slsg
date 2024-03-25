@@ -118,19 +118,10 @@ function el(ty, void)
 	return element
 end
 
--- text node
--- TODO: escaping
-function textNode(text) 
-	return {
-		renderself = function() return escapeHtml(text) end,
-		render = function() return escapeHtml(text) end
-	}
-end
-
 -- raw html
--- TODO: escaping
 function rawHtml(text) 
 	return {
+		renderHtml = function() return "<!DOCTYPE html>" .. text end,
 		renderself = function() return text end,
 		render = function() return text end
 	}
@@ -155,7 +146,6 @@ function fragment(...)
 end
 
 -- make a node function
--- TODO: self closing tags here
 -- void tags do not need a closing or /> at the end of them
 local voidTags = { 
 	area = true, base = true, br = true, col = true, embed = true, hr = true, img = true, 

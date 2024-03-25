@@ -93,6 +93,47 @@ impl<E: Into<anyhow::Error>> From<E> for GenerateError {
 }
 
 impl Site {
+    /// Geenrate a standalone site, aka only a script
+    pub(crate) fn generate_standalone(
+        path: Option<PathBuf>,
+        debug: bool,
+    ) -> Result<Self, GenerateError> {
+        // find the path
+        let path = path
+            .map(|x| Ok(x) as Result<PathBuf, anyhow::Error>)
+            .unwrap_or_else(|| current_dir().map_err(|x| x.into()))
+            .context("Could not get the current directory")?;
+
+        let lua = Lua::new_with(
+            StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH,
+            LuaOptions::new().catch_rust_panics(true),
+        )?;
+
+        // load the globals
+        let warnings = load_globals(&lua, &path, debug).context("Failed to load globals")?;
+
+        // empty statics
+        let static_files = Directory::empty(&lua)?;
+        let styles = lua.create_table()?;
+
+        // load the root script
+        let script = Script::load(&PathBuf::new(), &path, &lua, &static_files, &styles)
+            .with_warns(warnings.borrow().iter())?;
+
+        // run the script
+        let page = script.run().with_warns(warnings.borrow().iter())?;
+
+        // get the warnings
+        let warnings = warnings.borrow().clone();
+
+        Ok(Site {
+            page,
+            warnings,
+            path: path.into(),
+            dev_404: None,
+        })
+    }
+
     /// Generate the site
     pub(crate) fn generate(path: Option<PathBuf>, debug: bool) -> Result<Self, GenerateError> {
         // path to load from
@@ -148,7 +189,6 @@ impl Site {
         let warnings = load_globals(&lua, path, debug)?;
 
         // load the root script
-        // TODO: make this load directly into lua tables
         let script = Script::load(
             &PathBuf::from("site/"),
             &path.join("site/"),
@@ -177,9 +217,11 @@ impl Site {
         &self,
         path: Option<P>,
     ) -> Result<(), anyhow::Error> {
-        self.page.write_to_directory(
-            path.map(|x| x.as_ref().into())
-                .unwrap_or(self.path.join("public/")),
-        ).context("Could not write to the output directory")
+        self.page
+            .write_to_directory(
+                path.map(|x| x.as_ref().into())
+                    .unwrap_or(self.path.join("public/")),
+            )
+            .context("Could not write to the output directory")
     }
 }

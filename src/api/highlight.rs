@@ -81,6 +81,19 @@ impl Languages {
         Ok(Languages(languages))
     }
 
+    /// check if a language exists
+    pub(crate) fn exists(&self, language: &str) -> bool {
+        self.0.get(language).or_else(|| {
+            self.0.iter().find_map(|(_, x)| {
+                if x.extentions.iter().any(|x| x.as_str() == language) {
+                    Some(x)
+                } else {
+                    None
+                }
+            })
+        }).is_some()
+    }
+
     /// Highlight one language, from the language name or extention, if it exists
     pub(crate) fn highlight(
         &self,

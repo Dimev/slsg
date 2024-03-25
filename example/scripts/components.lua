@@ -5,17 +5,27 @@ function titlebar(links)
   for key, value in pairs(links) do
     table.insert(
       pagelinks, 
-      h.a()
-        :attrs({ class = "titlelink", href = key })
-        :sub(value)
+      { key, 
+        h.a()
+          :attrs({ class = "titlelink", href = key })
+          :sub(value)
+      }
     )
+  end
+
+  -- sort them to be in alphabetical order
+  local p2 = {}
+  table.sort(pagelinks, function (l, r) return l[1] < r[1] end)
+  
+  for key, value in ipairs(pagelinks) do
+    table.insert(p2, value[2])
   end
   
   return h.nav():attrs({ class = "titlebar" }):sub(
     h.a()
       :attrs({ class = "titlelink", href = "/" })
       :sub("LSSG"),
-    fragment(table.unpack(pagelinks))
+    fragment(table.unpack(p2))
   )
 end
 
