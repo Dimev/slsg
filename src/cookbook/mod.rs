@@ -18,7 +18,7 @@ pub(crate) fn entries() -> Vec<Entry> {
         name: "markdown",
         description: "Custom markdown rendering",
         tutorial: "By default, markdown is rendered straight to HTML. The following script allows custom rendering of markdown",
-        code: include_str!("manual_markdown.lua")
+        code: include_str!("../../example/scripts/markdown.lua")
     },
     Entry {
         name: "highlighting",

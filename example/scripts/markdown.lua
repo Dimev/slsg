@@ -17,7 +17,7 @@ function defaults.toml() return fragment() end
 function defaults.yaml() return fragment() end
 defaults["break"] = function() return h.hr() end
 function defaults.inlineCode(ast) return h.code():sub(ast.value) end
-function defaults.inlineMath(ast) return rawHtml(site.latexToMathml(ast.value, false)) end
+function defaults.inlineMath(ast) return rawHtml(site.latexToMathml(ast.value)) end
 function defaults.delete(c) return h.strikethrough():sub(c) end
 function defaults.emphasis(c) return h.em():sub(c) end
 function defaults.mdxTextExpression() return fragment(c.value) end
@@ -32,7 +32,7 @@ function defaults.linkReference(ast) return fragment() end
 function defaults.strong(c) return h.strong():sub(table.unpack(c)) end
 function defaults.text(ast) return fragment(ast.value) end
 function defaults.code(ast) return h.code():sub(h.pre():sub(ast.value)) end
-function defaults.math(ast) return rawHtml(site.latexToMathml(ast.value, true)) end
+function defaults.math(ast) return rawHtml(site.latexToMathml(ast.value)) end
 function defaults.mdxFlowExpression() return fragment() end
 function defaults.heading(c, ast) 
   local headings = { h.h1, h.h2, h.h3, h.h4, h.h5 }

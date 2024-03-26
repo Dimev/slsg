@@ -254,7 +254,7 @@ fn ast_to_lua(lua: &Lua, ast: Node) -> Result<Table, Error> {
         }
         Node::Math(x) => {
             table.set("type", "math")?;
-            table.set("vale", x.value)?;
+            table.set("value", x.value)?;
             table.set("meta", x.meta)?;
         }
         Node::MdxFlowExpression(x) => {

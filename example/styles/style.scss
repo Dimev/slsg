@@ -20,7 +20,7 @@ $comment: #8E908C;
 }
 
 math {
- 	font-size: 24px;
+ 	font-size: 20px;
 	font-family: STIXMath;
 }
 
@@ -39,8 +39,6 @@ html {
 	display: flex;
 	flex-direction: row;
 	background: $navy;
-	border-top-left-radius: 10px;
-	border-top-right-radius: 10px;
 }
 
 .titlelink {
@@ -63,7 +61,6 @@ body {
 	width: 100%;
 	max-width: 800px;
 	margin: 30px;
-	border-radius: 10px;
 	background: white;
 	box-shadow: 2px 2px 60px #0005;
 }
@@ -72,11 +69,6 @@ body {
 	body {
 		margin: 0px;
 		box-shadow: none;
-		border-radius: 0px;
-	}
-
-	.titlebar {
-		border-radius: 0px;
 	}
 }
 

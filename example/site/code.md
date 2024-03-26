@@ -14,7 +14,7 @@ Below is a simple example of this for a non-existent functional language
 ```toml
 [funlang]
 extentions = ["fn", "fnl"]
-keywords = 'def|import|let|in||match'
+keywords = '\<(def|import|let|in||match)\>'
 ```
 
 With these, the language looks like this

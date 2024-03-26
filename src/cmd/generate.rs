@@ -157,7 +157,7 @@ impl Site {
             .join("site.toml");
 
         // load the config
-        let config = read_to_string(&path)?;
+        let config = read_to_string(&path).context("Failed to open site.toml")?;
 
         // parse the config
         let config: SiteConfig = toml::from_str(&config)?;

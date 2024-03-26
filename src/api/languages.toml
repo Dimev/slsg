@@ -23,3 +23,6 @@ comment = '--.*|\{-(.|\n)*-\}'
 [javascript]
 extentions = ["js", "mjs", "jsx"]
 keywords = "function|class|import"
+
+[toml]
+extentions = ["toml"]

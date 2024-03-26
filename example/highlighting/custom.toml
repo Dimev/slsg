@@ -1,0 +1,4 @@
+[funlang]
+extentions = ["fn", "fnl"]
+keyword = '\<(def|import|let|in|match)\>'
+
