@@ -25,6 +25,7 @@ pub(crate) fn serve(
     path: Option<PathBuf>,
     addr: Option<String>,
     standalone: bool,
+    spa: bool,
 ) -> Result<(), anyhow::Error> {
     // load the site
     let warnings = Arc::new(RwLock::new(Vec::new()));
@@ -50,6 +51,10 @@ pub(crate) fn serve(
                 // set the 404 error page
                 if let Some(dev_404) = res.dev_404 {
                     if let Some(file) = pages.get(&PathBuf::from("/").join(dev_404)).cloned() {
+                        pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
+                    }
+                } else if spa {
+                    if let Some(file) = pages.get(&PathBuf::from("/index.html")).cloned() {
                         pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
                     }
                 }
@@ -120,6 +125,10 @@ pub(crate) fn serve(
                         if let Some(file) = pages.get(&PathBuf::from("/").join(dev_404)).cloned() {
                             pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
                         }
+                    } else if spa {
+                        if let Some(file) = pages.get(&PathBuf::from("/index.html")).cloned() {
+                            pages.insert(PathBuf::from("dev-server-404-error-page.rs"), file);
+                        }
                     }
 
                     pages
@@ -174,12 +183,9 @@ pub(crate) fn serve(
     }
 
     // listen to incoming requests
-    // TODO: use hyper instead?
     let addr = addr.unwrap_or("127.0.0.1:1111".to_string());
     let listener = TcpListener::bind(&addr)?;
     println!("listening on {}", addr);
-
-    // TODO: in this loop, don't crash if things go wrong (move to sep function?)
 
     for stream in listener.incoming() {
         if let Err(e) = handle_connection(stream?, &site, &warnings, &errors, &update_notify) {

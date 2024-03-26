@@ -26,6 +26,7 @@ enum Args {
         output: Option<PathBuf>,
 
         /// Whether we want to render a standalone lua file
+        /// expects either a path to a directory with an index.lua file, allowing colocated files, or a single lua file, without colocated files
         #[clap(short, long, action)]
         standalone: bool,
     },
@@ -41,8 +42,13 @@ enum Args {
         address: Option<String>,
 
         /// Whether we want to render a standalone lua file
+        /// expects either a path to a directory with an index.lua file, allowing colocated files, or a single lua file, without colocated files
         #[clap(short, long, action)]
         standalone: bool,
+
+        /// Whether to treat the generated site as a single page app, and reroute everything to index.html if the file is not found
+        #[clap(long, action)]
+        spa: bool,
     },
 
     /// Lookup an included example script
@@ -64,6 +70,7 @@ fn main() -> Result<(), anyhow::Error> {
             dir,
             output,
             standalone,
+           
         } => match if standalone {
             Site::generate_standalone(dir, false)
         } else {
@@ -89,8 +96,9 @@ fn main() -> Result<(), anyhow::Error> {
             dir,
             address,
             standalone,
+            spa,
         } => {
-            serve(dir, address, standalone)?;
+            serve(dir, address, standalone, spa)?;
         }
         Args::Cookbook { name } => {
             if let Some(entry) = name.and_then(|x| lookup(&x)) {

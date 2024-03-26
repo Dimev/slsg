@@ -40,10 +40,9 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `files`: table for all colocated files
 - `directories`: table for all colocated directories
 - `scripts`: table for all colocated scripts (`*.lua`, or `./index.lua`)
-- `find(path)`: finds a `file` from the given path
 
 `file`:
-- can be created with the `file(text)` function
+- can be created with the `site.file(text)` function
 - `parseMd()`: parses the file as markdown
 - `parseJson()`: parses the file as json, into a table
 - `parseYaml()`:  parses the file as yaml, into a table
@@ -55,10 +54,11 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `extention`: file extention if any, or nil
 
 `markdown`:
-- `front`: the front matter as a table, or nil if none. --- is parsed as yaml, +++ is parsed as toml
-- `raw`: the raw markdown
-- `html`: the markdown as html
-- `events`: table of all events in the markdown stream
+- `front()`: the front matter as a table, or nil if none. --- is parsed as yaml, +++ is parsed as toml
+- `raw`: the raw markdown text
+- `html(flow)`: the markdown as html, accepts a bool for whether to allow mdx flow, as in text between {} to be interpreted specially
+- `ast(flow)`: the markdown as the ast (table), accepts a bool for whether to allow mdx flow, as in text between {} to be interpreted specially
+  See the cookbook page on markdown for more details on how to use this
 
 `page`:
 - can be created with the `page(name)` function
@@ -70,15 +70,18 @@ They also get access to the `config` table, which is loaded from `site.toml`
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page
 
 # lssg library
-- These are available under the `site` global table
-- `debug`: bool, true if the site is built from the `serve` command
-- `escapeHtml`: escapes the given html string TODO
-- `unescapeHtml`: unescapes the given html string TODO
+- `site.debug`: bool, true if the site is built from the `serve` command
+- `escapeHtml`: escapes the given html string
 
 # Rendering HTML
 Besides including these page and file searching functions, 
 there's also a small library for rendering html
-TODO
+This is available under the h table, as well as with the fragment and rawHtml functions
+`h` contains all elements as functions, with the `sub()` method allowing child nodes to be added, one per argument,
+and `attrs()` accepting a table of the attributes to set on the element
+
+`renderHtml()` will render the given nodes to a string of html
+`render()` will do the same, but exclude the initial "\<!DOCTYPE html>"
 
 # Code highlighting
 TODO
@@ -106,15 +109,13 @@ everything under the `[config]` section is loaded into the `config` global
 
 # Current TODO:
 - have example site also serve as short intro to lssg
-- clippy
 - code highlighting rules for common language set
-- tex (as in, parse a subset of latex)
 - minification
 - docs
 - Image resizing
 
 # Cookbook TODO:
-- manual markdown rendering
+- manual markdown rendering FINISH
 - code highlighting
 - markdown based blog
 - bibtex bibliography

@@ -103,9 +103,20 @@ impl UserData for Markdown {
             .map_err(Error::external)
         });
 
-        methods.add_method("ast", |lua, this, ()| {
+        methods.add_method("ast", |lua, this, mdx_flow: Option<bool>| {
             // convert to the abstract syntax tree
-            let md = to_mdast(&this.raw, &OPTIONS).map_err(Error::external)?;
+            let md = to_mdast(
+                &this.raw,
+                &ParseOptions {
+                    constructs: Constructs {
+                        mdx_expression_flow: mdx_flow.unwrap_or(false),
+                        mdx_expression_text: mdx_flow.unwrap_or(false),
+                        ..OPTIONS.constructs
+                    },
+                    ..OPTIONS
+                },
+            )
+            .map_err(Error::external)?;
             let table = ast_to_lua(lua, md)?;
             Ok(table)
         });
