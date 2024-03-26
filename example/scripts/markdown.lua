@@ -140,9 +140,8 @@ end
 
 -- link ([a](b))
 function defaults.link(c, ast) 
-  return h.a()
+  return h.a(ast.title)
     :attrs({ href = ast.url })
-    :sub(title)
     :sub(table.unpack(c)) 
 end
 
@@ -163,10 +162,7 @@ end
 
 -- code (```fang\ncode```)
 function defaults.code(ast)
-  return h.code()
-    :sub(h.pre()
-      :sub(ast.value)
-    ) 
+  return h.code():sub(h.pre(ast.value)) 
 end
 
 -- math ($$\n$$) Note that this is the same as inline math, but requires multiple lines
@@ -182,7 +178,7 @@ end
 -- heading (# c), outputs up to h6
 function defaults.heading(c, ast) 
   local headings = { h.h1, h.h2, h.h3, h.h4, h.h5 }
-  return (headings[ast.depth] or h.h6)():sub(table.unpack(c)) 
+  return (headings[ast.depth] or h.h6)(table.unpack(c)) 
 end
 
 -- table (| a |), (| - |) TODO
@@ -212,7 +208,7 @@ end
 
 -- paragraph (text seperated by empty lines)
 function defaults.paragraph(c)
-  return h.p():sub(table.unpack(c))
+  return h.p(table.unpack(c))
 end
 
 -- definition ([a]: b) TODO

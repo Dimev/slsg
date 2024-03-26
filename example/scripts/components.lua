@@ -6,9 +6,8 @@ function titlebar(links)
     table.insert(
       pagelinks, 
       { key, 
-        h.a()
-          :attrs({ class = "titlelink", href = key })
-          :sub(value)
+        h.a(value):attrs({ class = "titlelink", href = key })
+    
       }
     )
   end
@@ -22,9 +21,7 @@ function titlebar(links)
   end
   
   return h.nav():attrs({ class = "titlebar" }):sub(
-    h.a()
-      :attrs({ class = "titlelink", href = "/" })
-      :sub("LSSG"),
+    h.a("LSSG"):attrs({ class = "titlelink", href = "/" }),
     fragment(table.unpack(p2))
   )
 end
@@ -35,7 +32,7 @@ function mod.page(title, description, css, links, body)
       -- header
       h.meta():attrs({ charset = "UTF-8" }),
       h.meta():attrs({ content = "width=device-width,initial-scale=1", name="viewport"}),
-      h.title():sub(title),
+      h.title(title),
       h.link():attrs({ rel = "stylesheet", href = css })
     ),
     -- links and title page
