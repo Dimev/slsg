@@ -28,7 +28,7 @@ $$\int_0^1 x dx$$
 
 Here's a few more formulas:
 
-$$x=\frac{-b\bm\sqrt{b^2-4ac}}{2a}$$
+$$x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}$$
 
 $$\int_0^1 x^x dx = \sum_{n=1}^{\infty} {(-1)}^{n+1}n^{-1}$$
 
