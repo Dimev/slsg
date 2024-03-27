@@ -208,7 +208,7 @@ end
 
 -- paragraph (text seperated by empty lines)
 function defaults.paragraph(c)
-  return h.p(table.unpack(c))
+  return h.p():sub(table.unpack(c))
 end
 
 -- definition ([a]: b) TODO

@@ -5,7 +5,7 @@ title = "Math"
 # Math in LSSG
 lssg includes an extention to commonmark to allow writing math!
 
-Any text between `$` and `$$` is interpreted as inline and block math respectively
+Any text between `$` and `$$` is interpreted as math
 By default, this won't render to mathml. Instead, it has to be passed to the function latexToMathml
 
 This converts latex code to mathml, like so!
