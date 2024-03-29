@@ -108,7 +108,7 @@ everything under the `[config]` section is loaded into the `config` global
   due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static
 
 # Current TODO:
-- have example site also serve as short intro to lssg
+- have example site also serve as short intro to lssg (and make logo)
 - code highlighting rules for common language set
 - minification
 - docs

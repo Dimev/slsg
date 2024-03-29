@@ -3,6 +3,7 @@ mod cmd;
 mod cookbook;
 mod pretty_print;
 
+use anyhow::anyhow;
 use clap::Parser;
 use cmd::{
     generate::{GenerateError, Site},
@@ -70,7 +71,6 @@ fn main() -> Result<(), anyhow::Error> {
             dir,
             output,
             standalone,
-           
         } => match if standalone {
             Site::generate_standalone(dir, false)
         } else {
@@ -111,46 +111,49 @@ fn main() -> Result<(), anyhow::Error> {
             }
         }
         Args::New { path } => {
-            // check if the directory is empty
-            if path.read_dir()?.next().is_some() {
-                println!("{:?} is not empty!", path);
-            }
-
-            // make the directory
-            fs::create_dir_all(&path)?;
-
-            // create the site directories
-            fs::File::create(path.join("site.toml"))?;
-
-            // TODO: create example site (single hello world page)
-            fs::create_dir(path.join("site"))?;
-
-            // TODO: create example logo (single lssg logo)
-            fs::create_dir(path.join("static"))?;
-
-            // TODO: create example style (center the hello world text)
-            fs::create_dir(path.join("styles"))?;
-
-            // TODO: dump cookbook scripts here
-            fs::create_dir(path.join("scripts"))?;
-
+            init_folder(&path)?;
             println!("site created at {:?}", path);
         }
         Args::Init {} => {
-            // check if the directory is empty
-            if env::current_dir()?.read_dir()?.next().is_some() {
-                println!("Current directory is not empty!");
-            }
-            // create the site directories
-            fs::File::create(PathBuf::from("site.toml"))?;
-            fs::create_dir(PathBuf::from("site"))?;
-            fs::create_dir(PathBuf::from("static"))?;
-            fs::create_dir(PathBuf::from("styles"))?;
-            fs::create_dir(PathBuf::from("scripts"))?;
-
+            init_folder(&env::current_dir()?)?;
             println!("site created in current directory");
         }
     }
+
+    Ok(())
+}
+
+fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
+    // check if the directory is empty
+    if let Ok(mut dir) = path.read_dir() {
+        if dir.next().is_some() {
+            Err(anyhow!("Directory is not empty!"))?
+        }
+    }
+
+    // make the directory
+    fs::create_dir_all(&path)?;
+
+    // create the site directories
+    fs::write(
+        path.join("site.toml"),
+        "[config]\n# dev-404: \"404.html\"\n",
+    )?;
+
+    fs::create_dir(path.join("site"))?;
+    fs::write(
+        path.join("site/index.lua"),
+        "local html = h.p('Hello, world!'):renderHtml()\n\nreturn page():withHtml(html)",
+    )?;
+
+    // TODO: create example logo (single lssg logo)
+    fs::create_dir(path.join("static"))?;
+
+    // TODO: create example style (center the hello world text)
+    fs::create_dir(path.join("styles"))?;
+
+    // TODO: dump cookbook scripts here
+    fs::create_dir(path.join("scripts"))?;
 
     Ok(())
 }

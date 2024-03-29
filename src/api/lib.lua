@@ -70,7 +70,7 @@ function page()
 end
 
 -- make a node
-function el(ty, void) 
+function el(ty, void, ...) 
 	local element =  {
 		tag = ty,
 		attributes = "",
@@ -115,6 +115,9 @@ function el(ty, void)
 			.. "</" .. self.tag .. ">"
 	end
 
+	-- add initial attributes, if allowed
+	if not void then element = element:sub(...) end
+	
 	return element
 end
 
@@ -154,17 +157,12 @@ local voidTags = {
 
 -- make an element
 local function mkEl(ty) 
-	return function() return el(ty, voidTags[ty] ~= nil) end
+	return function(...) return el(ty, voidTags[ty] ~= nil, ...) end
 end 
-
--- make an element accepting text
-local function mkTx(ty)
-	return function(c) return el(ty, voidTags[ty] ~= nil):sub(c) end
-end
 
 -- make an element accepting raw text
 local function mkRw(ty)
-	return function(c) return el(ty, voidTags[ty] ~= nil):sub(rawHtml(c)) end
+	return function(c) return el(ty, voidTags[ty] ~= nil, rawHtml(c)) end
 end
 
 -- collection of all nodes
@@ -183,7 +181,7 @@ h.head = mkEl('head')
 h.link = mkEl('link')
 h.meta = mkEl('meta')
 h.style = mkRw('style')
-h.title = mkTx('title')
+h.title = mkEl('title')
 
 -- sectioning root
 h.body = mkEl('body')
@@ -193,12 +191,12 @@ h.address = mkEl('address')
 h.article = mkEl('article')
 h.aside = mkEl('aside')
 h.footer = mkEl('footer')
-h.h1 = mkTx('h1')
-h.h2 = mkTx('h2')
-h.h3 = mkTx('h3')
-h.h4 = mkTx('h4')
-h.h5 = mkTx('h5')
-h.h6 = mkTx('h6')
+h.h1 = mkEl('h1')
+h.h2 = mkEl('h2')
+h.h3 = mkEl('h3')
+h.h4 = mkEl('h4')
+h.h5 = mkEl('h5')
+h.h6 = mkEl('h6')
 h.hgroup = mkEl('hgroup')
 h.main = mkEl('main')
 h.nav = mkEl('nav')
@@ -217,39 +215,39 @@ h.hr = mkEl('hr')
 h.li = mkEl('li')
 h.menu = mkEl('menu')
 h.ol = mkEl('ol')
-h.p = mkTx('p')
-h.pre = mkTx('pre')
+h.p = mkEl('p')
+h.pre = mkEl('pre')
 h.ul = mkEl('ul')
 
 -- inline text semantics
-h.a = mkTx('a')
-h.abbr = mkTx('abbr')
-h.b = mkTx('b')
-h.bdi = mkTx('bdi')
-h.bdo = mkTx('bdo')
+h.a = mkEl('a')
+h.abbr = mkEl('abbr')
+h.b = mkEl('b')
+h.bdi = mkEl('bdi')
+h.bdo = mkEl('bdo')
 h.br = mkEl('br')
-h.cite = mkTx('cite')
-h.code = mkTx('code')
-h.data = mkTx('data')
-h.dfn = mkTx('dfn')
-h.em = mkTx('em')
-h.i = mkTx('i')
-h.kbd = mkTx('kbd')
-h.mark = mkTx('mark')
-h.q = mkTx('q')
-h.rp = mkTx('rp')
-h.rt = mkTx('rt')
-h.ruby = mkTx('ruby')
-h.s = mkTx('s')
-h.samp = mkTx('samp')
-h.small = mkTx('small')
-h.span = mkTx('span')
-h.strong = mkTx('strong')
-h.sub = mkTx('sub')
-h.sup = mkTx('sup')
-h.time = mkTx('time')
-h.u = mkTx('u')
-h.var = mkTx('var')
+h.cite = mkEl('cite')
+h.code = mkEl('code')
+h.data = mkEl('data')
+h.dfn = mkEl('dfn')
+h.em = mkEl('em')
+h.i = mkEl('i')
+h.kbd = mkEl('kbd')
+h.mark = mkEl('mark')
+h.q = mkEl('q')
+h.rp = mkEl('rp')
+h.rt = mkEl('rt')
+h.ruby = mkEl('ruby')
+h.s = mkEl('s')
+h.samp = mkEl('samp')
+h.small = mkEl('small')
+h.span = mkEl('span')
+h.strong = mkEl('strong')
+h.sub = mkEl('sub')
+h.sup = mkEl('sup')
+h.time = mkEl('time')
+h.u = mkEl('u')
+h.var = mkEl('var')
 h.wbr = mkEl('wbr')
 
 -- image and multimedia
@@ -275,15 +273,15 @@ h.math = mkEl('math')
 
 -- scripting
 h.canvas = mkEl('canvas')
-h.noscript = mkTx('noscript')
+h.noscript = mkEl('noscript')
 h.script = mkRw('script')
 
 -- demarcating edits
-h.del = mkTx('del')
-h.ins = mkTx('ins')
+h.del = mkEl('del')
+h.ins = mkEl('ins')
 
 -- table content
-h.caption = mkTx('caption')
+h.caption = mkEl('caption')
 h.col = mkEl('col')
 h.colgroup = mkEl('colgroup')
 h.table = mkEl('table')
@@ -295,12 +293,12 @@ h.thead = mkEl('thead')
 h.tr = mkEl('tr')
 
 -- forms
-h.button = mkTx('button')
+h.button = mkEl('button')
 h.datalist = mkEl('datalist')
 h.fieldset = mkEl('fieldset')
 h.form = mkEl('form')
 h.input = mkEl('input')
-h.label = mkTx('label')
+h.label = mkEl('label')
 h.legend = mkEl('legend')
 h.meter = mkEl('meter')
 h.optgroup = mkEl('optgroup')
