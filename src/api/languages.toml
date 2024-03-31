@@ -7,6 +7,7 @@ comment = '--.*|\{-(.|\n)*-\}'
 [rust]
 extentions = ["rs"]
 keyword = '\<(abstract|alignof|as|become|box|break|const|continue|crate|do|else|enum|extern|false|final|fn|for|if|impl|in|let|loop|macro|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|struct|super|true|trait|type|typeof|unsafe|unsized|use|virtual|where|while|yield)\>'
+function = '\w+\s*(?=\()'
 macro = '(\w|_)(\w|\d|_)*!'
 constant = '[A-Z][A-Z_]*'
 type = '[A-Z]\w*'

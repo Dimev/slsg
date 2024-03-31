@@ -1,7 +1,7 @@
-use std::{collections::HashMap, fs, iter::Peekable, path::Path};
+use std::{collections::HashMap, fs, iter::{FilterMap, Peekable}, path::Path};
 
 use anyhow::anyhow;
-use regex::{Matches, Regex, RegexBuilder};
+use fancy_regex::{Match, Matches, Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Single set of regex rules, as strings
@@ -48,7 +48,7 @@ impl Languages {
         for (name, language) in raw {
             let mut rules = Vec::with_capacity(language.rules.len());
             for (style, rule) in language.rules {
-                rules.push((style, RegexBuilder::new(&rule).multi_line(true).build()?));
+                rules.push((style, RegexBuilder::new(&rule).build()?));
             }
             languages.insert(
                 name,
@@ -115,10 +115,10 @@ impl Languages {
             })
             .ok_or(anyhow!("Could not find language {language}"))?;
 
-        let mut matches: Vec<Peekable<Matches>> = language
+        let mut matches: Vec<Peekable<FilterMap<Matches, _>>> = language
             .rules
             .iter()
-            .map(|x| x.1.find_iter(code).peekable())
+            .map(|x| x.1.find_iter(code).filter_map(|x| x.ok()).peekable())
             .collect();
 
         // highlight the code
@@ -138,9 +138,9 @@ impl Languages {
             // keep the current item if it still matches
             let style = if cur_style
                 .map(|i| {
-                    (&mut matches[i] as &mut Peekable<Matches>)
+                    (&mut matches[i] as &mut Peekable<FilterMap<Matches, _>>)
                         .peek()
-                        .map(|x| start >= x.start() && start < x.end())
+                        .map(|x: &Match| start >= x.start() && start < x.end())
                         .unwrap_or(false)
                 })
                 .unwrap_or(false)
