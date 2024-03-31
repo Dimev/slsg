@@ -152,8 +152,11 @@ fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
     // TODO: create example style (center the hello world text)
     fs::create_dir(path.join("styles"))?;
 
-    // TODO: dump cookbook scripts here
+    // TODO: basic component script here
     fs::create_dir(path.join("scripts"))?;
+
+    // gitignore to ignore public directory used for builds
+    fs::write(path.join(".gitignore"), "public/\n")?;
 
     Ok(())
 }
