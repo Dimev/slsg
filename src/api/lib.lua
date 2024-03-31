@@ -89,9 +89,9 @@ function el(ty, void, ...)
 	-- add content
 	function element:sub(...)
 		assert(not void, 'Elements of type "' .. self.tag .. '" cannot have children, as they are a void element')
-		for _, value in ipairs({ ... }) do
+		for _, value in pairs({ ... }) do
 			if type(value) == "string" then  
-				self.content = self.content .. escapeHtml(value)
+				self.content = self.content .. " " .. escapeHtml(value)
 			elseif value ~= nil then
 				self.content = self.content .. value:render()
 			end 
@@ -133,9 +133,9 @@ end
 -- fragment
 function fragment(...)
 	local html = ""
-	for _, value in ipairs({...}) do
+	for _, value in pairs({...}) do
 		if type(value) == "string" then
-		  html = html .. value
+		  html = html .. " " .. value -- TODO: is this a smart idea? inserting spaces may not be that expected in pre tags
 		else
 			html = html .. value:render()
 		end
