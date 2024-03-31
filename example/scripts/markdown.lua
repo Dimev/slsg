@@ -3,38 +3,6 @@ local mod = {}
 -- render one node, the defaults
 local defaults = {}
 
--- compile many markdown nodes
-function compileMany(children, funcs, context)
-  local res = {}
-  for i, value in ipairs(children) do
-    table.insert(res, compileMd(value, funcs, context))
-  end
-
-  return res
-end
-
--- Parse and compile markdown, with custom functions
-function compileMd(ast, funcs, context)
-  -- compile the markdown
-  -- if we have children, pass those in as special
-  if ast.children then 
-    return (funcs[ast.type] 
-      or defaults[ast.type] 
-      or warn("Missing " .. ast.type)
-    )(compileMany(ast.children, funcs), ast, context)
-  else
-    return (funcs[ast.type] 
-      or defaults[ast.type] 
-      or warn("Missing " .. ast.type)
-    )(ast, context)
-  end
-end
-
--- Parse and compile markdown, with custom functions, and an empty context
-function mod.compileMd(ast, funcs)
-  return compileMd(ast, funcs, {})
-end
-
 -- full list of all operations
 -- some of these are not used, as they aren't parsed by the parser
 -- They are still included for completeness
@@ -214,6 +182,38 @@ end
 -- definition ([a]: b) TODO
 function defaults.definition(ast, context)
   return fragment()
+end
+
+-- compile many markdown nodes
+function compileMany(children, funcs, context)
+  local res = {}
+  for i, value in ipairs(children) do
+    table.insert(res, compileMd(value, funcs, context))
+  end
+
+  return res
+end
+
+-- Parse and compile markdown, with custom functions
+function compileMd(ast, funcs, context)
+  -- compile the markdown
+  -- if we have children, pass those in as special
+  if ast.children then 
+    return (funcs[ast.type] 
+      or defaults[ast.type] 
+      or warn("Missing " .. ast.type)
+    )(compileMany(ast.children, funcs), ast, context)
+  else
+    return (funcs[ast.type] 
+      or defaults[ast.type] 
+      or warn("Missing " .. ast.type)
+    )(ast, context)
+  end
+end
+
+-- Parse and compile markdown, with custom functions, and an empty context
+function mod.compileMd(ast, funcs)
+  return compileMd(ast, funcs, {})
 end
 
 return mod
