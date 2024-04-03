@@ -91,7 +91,7 @@ function el(ty, void, ...)
 		assert(not void, 'Elements of type "' .. self.tag .. '" cannot have children, as they are a void element')
 		for _, value in pairs({ ... }) do
 			if type(value) == "string" then  
-				self.content = self.content .. " " .. escapeHtml(value)
+				self.content = self.content .. escapeHtml(value)
 			elseif value ~= nil then
 				self.content = self.content .. value:render()
 			end 
@@ -135,7 +135,7 @@ function fragment(...)
 	local html = ""
 	for _, value in pairs({...}) do
 		if type(value) == "string" then
-		  html = html .. " " .. value -- TODO: is this a smart idea? inserting spaces may not be that expected in pre tags
+		  html = html .. value
 		else
 			html = html .. value:render()
 		end
@@ -169,8 +169,6 @@ end
 -- see https://developer.mozilla.org/en-US/docs/Web/HTML/Element
 -- we put them in the h table, to not fill global scope
 h = {}
-
--- TODO: special element functionality
 
 -- root
 h.html = mkEl('html')
