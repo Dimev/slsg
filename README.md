@@ -118,6 +118,5 @@ everything under the `[config]` section is loaded into the `config` global
 
 # Cookbook TODO:
 - manual markdown rendering FINISH
-- code highlighting
 - markdown based blog
 - bibtex bibliography

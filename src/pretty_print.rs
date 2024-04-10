@@ -131,7 +131,7 @@ pub(crate) fn print_entry(entry: Entry) {
         Languages::from_str(include_str!("api/languages.toml")).expect("Failed to parse languages");
 
     for range in languages
-        .highlight(entry.code, "lua")
+        .highlight(&entry.code.replace("\t", "  "), "lua")
         .expect("Failed to highlight language")
     {
         let color = match range.style.as_str() {

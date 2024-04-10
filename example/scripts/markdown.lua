@@ -58,7 +58,7 @@ end
 
 -- inline math ($c$), ($$c$$)
 function defaults.inlineMath(ast)
-  return rawHtml(site.latexToMathml(ast.value))
+  return rawHtml(site.latexToMathml(ast.value, true))
 end
 
 -- delete (~c~), (~~c~~)

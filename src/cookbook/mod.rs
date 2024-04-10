@@ -21,10 +21,10 @@ pub(crate) fn entries() -> Vec<Entry> {
         code: include_str!("../../example/scripts/markdown.lua")
     },
     Entry {
-        name: "highlighting",
-        description: "Syntax highlighting",
-        tutorial: "lssg can do syntax highlighting",
-        code: r#"local x = "None yet""#,    
+        name: "bibliography",
+        description: "Add citations with a bibtex bibliography",
+        tutorial: "TODO",
+        code: include_str!("../../example/scripts/bibliography.lua"),    
     }]
 }
 
