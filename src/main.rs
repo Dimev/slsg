@@ -141,7 +141,7 @@ fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
     // create the site directories
     fs::write(
         path.join("site.toml"),
-        "[config]\n# dev-404: \"404.html\"\n",
+        "# dev-404: \"404.html\"\n\n[config]\n",
     )?;
 
     fs::create_dir(path.join("site"))?;
