@@ -93,7 +93,7 @@ end
 
 -- imgage (![a](b))
 function defaults.image(ast)
-  return h.img():attrs({ alt = ast.alt, url = ast.url })
+  return h.img():attrs({ alt = ast.alt, src = ast.url })
 end
 
 -- image reference ![c] TODO
