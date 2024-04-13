@@ -26,3 +26,4 @@ serde = { version = "1.0.197", features = ["derive"] }
 latex2mathml = "0.2.3"
 fancy-regex = "0.13.0"
 serde-tuple-vec-map = "1.0.1"
+image = "0.25.1"

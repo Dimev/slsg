@@ -19,6 +19,15 @@ pub(crate) enum File {
 
     /// Content of a new file
     New(String),
+
+    /// Resized image, percentage of size
+    ResizePercentage(PathBuf, f32),
+
+    /// Resized image, x axis size
+    ResizeX(PathBuf, u32),
+
+    /// Resized image, y axis size
+    ResizeY(PathBuf, u32),
 }
 
 impl File {
@@ -32,6 +41,9 @@ impl File {
         match self {
             Self::RelPath(p) => fs::copy(p, path).map(|_| ()),
             Self::New(content) => fs::write(path, content).map(|_| ()),
+            Self::ResizePercentage(_, _) => todo!(),
+            Self::ResizeX(_, _) => todo!(),
+            Self::ResizeY(_, _) => todo!(),
         }
         .map_err(|x| x.into())
     }
@@ -41,6 +53,7 @@ impl File {
         match self {
             Self::RelPath(path) => fs::read_to_string(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.clone()),
+            _ => Err(anyhow!("A resized image cannot be loaded to a string!")),
         }
     }
 
@@ -49,6 +62,9 @@ impl File {
         match self {
             Self::RelPath(path) => fs::read(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.as_bytes().to_owned()),
+            Self::ResizePercentage(_, _) => todo!(),
+            Self::ResizeX(_, _) => todo!(),
+            Self::ResizeY(_, _) => todo!(),
         }
     }
 
@@ -57,6 +73,9 @@ impl File {
         match self {
             Self::RelPath(p) => Some(p),
             Self::New(_) => None,
+            Self::ResizePercentage(p, _) => Some(p),
+            Self::ResizeX(p, _) => Some(p),
+            Self::ResizeY(p, _) => Some(p),
         }
     }
 }
@@ -117,6 +136,41 @@ impl UserData for File {
             let bibtex: Bibtex = Bibtex::parse(&str)
                 .map_err(|x| mlua::Error::external(anyhow!("failed to parse bibtex: {:?}", x)))?;
             biblatex_to_table(lua, bibtex)
+        });
+        methods.add_method("resizeImgPercentage", |_, this, size: f32| match this {
+            Self::New(_) => Err(mlua::Error::external(anyhow!(
+                "A new file can not be an image"
+            ))),
+            Self::RelPath(p) => Ok(Self::ResizePercentage(p.clone(), size)),
+            Self::ResizeX(p, amount) => Ok(Self::ResizeX(
+                p.clone(),
+                (*amount as f32 * size * 0.01) as u32,
+            )),
+            Self::ResizeY(p, amount) => Ok(Self::ResizeY(
+                p.clone(),
+                (*amount as f32 * size * 0.01) as u32,
+            )),
+            Self::ResizePercentage(p, perc) => {
+                Ok(Self::ResizePercentage(p.clone(), perc * size * 0.01))
+            }
+        });
+        methods.add_method("resizeImgX", |_, this, size: u32| match this {
+            Self::New(_) => Err(mlua::Error::external(anyhow!(
+                "A new file can not be an image"
+            ))),
+            Self::RelPath(p) => Ok(Self::ResizeX(p.clone(), size)),
+            Self::ResizeX(p, _) => Ok(Self::ResizeX(p.clone(), size)),
+            Self::ResizeY(p, _) => Ok(Self::ResizeX(p.clone(), size)),
+            Self::ResizePercentage(p, _) => Ok(Self::ResizeX(p.clone(), size)),
+        });
+        methods.add_method("resizeImgY", |_, this, size: u32| match this {
+            Self::New(_) => Err(mlua::Error::external(anyhow!(
+                "A new file can not be an image"
+            ))),
+            Self::RelPath(p) => Ok(Self::ResizeY(p.clone(), size)),
+            Self::ResizeX(p, _) => Ok(Self::ResizeY(p.clone(), size)),
+            Self::ResizeY(p, _) => Ok(Self::ResizeY(p.clone(), size)),
+            Self::ResizePercentage(p, _) => Ok(Self::ResizeY(p.clone(), size)),
         });
     }
 }

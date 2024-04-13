@@ -98,29 +98,72 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
     }
 }
 
-pub(crate) fn print_markdown(md: &str) {
+pub(crate) fn print_markdown(mut md: &str) {
     let mut stdout = stdout();
-    for line in md.lines() {
-        if line.starts_with('#') {
+    while !md.is_empty() {
+        // title, bold
+        if md.starts_with('#') {
+            // trim
+            md = md.trim_start_matches('#');
+
+            // display until new line
+            if let Some((line, rest)) = md.split_once('\n') {
+                md = rest;
+                queue!(
+                    stdout,
+                    SetAttribute(Attribute::Bold),
+                    Print(line.trim()),
+                    Print('\n'),
+                    SetAttribute(Attribute::Reset)
+                )
+                .expect("Failed to print entry");
+            }
+        }
+        // inline code
+        else if md.starts_with('`') {
+            // trim
+            md = md.trim_start_matches('`');
+
+            // print until rest
+            if let Some((line, rest)) = md.split_once('`') {
+                md = rest;
+                queue!(
+                    stdout,
+                    SetForegroundColor(Color::Green),
+                    Print(line),
+                    ResetColor
+                )
+                .expect("Failed to print entry");
+            }
+        }
+        // bullet point
+        else if md.starts_with('-') {
+            // trim
+            md = md.trim_start_matches('-');
+
             queue!(
                 stdout,
                 SetAttribute(Attribute::Bold),
-                Print(line.trim_start_matches('#').trim()),
-                Print("\n"),
+                SetForegroundColor(Color::Red),
+                Print('-'),
+                ResetColor,
                 SetAttribute(Attribute::Reset),
             )
             .expect("Failed to print entry");
-        } else {
-            queue!(
-                stdout,
-                Print(line.trim_start_matches('#').trim()),
-                Print("\n"),
-            )
-            .expect("Failed to print entry");
+        }
+        // else, read a single character
+        else if let Some(pos) = md.find(['`', '#', '-']) {
+            queue!(stdout, Print(&md[..pos])).expect("Failed to print entry");
+            md = &md[pos..];
+        }
+        // nothing left, print the rest
+        else {
+            queue!(stdout, Print(md)).expect("Failed to print entry");
+            md = "";
         }
     }
 
-    execute!(stdout, Print("\n\n")).expect("Failed to write entry");
+    execute!(stdout, Print("\n")).expect("Failed to write entry");
 }
 
 pub(crate) fn print_entry(entry: Entry) {
@@ -134,25 +177,7 @@ pub(crate) fn print_entry(entry: Entry) {
     )
     .expect("Failed to print entry");
 
-    for line in entry.tutorial.lines() {
-        if line.starts_with('#') {
-            queue!(
-                stdout,
-                SetAttribute(Attribute::Bold),
-                Print(line.trim_start_matches('#').trim()),
-                Print("\n"),
-                SetAttribute(Attribute::Reset),
-            )
-            .expect("Failed to print entry");
-        } else {
-            queue!(
-                stdout,
-                Print(line.trim_start_matches('#').trim()),
-                Print("\n"),
-            )
-            .expect("Failed to print entry");
-        }
-    }
+    print_markdown(entry.tutorial);
 
     queue!(stdout, Print("\n")).expect("Failed to print entry");
 
