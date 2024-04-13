@@ -1,5 +1,5 @@
-# LSSG
-Lua Static Site Generator
+# SLSG
+Scriptable Lua Site Generator
 
 # How does this differ from other site generators?
 - lssg uses lua as it's scripting and templating language, allowing for more complex logic with less boilerplate for generating sites
@@ -108,15 +108,18 @@ everything under the `[config]` section is loaded into the `config` global
   due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static
 
 # Current TODO:
+- rename to SLSG
 - figure out a way to do spacing between strings nicely
 - have example site also serve as short intro to lssg (and make logo)
 - code highlighting rules for common language set
+- image resizing
 - minification(?)
-- docs
-- Image resizing
-- subsite (nested lssg sites)
+- finish docs
+- atom/rss
 
 # Cookbook TODO:
 - manual markdown rendering FINISH
-- markdown based blog
+- markdown based blog (loads md)
+- atom
+- search index?
 - bibtex bibliography

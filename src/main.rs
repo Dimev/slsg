@@ -10,7 +10,7 @@ use cmd::{
     serve::serve,
 };
 use cookbook::lookup;
-use pretty_print::{print_entry, print_error};
+use pretty_print::{print_entry, print_error, print_markdown};
 use std::{env, fs, path::PathBuf};
 
 use crate::{cookbook::entries, pretty_print::print_warning};
@@ -55,11 +55,14 @@ enum Args {
     /// Lookup an included example script
     Cookbook { name: Option<String> },
 
+    /// Print the readme
+    Readme,
+
     /// Create a new site
     New { path: PathBuf },
 
     /// Init a site in the current directory
-    Init {},
+    Init,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -110,6 +113,7 @@ fn main() -> Result<(), anyhow::Error> {
                 }
             }
         }
+        Args::Readme => print_markdown(include_str!("../README.md")),
         Args::New { path } => {
             init_folder(&path)?;
             println!("site created at {:?}", path);
