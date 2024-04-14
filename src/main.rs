@@ -150,7 +150,7 @@ return page()
 const EX_CSS: &'static str = "html {
     display: flex;
     justify-content: center;
-    justify-items: center;
+    align-items: center;
     height: 100vh;
     font-family: sans-serif;
 }
