@@ -30,7 +30,8 @@ pub(crate) fn load_globals(
     // syntax highlighting
     let highlights = Languages::load(&path.as_ref().join("highlighting/"))?;
     let highlights_cloned = highlights.clone();
-    let has_lang = lua.create_function(move |_, language: String| Ok(highlights_cloned.exists(&language)))?;
+    let has_lang =
+        lua.create_function(move |_, language: String| Ok(highlights_cloned.exists(&language)))?;
     let highlights_cloned = highlights.clone();
     let highlight = lua.create_function(
         move |_, (text, language, class_prefix): (String, String, Option<String>)| {

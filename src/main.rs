@@ -127,6 +127,35 @@ fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+const EX_CONFIG: &'static str = "# dev-404: \"404.html\"
+
+[config]
+# sitename = \"My website\"
+";
+
+const EX_LUA: &'static str = "local html = fragment(
+    h.style(script.styles.style:parseTxt()),
+    h.title('My website'),
+    h.div():sub(
+        h.h1('Hello, world!'),
+        h.img():attrs({ class = 'logo', alt = 'logo', src = 'logo.svg' })
+    )
+):renderHtml()
+
+return page()
+    :withHtml(html)
+    :withManyFiles(script.static.files)
+";
+
+const EX_CSS: &'static str = "html {
+    display: flex;
+    justify-content: center;
+    justify-items: center;
+    height: 100vh;
+    font-family: sans-serif;
+}
+";
+
 fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
     // check if the directory is empty
     if let Ok(mut dir) = path.read_dir() {
@@ -139,24 +168,21 @@ fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
     fs::create_dir_all(&path)?;
 
     // create the site directories
-    fs::write(
-        path.join("site.toml"),
-        "# dev-404: \"404.html\"\n\n[config]\n",
-    )?;
+    fs::write(path.join("site.toml"), EX_CONFIG)?;
 
     fs::create_dir(path.join("site"))?;
+    fs::write(path.join("site/index.lua"), EX_LUA)?;
+
+    fs::create_dir(path.join("static"))?;
     fs::write(
-        path.join("site/index.lua"),
-        "local html = h.p('Hello, world!'):renderHtml()\n\nreturn page():withHtml(html)",
+        path.join("static/logo.svg"),
+        include_str!("../example/static/logo.svg"),
     )?;
 
-    // TODO: create example logo (single lssg logo)
-    fs::create_dir(path.join("static"))?;
-
-    // TODO: create example style (center the hello world text)
     fs::create_dir(path.join("styles"))?;
+    fs::write(path.join("styles/style.scss"), EX_CSS)?;
 
-    // TODO: basic component script here
+    // TODO: basic component script here (markdown blog?)
     fs::create_dir(path.join("scripts"))?;
 
     // gitignore to ignore public directory used for builds

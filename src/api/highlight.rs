@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs, iter::{FilterMap, Peekable}, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    iter::{FilterMap, Peekable},
+    path::Path,
+};
 
 use anyhow::anyhow;
 use fancy_regex::{Match, Matches, Regex, RegexBuilder};
@@ -83,15 +88,18 @@ impl Languages {
 
     /// check if a language exists
     pub(crate) fn exists(&self, language: &str) -> bool {
-        self.0.get(language).or_else(|| {
-            self.0.iter().find_map(|(_, x)| {
-                if x.extentions.iter().any(|x| x.as_str() == language) {
-                    Some(x)
-                } else {
-                    None
-                }
+        self.0
+            .get(language)
+            .or_else(|| {
+                self.0.iter().find_map(|(_, x)| {
+                    if x.extentions.iter().any(|x| x.as_str() == language) {
+                        Some(x)
+                    } else {
+                        None
+                    }
+                })
             })
-        }).is_some()
+            .is_some()
     }
 
     /// Highlight one language, from the language name or extention, if it exists

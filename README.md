@@ -2,26 +2,26 @@
 Scriptable Lua Site Generator
 
 # How does this differ from other site generators?
-- lssg uses lua as it's scripting and templating language, allowing for more complex logic with less boilerplate for generating sites.
-- lssg allows pages to be made from lua, thus allowing to generate a different file structure than the defined one in the file system.
+- slsg uses lua as it's scripting and templating language, allowing for more complex logic with less boilerplate for generating sites.
+- slsg allows pages to be made from lua, thus allowing to generate a different file structure than the defined one in the file system.
 
 # How to use it
-`lssg new [name]` to initialize a new project. This will create a directory with that name, 
+`slsg new [name]` to initialize a new project. This will create a directory with that name, 
 a `site.toml` file, the content directory, style, static and lib directory.
 
-`lssg init` initializes the current directory as a new site, if it's empty.
+`slsg init` initializes the current directory as a new site, if it's empty.
 
 `site/` is for the site, `lib/` is for lua scripts, `styles/` is for sass stylesheets, 
 `static/` is for statically accessible files.
 
 The completed website is output to `public/`, or the folder specified by `-o` or `--output`.
 
-`lssg build` builds the site by looking at the first found `site.toml` file in the current or any ancestor directories.
+`slsg build` builds the site by looking at the first found `site.toml` file in the current or any ancestor directories.
 
-`lssg cookbook [name]` shows a script that may be useful when making a site. Run without name to see the full list.
+`slsg cookbook [name]` shows a script that may be useful when making a site. Run without name to see the full list.
 
 # How to use:
-lssg runs the `site/index.lua` file, which is expected to return a page.
+slsg runs the `site/index.lua` file, which is expected to return a page.
 This page is then converted into a website.
 
 The final returned item of this script is expected to be a page.
@@ -69,7 +69,7 @@ They also get access to the `config` table, which is loaded from `site.toml`.
 # Other globals
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page.
 
-# lssg library
+# slsg library
 - `site.debug`: bool, true if the site is built from the `serve` command.
 - `escapeHtml`: escapes the given html string.
 
@@ -108,18 +108,18 @@ everything under the `[config]` section is loaded into the `config` global.
   due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static.
 
 # Current TODO:
-- rename to SLSG
-- figure out a way to do spacing between strings nicely
-- have example site also serve as short intro to lssg (and make logo)
-- code highlighting rules for common language set
-- image resizing
-- minification(?)
-- finish docs
-- atom/rss
+- [X] rename to SLSG
+- [ ] figure out a way to do spacing between strings nicely
+- [ ] have example site also serve as short intro to slsg (and make logo)
+- [ ] code highlighting rules for common language set
+- [ ] image resizing
+- [ ] minification(?)
+- [ ] finish docs
+- [ ] atom/rss (x/a under the standard lib)
 
 # Cookbook TODO:
-- manual markdown rendering FINISH
-- markdown based blog (loads md)
-- atom
-- search index?
-- bibtex bibliography
+- [ ] manual markdown rendering FINISH
+- [ ] markdown based blog (loads md)
+- [ ] atom
+- [ ] search index?
+- [ ] bibtex bibliography

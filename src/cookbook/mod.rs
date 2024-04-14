@@ -7,25 +7,19 @@ pub(crate) struct Entry {
     pub(crate) description: &'static str,
 
     /// elaborate description
-    pub(crate) tutorial: &'static str,
-
-    /// Code
-    pub(crate) code: &'static str,
+    pub(crate) tutorial: String,
 }
 
 pub(crate) fn entries() -> Vec<Entry> {
     vec![Entry {
         name: "markdown",
         description: "Custom markdown rendering",
-        tutorial: "By default, markdown is rendered straight to HTML. The following script allows custom rendering of markdown",
-        code: include_str!("../../example/scripts/markdown.lua")
+        tutorial: format!("By default, markdown is rendered straight to HTML. The following script allows custom rendering of markdown\n```lua{}```", include_str!("../../example/scripts/markdown.lua")),
     },
     Entry {
         name: "bibliography",
         description: "Add citations with a bibtex bibliography",
-        tutorial: "TODO",
-        code: include_str!("../../example/scripts/bibliography.lua"),    
-    }]
+        tutorial: format!("TODO ```lua{}```", include_str!("../../example/scripts/bibliography.lua")),   }]
 }
 
 /// All cookbook entries

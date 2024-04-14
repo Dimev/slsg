@@ -90,8 +90,8 @@ function el(ty, void, ...)
 	function element:sub(...)
 		assert(not void, 'Elements of type "' .. self.tag .. '" cannot have children, as they are a void element')
 		for _, value in pairs({ ... }) do
-			if type(value) == "string" then  
-				self.content = self.content .. escapeHtml(value)
+			if type(value) == "string" then
+				self.content = self.content .. ((self.content and " ") or "") .. escapeHtml(value)
 			elseif value ~= nil then
 				self.content = self.content .. value:render()
 			end 
@@ -145,6 +145,15 @@ function fragment(...)
 		renderHtml = function() return "<!DOCTYPE html>" .. html end,
 		renderself = function() return html end,
 		render = function() return html end
+	}
+end
+
+-- raw text
+function txt(t)
+	return {
+		renderHtml = function() return "!<DOCTYPE html>" .. t end,
+		renderself = function() return t end,
+		render = function() return t end
 	}
 end
 

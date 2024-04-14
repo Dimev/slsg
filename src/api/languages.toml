@@ -1,6 +1,7 @@
 [lua]
 extentions = ["lua"]
 keyword = '\<(do|end|while|repeat|until|if|elseif|then|else|for|in|function|local|return)\>'
+function = '\w+\s*(?=\()'
 string = '"([^\"]|\\.)*"'
 comment = '--.*|\{-(.|\n)*-\}'
 
@@ -17,13 +18,17 @@ comment = '\/\/.*|\/\*(.|\n)*\*\/'
 [haskell]
 extentions = ["hs", "lhs"]
 keyword = '\<(as|case|of|class|data|default|deriving|do|forall|foreign|hiding|if|then|else|import|infix|infixl|infixr|instance|let|in|mdo|module|newtype|qualified|type|where)\>'
+function = '$\w+'
 type = '\<([A-Z]\w*)\>'
 string = '"([^\"]|\\.)*"'
 comment = '--.*|\{-(.|\n)*-\}'
 
 [javascript]
 extentions = ["js", "mjs", "jsx"]
-keywords = "function|class|import"
+keyword = "function|class|import"
+function = '\w+\s*(?=\()'
 
 [toml]
 extentions = ["toml"]
+string = '"([^\"]|\\.)*"'
+comment = '#.*'

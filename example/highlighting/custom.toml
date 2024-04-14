@@ -1,4 +1,4 @@
 [funlang]
 extentions = ["fn", "fnl"]
-keyword = '\<(def|import|let|in|match)\>'
-
+keyword = '\<(def|import|let|in|case|of)\>'
+function = '(?<=def)\s+\w+'

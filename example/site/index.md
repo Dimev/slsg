@@ -1,4 +1,6 @@
-# LSSG
+# SLSG
+
+![Logo](logo.svg)
 
 Hello, world!
 

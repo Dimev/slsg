@@ -117,6 +117,27 @@ pub(crate) fn print_markdown(mut md: &str) {
                     SetAttribute(Attribute::Reset)
                 )
                 .expect("Failed to print entry");
+            } else {
+                // no new line: display everything left, as this is the last line
+                queue!(
+                    stdout,
+                    SetAttribute(Attribute::Bold),
+                    Print(md.trim()),
+                    Print('\n'),
+                    SetAttribute(Attribute::Reset)
+                )
+                .expect("Failed to print entry");
+                md = "";
+            }
+        }
+        // normal code, assuming lua
+        else if md.starts_with("```lua") {
+            // trim
+            md = md.trim_start_matches("```lua");
+
+            if let Some((line, rest)) = md.split_once("\n```") {
+                md = rest;
+                print_lua(line);
             }
         }
         // inline code
@@ -166,26 +187,13 @@ pub(crate) fn print_markdown(mut md: &str) {
     execute!(stdout, Print("\n")).expect("Failed to write entry");
 }
 
-pub(crate) fn print_entry(entry: Entry) {
+fn print_lua(code: &str) {
     let mut stdout = stdout();
-    queue!(
-        stdout,
-        SetAttribute(Attribute::Bold),
-        Print(entry.description),
-        Print("\n\n"),
-        SetAttribute(Attribute::Reset),
-    )
-    .expect("Failed to print entry");
-
-    print_markdown(entry.tutorial);
-
-    queue!(stdout, Print("\n")).expect("Failed to print entry");
-
     let languages =
         Languages::from_str(include_str!("api/languages.toml")).expect("Failed to parse languages");
 
     for range in languages
-        .highlight(&entry.code.replace("\t", "  "), "lua")
+        .highlight(&code.replace("\t", "  "), "lua")
         .expect("Failed to highlight language")
     {
         let color = match range.style.as_str() {
@@ -203,6 +211,18 @@ pub(crate) fn print_entry(entry: Entry) {
         )
         .expect("Failed to write entry");
     }
+}
 
-    execute!(stdout, Print("\n\n")).expect("Failed to write entry");
+pub(crate) fn print_entry(entry: Entry) {
+    let mut stdout = stdout();
+    queue!(
+        stdout,
+        SetAttribute(Attribute::Bold),
+        Print(entry.description),
+        Print("\n\n"),
+        SetAttribute(Attribute::Reset),
+    )
+    .expect("Failed to print entry");
+
+    print_markdown(&entry.tutorial);
 }

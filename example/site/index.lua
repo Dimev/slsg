@@ -59,7 +59,7 @@ local indexHtml = markdown.compileMd(
 
 -- index page
 local html = components.page(
-  "LSSG", "", "/style.css", pagelinks, h.main():sub(
+  config.name, "", "/style.css", pagelinks, h.main():sub(
     indexHtml,
     bib.generateBibHtml(script.static.files["references.bib"])
   )

@@ -22,19 +22,19 @@ function mod.generateBibHtml(bib, list)
 			-- nothing
 		elseif ref.type == 'book' then
 			html = html:sub(h.li():sub(
-				ref.tags.author, " ",
-				h.em(ref.tags.title), " ",
-				ref.tags.publisher, " ",
+				ref.tags.author,
+				h.em(ref.tags.title),
+				ref.tags.publisher,
 				ref.tags.year
 			))
 		elseif ref.type == 'article' then
 			html = html:sub(h.li():sub(
-				ref.tags.author, " ",
-				'"' .. ref.tags.title .. '" ',
-				h.em(ref.tags.journal), " ",
-				ref.tags.volume and 'vol. ' .. ref.tags.volume .. " ",
+				ref.tags.author,
+				'"' .. ref.tags.title .. '"',
+				h.em(ref.tags.journal),
+				ref.tags.volume and 'vol. ' .. ref.tags.volume,
 				ref.tags.number, " ",
-				ref.tags.pages and 'pp. ' .. ref.tags.pages .. " ",
+				ref.tags.pages and 'pp. ' .. ref.tags.pages,
 				ref.tags.year
 			))
 		end
