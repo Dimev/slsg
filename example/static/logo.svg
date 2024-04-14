@@ -1,13 +1,11 @@
 <svg version="1.1" width="210" height="100" xmlns="http://www.w3.org/2000/svg">
-<style>.t { font: bold 18px monospace }</style>
-
 <circle cx="50" cy="50" r="50" fill="#1D2951"/>
-<circle cx="65" cy="35" r="15" fill="white" />
-
-<text x="100" y="20" fill="#1D2951" class="t">Scriptable</text>
-<text x="110" y="45" fill="#1D2951" class="t">Lua</text>
-<text x="110" y="70" fill="#1D2951" class="t">Site</text>
-<text x="100" y="95" fill="#1D2951" class="t">Generator</text>
-
+<circle cx="65" cy="35" r="15" fill="white"/>
+<g fill="#1D2951" font-family="monospace" font-size="18" font-weight="bold">
+  <text x="100" y="20">Scriptable</text>
+  <text x="110" y="45">Lua</text>
+  <text x="110" y="70">Site</text>
+  <text x="100" y="95">Generator</text>
+</g>
 </svg>
 
