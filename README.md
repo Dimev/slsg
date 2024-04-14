@@ -81,7 +81,7 @@ This is available under the h table, as well as with the fragment and rawHtml fu
 and `attrs()` accepting a table of the attributes to set on the element.
 
 `renderHtml()` will render the given nodes to a string of html.
-`render()` will do the same, but exclude the initial "\<!DOCTYPE html>".
+`render()` will do the same, but exclude the initial `<!DOCTYPE html>`.
 
 # Code highlighting
 TODO
