@@ -1,5 +1,6 @@
 use std::{cell::RefCell, fs, path::Path, rc::Rc};
 
+use base64::Engine;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{Lua, Value};
 
@@ -13,6 +14,16 @@ pub(crate) fn load_globals(
 ) -> Result<Rc<RefCell<Vec<String>>>, anyhow::Error> {
     // create a new file
     let file = lua.create_function(|_, text: String| Ok(File::New(text)))?;
+
+    // create a new binary file
+    let bin_file = lua.create_function(|_, bytes: Vec<u8>| Ok(File::NewBin(bytes)))?;
+
+    // create a new binary file, from base64
+    let base64_file = lua.create_function(|_, text: String| {
+        base64::prelude::BASE64_STANDARD
+            .decode(text)
+            .map_err(mlua::Error::external)
+    })?;
 
     // convert tex math to mathml
     let mathml = lua.create_function(|_, (text, inline): (String, Option<bool>)| {
@@ -117,6 +128,8 @@ pub(crate) fn load_globals(
     // load
     let table = lua.create_table()?;
     table.set("file", file)?;
+    table.set("binaryFile", bin_file)?;
+    table.set("base64File", base64_file)?;
     table.set("debug", debug)?;
     table.set("highlightCodeHtml", highlight)?;
     table.set("highlightCodeAst", highlight_ast)?;

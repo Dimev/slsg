@@ -21,6 +21,9 @@ pub(crate) enum File {
     /// Content of a new file
     New(String),
 
+    /// Content of a new file, binary
+    NewBin(Vec<u8>),
+
     /// Resized image, percentage of size
     ResizePercentage(PathBuf, f32),
 
@@ -42,6 +45,7 @@ impl File {
         match self {
             Self::RelPath(p) => fs::copy(p, path).map(|_| ()),
             Self::New(content) => fs::write(path, content).map(|_| ()),
+            Self::NewBin(content) => fs::write(path, content).map(|_| ()),
             Self::ResizePercentage(_, _) => todo!(),
             Self::ResizeX(_, _) => todo!(),
             Self::ResizeY(_, _) => todo!(),
@@ -54,6 +58,7 @@ impl File {
         match self {
             Self::RelPath(path) => fs::read_to_string(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.clone()),
+            Self::NewBin(_) => Err(anyhow!("A binary file cannot be loaded to a string!")),
             _ => Err(anyhow!("A resized image cannot be loaded to a string!")),
         }
     }
@@ -63,6 +68,7 @@ impl File {
         match self {
             Self::RelPath(path) => fs::read(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.as_bytes().to_owned()),
+            Self::NewBin(bytes) => Ok(bytes.clone()),
             Self::ResizePercentage(_, _) => todo!(),
             Self::ResizeX(_, _) => todo!(),
             Self::ResizeY(_, _) => todo!(),
@@ -72,8 +78,9 @@ impl File {
     /// Get the path used, if any
     fn get_path(&self) -> Option<&Path> {
         match self {
-            Self::RelPath(p) => Some(p),
             Self::New(_) => None,
+            Self::NewBin(_) => None,
+            Self::RelPath(p) => Some(p),
             Self::ResizePercentage(p, _) => Some(p),
             Self::ResizeX(p, _) => Some(p),
             Self::ResizeY(p, _) => Some(p),
@@ -119,6 +126,10 @@ impl UserData for File {
             let bytes = this.get_bytes().map_err(mlua::Error::external)?;
             Ok(base64::prelude::BASE64_STANDARD.encode(bytes))
         });
+        methods.add_method("parseBinary", |_, this, ()| {
+            let bytes = this.get_bytes().map_err(mlua::Error::external)?;
+            Ok(bytes)
+        });
         methods.add_method("parseJson", |lua, this, ()| {
             let str = this.get_string().map_err(mlua::Error::external)?;
             let json: serde_json::Value =
@@ -143,8 +154,8 @@ impl UserData for File {
             biblatex_to_table(lua, bibtex)
         });
         methods.add_method("resizeImgPercentage", |_, this, size: f32| match this {
-            Self::New(_) => Err(mlua::Error::external(anyhow!(
-                "A new file can not be an image"
+            Self::New(_) | Self::NewBin(_) => Err(mlua::Error::external(anyhow!(
+                "A new file cannot be resized"
             ))),
             Self::RelPath(p) => Ok(Self::ResizePercentage(p.clone(), size)),
             Self::ResizeX(p, amount) => Ok(Self::ResizeX(
@@ -160,8 +171,8 @@ impl UserData for File {
             }
         });
         methods.add_method("resizeImgX", |_, this, size: u32| match this {
-            Self::New(_) => Err(mlua::Error::external(anyhow!(
-                "A new file can not be an image"
+            Self::New(_) | Self::NewBin(_) => Err(mlua::Error::external(anyhow!(
+                "A new file cannot be resized"
             ))),
             Self::RelPath(p) => Ok(Self::ResizeX(p.clone(), size)),
             Self::ResizeX(p, _) => Ok(Self::ResizeX(p.clone(), size)),
@@ -169,8 +180,8 @@ impl UserData for File {
             Self::ResizePercentage(p, _) => Ok(Self::ResizeX(p.clone(), size)),
         });
         methods.add_method("resizeImgY", |_, this, size: u32| match this {
-            Self::New(_) => Err(mlua::Error::external(anyhow!(
-                "A new file can not be an image"
+            Self::New(_) | Self::NewBin(_) => Err(mlua::Error::external(anyhow!(
+                "A new file cannot be resized"
             ))),
             Self::RelPath(p) => Ok(Self::ResizeY(p.clone(), size)),
             Self::ResizeX(p, _) => Ok(Self::ResizeY(p.clone(), size)),

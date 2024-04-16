@@ -34,7 +34,7 @@ They also get access to the `config` table, which is loaded from `site.toml`.
 - `colocated`: `directory` for the colocated files, if this was an `index.lua` file, otherwise an empty directory.
 - `name`: stem of the `*.lua` file, or directory name if `index.lua`.
 - `static`: `directory` for the static files.
-- `styles`: return table of `file`s, for the style.
+- `styles`: return table of `file`s, found in the style directory. Note that these are the generated CSS files from the given Sass files.
 
 `directory`:
 - `files`: table for all colocated files.
@@ -43,11 +43,15 @@ They also get access to the `config` table, which is loaded from `site.toml`.
 
 `file`:
 - can be created with the `site.file(text)` function.
+- `site.binaryFile(bytes)` can be used to create a binary file from a table of bytes.
+- `site.base64File(base64)` can be used to create a binary file from a base64 string.
 - `parseMd()`: parses the file as markdown.
 - `parseJson()`: parses the file as json, into a table.
 - `parseYaml()`:  parses the file as yaml, into a table.
 - `parseToml()`: parses the file as toml, into a table.
 - `parseTxt()`: loads the file as a string.
+- `parseBinary()`: loads the file as a table of bytes.
+- `parseBase64`: loads the file as a base64 string.
 - `parseBibtex()`: loads the file as bibtex, into a table.
 - `stem`: file stem if any, or nil.
 - `name`: file name if any, or nil.
@@ -65,6 +69,7 @@ They also get access to the `config` table, which is loaded from `site.toml`.
 - `withFile(path, file)`: adds a file at the given relative path.
 - `withHtml(html)`: adds html to the page. If no html is used, no index.html file is generated for the directory.
 - `withPage(page)`: adds a subpage to the page.
+- TODO: withmany
 
 # Other globals
 - `warn`: Accepts a single string, warnings will be shown in the terminal and error page.
@@ -109,13 +114,14 @@ everything under the `[config]` section is loaded into the `config` global.
 
 # Current TODO:
 - [X] rename to SLSG
-- [ ] figure out a way to do spacing between strings nicely
+- [X] figure out a way to do spacing between strings nicely
 - [ ] have example site also serve as short intro to slsg (and make logo)
 - [ ] code highlighting rules for common language set
 - [ ] image resizing
-- [ ] minification(?)
+- [ ] minification/bundling(?)
 - [ ] finish docs
 - [ ] atom/rss (x/a under the standard lib)
+- [X] Binary file creation
 
 # Cookbook TODO:
 - [ ] manual markdown rendering FINISH
