@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use base64::Engine;
 use mlua::{
     AnyUserData, FromLua, Lua, LuaSerdeExt, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
@@ -113,6 +114,10 @@ impl UserData for File {
         });
         methods.add_method("parseTxt", |_, this, ()| {
             this.get_string().map_err(mlua::Error::external)
+        });
+        methods.add_method("parseBase64", |_, this, ()| {
+            let bytes = this.get_bytes().map_err(mlua::Error::external)?;
+            Ok(base64::prelude::BASE64_STANDARD.encode(bytes))
         });
         methods.add_method("parseJson", |lua, this, ()| {
             let str = this.get_string().map_err(mlua::Error::external)?;

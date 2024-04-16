@@ -41,7 +41,7 @@ for key, value in pairs(script.colocated.files) do
 
     -- render out
     local mdHtml = markdown.compileMd(md:ast(), { code = codeHighlight }):renderHtml()
-    local html = components.page(front.title, "", "/style.css", pagelinks, rawHtml(mdHtml))
+    local html = components.page(front.title, script.styles.style, pagelinks, rawHtml(mdHtml))
 
     -- and the actual page file
     mdPages[value.stem] = page()
@@ -59,14 +59,14 @@ local indexHtml = markdown.compileMd(
 
 -- index page
 local html = components.page(
-  config.name, "", "/style.css", pagelinks, h.main():sub(
+  config.name, script.styles.style, pagelinks, h.main():sub(
     indexHtml,
     bib.generateBibHtml(script.static.files["references.bib"])
   )
 ):renderHtml()
 
 local notFoundPage = site.file(components.page(
-  "LSSG - Not found", "", "/style.css", pagelinks,
+  "LSSG - Not found", script.styles.style, pagelinks,
   h.main():sub(
     h.h1():sub("404!"),
     h.p():sub("Page not found!")
@@ -76,6 +76,5 @@ local notFoundPage = site.file(components.page(
 return page()
   :withHtml(html)
   :withManyPages(mdPages)
-  :withFile("style.css", script.styles.style)
   :withFile("404.html", notFoundPage)
   :withManyFiles(script.static.files)
