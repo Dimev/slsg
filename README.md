@@ -117,7 +117,7 @@ everything under the `[config]` section is loaded into the `config` global.
 - [X] figure out a way to do spacing between strings nicely
 - [ ] have example site also serve as short intro to slsg (and make logo)
 - [ ] code highlighting rules for common language set
-- [ ] image resizing
+- [X] image resizing
 - [ ] minification/bundling(?)
 - [ ] finish docs
 - [ ] atom/rss (x/a under the standard lib)

@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Cursor,
     path::{Path, PathBuf},
 };
 
@@ -11,6 +12,8 @@ use nom_bibtex::Bibtex;
 
 use super::markdown::Markdown;
 use anyhow::anyhow;
+
+use image::{imageops::FilterType, io::Reader as ImageReader};
 
 /// File for the file tree
 #[derive(Clone, Debug)]
@@ -46,9 +49,7 @@ impl File {
             Self::RelPath(p) => fs::copy(p, path).map(|_| ()),
             Self::New(content) => fs::write(path, content).map(|_| ()),
             Self::NewBin(content) => fs::write(path, content).map(|_| ()),
-            Self::ResizePercentage(_, _) => todo!(),
-            Self::ResizeX(_, _) => todo!(),
-            Self::ResizeY(_, _) => todo!(),
+            x => fs::write(path, x.get_bytes()?).map(|_| ()),
         }
         .map_err(|x| x.into())
     }
@@ -69,9 +70,43 @@ impl File {
             Self::RelPath(path) => fs::read(path).map_err(|x| x.into()),
             Self::New(str) => Ok(str.as_bytes().to_owned()),
             Self::NewBin(bytes) => Ok(bytes.clone()),
-            Self::ResizePercentage(_, _) => todo!(),
-            Self::ResizeX(_, _) => todo!(),
-            Self::ResizeY(_, _) => todo!(),
+            Self::ResizePercentage(path, perc) => {
+                let img = ImageReader::open(path)?;
+                let format = img
+                    .format()
+                    .ok_or(anyhow!("Image did not have a known format!"))?;
+                let decoded = img.decode()?;
+                let resized = decoded.resize(
+                    (decoded.width() as f32 * perc * 0.01) as u32,
+                    (decoded.height() as f32 * perc * 0.01) as u32,
+                    FilterType::Lanczos3,
+                );
+                let mut bytes = Vec::<u8>::new();
+                resized.write_to(&mut Cursor::new(&mut bytes), format)?;
+                Ok(bytes)
+            }
+            Self::ResizeX(path, width) => {
+                let img = ImageReader::open(path)?;
+                let format = img
+                    .format()
+                    .ok_or(anyhow!("Image did not have a known format!"))?;
+                let decoded = img.decode()?;
+                let resized = decoded.resize(*width, std::u32::MAX, FilterType::Lanczos3);
+                let mut bytes = Vec::<u8>::new();
+                resized.write_to(&mut Cursor::new(&mut bytes), format)?;
+                Ok(bytes)
+            }
+            Self::ResizeY(path, height) => {
+                let img = ImageReader::open(path)?;
+                let format = img
+                    .format()
+                    .ok_or(anyhow!("Image did not have a known format!"))?;
+                let decoded = img.decode()?;
+                let resized = decoded.resize(std::u32::MAX, *height, FilterType::Lanczos3);
+                let mut bytes = Vec::<u8>::new();
+                resized.write_to(&mut Cursor::new(&mut bytes), format)?;
+                Ok(bytes)
+            }
         }
     }
 
