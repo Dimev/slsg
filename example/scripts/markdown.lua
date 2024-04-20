@@ -1,5 +1,3 @@
-local mod = {}
-
 -- render one node, the defaults
 local defaults = {}
 
@@ -184,6 +182,30 @@ function defaults.definition(ast, context)
   return fragment()
 end
 
+-- TODO: add setup functions
+-- setup many markdown nodes
+function setupMany(children, funcs, context)
+  for i, value in ipairs(children) do
+    setupMd(value, funcs, context)
+  end
+end
+
+-- setup one markdown node
+function setupMd(ast, funcs, context)
+  -- run the setup function
+  if ast.children then
+    (funcs[ast.type .. 'Setup'] 
+      or defaults[ast.type .. 'Setup'] 
+      or function() end -- identity, do nothing
+    )(setupMany(ast.children, funcs), ast, context)
+  else
+    (funcs[ast.type .. 'Setup'] 
+      or defaults[ast.type .. 'Setup'] 
+      or function() end
+    )(ast, context)
+  end 
+end
+
 -- compile many markdown nodes
 function compileMany(children, funcs, context)
   local res = {}
@@ -211,9 +233,15 @@ function compileMd(ast, funcs, context)
   end
 end
 
+local mod = {}
+
 -- Parse and compile markdown, with custom functions, and an empty context
 function mod.compileMd(ast, funcs)
-  return compileMd(ast, funcs, {})
+  local ctx = {}
+  -- setup all things needed ahead of time
+  setupMd(ast, funcs, ctx)
+  -- and compile the markdown to what we want
+  return compileMd(ast, funcs, ctx)
 end
 
 return mod

@@ -1,6 +1,6 @@
 <svg version="1.1" width="210" height="100" xmlns="http://www.w3.org/2000/svg">
-<circle cx="50" cy="50" r="50" fill="#1D2951"/>
-<circle cx="65" cy="35" r="15" fill="white"/>
+<circle cx="50" cy="50" r="50" fill="#1D2951" />
+<circle cx="65" cy="35" r="15" fill="white" />
 <g fill="#1D2951" font-family="monospace" font-size="18" font-weight="bold">
   <text x="100" y="20">Scriptable</text>
   <text x="110" y="45">Lua</text>

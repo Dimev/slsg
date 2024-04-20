@@ -53,6 +53,9 @@ They also get access to the `config` table, which is loaded from `site.toml`.
 - `parseBinary()`: loads the file as a table of bytes.
 - `parseBase64`: loads the file as a base64 string.
 - `parseBibtex()`: loads the file as bibtex, into a table.
+- `imgResizePercentage(percentage)`: Resize the image according to the given percentage.
+- `imgResizeX(x)`: Resize the image so it's x-axis is the given size.
+- `imgResizeY(y)`: Resize the image so it's y-axis is the given size.
 - `stem`: file stem if any, or nil.
 - `name`: file name if any, or nil.
 - `extention`: file extention if any, or nil.
@@ -108,24 +111,21 @@ TODO
 The `site.toml` file can be used for configuring.
 everything under the `[config]` section is loaded into the `config` global.
 
-# Known bugs:
-- Syntax highlighting currently leaks memory if a prefix string is given, 
-  due to the lifetime of syntects's ClassStyle::SpacedPrefixed needing to be static.
-
 # Current TODO:
 - [X] rename to SLSG
 - [X] figure out a way to do spacing between strings nicely
-- [ ] have example site also serve as short intro to slsg (and make logo)
+- [ ] have example site also serve as short intro to slsg (show some features)
 - [ ] code highlighting rules for common language set
 - [X] image resizing
 - [ ] minification/bundling(?)
 - [ ] finish docs
 - [ ] atom/rss (x/a under the standard lib)
 - [X] Binary file creation
+- [ ] Send correct mime types (use proper web server + parallel process files?)
 
 # Cookbook TODO:
 - [ ] manual markdown rendering FINISH
 - [ ] markdown based blog (loads md)
-- [ ] atom
+- [ ] atom/rss
 - [ ] search index?
 - [ ] bibtex bibliography

@@ -1,6 +1,6 @@
-local components = require('components.lua')
-local markdown = require('markdown.lua')
-local bib = require('bibliography.lua')
+local components = require 'components.lua'
+local markdown = require 'markdown.lua'
+local bib = require 'bibliography.lua'
 
 -- get all index pages
 local pagelinks = {}
