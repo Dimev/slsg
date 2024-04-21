@@ -121,7 +121,7 @@ everything under the `[config]` section is loaded into the `config` global.
 - [ ] finish docs
 - [ ] atom/rss (x/a under the standard lib)
 - [X] Binary file creation
-- [ ] Send correct mime types (use proper web server + parallel process files?)
+- [X] Send correct mime types
 
 # Cookbook TODO:
 - [ ] manual markdown rendering FINISH
