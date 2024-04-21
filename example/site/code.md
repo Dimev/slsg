@@ -19,6 +19,7 @@ keywords = '\<(def|import|let|in||match)\>'
 
 With these, the language looks like this:
 ```funlang
+# Fibbonachi using case of
 def fibbonachi n =
   case n
   of 0 = 0

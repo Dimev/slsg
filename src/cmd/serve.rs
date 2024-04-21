@@ -226,7 +226,7 @@ fn handle_connection(
         .expect(RW_ERR)
         .get(&PathBuf::from(file_path).join("index.html"))
     {
-        (file.get_bytes()?, "200 OK", get_mime_type(&file_path))
+        (file.get_bytes()?, "200 OK", Some("text/html"))
     }
     // if it's the update notifier, set the update stream
     else if file_path == VERY_LONG_PATH {

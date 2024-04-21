@@ -1,4 +1,5 @@
 [funlang]
 extentions = ["fn", "fnl"]
+comment = "#.*"
 keyword = '\<(def|import|let|in|case|of)\>'
 function = '(?<=def)\s+\w+'
