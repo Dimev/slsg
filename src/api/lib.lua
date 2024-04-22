@@ -91,8 +91,8 @@ function el(ty, void, ...)
 		assert(not void, 'Elements of type "' .. self.tag .. '" cannot have children, as they are a void element')
 		for _, value in pairs({ ... }) do
 			if type(value) == "string" then
-				-- TODO: this is still wrong
-				self.content = self.content .. ((#self.content > 0 and " ") or "") .. escapeHtml(value)
+				-- If it's text, surround it by spaces
+				self.content = self.content .. ' ' .. escapeHtml(value) .. ' '
 			elseif value ~= nil then
 				self.content = self.content .. value:render()
 			end 

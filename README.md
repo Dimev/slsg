@@ -116,6 +116,7 @@ everything under the `[config]` section is loaded into the `config` global.
 - [X] figure out a way to do spacing between strings nicely
 - [ ] have example site also serve as short intro to slsg (show some features)
 - [ ] code highlighting rules for common language set
+- [ ] Either fix markdown shenanigans (so citations are easier), or add a latex parser
 - [X] image resizing
 - [ ] minification/bundling(?)
 - [ ] finish docs
@@ -124,7 +125,7 @@ everything under the `[config]` section is loaded into the `config` global.
 - [X] Send correct mime types
 
 # Cookbook TODO:
-- [ ] manual markdown rendering FINISH
+- [ ] manual markdown rendering FINISH (if any)
 - [ ] markdown based blog (loads md)
 - [ ] atom/rss
 - [ ] search index?

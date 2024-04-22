@@ -1,9 +1,17 @@
--- render one node, the defaults
+-- render/setup one node, the defaults
 local defaults = {}
 
 -- full list of all operations
 -- some of these are not used, as they aren't parsed by the parser
 -- They are still included for completeness
+
+-- Setup
+function defaults.footnoteDefinitionSetup(c, ast, context)
+  --context.footnotes = context.footnotes or {}
+  --context.footnotes[ast.identifier] = c
+end
+
+-- Rendering
 -- root node
 function defaults.root(c)
   -- TODO: append definitions
@@ -70,8 +78,8 @@ function defaults.emphasis(c)
 end
 
 -- mdxTextExpression ({=}), optionally enabled
-function defaults.mdxTextExpression()
-  return fragment("{" .. c.value .. "}")
+function defaults.mdxTextExpression(ast)
+  return fragment("{" .. ast.value .. "}")
 end
 
 -- mdx import, unused
@@ -136,9 +144,9 @@ function defaults.math(ast)
   return rawHtml(site.latexToMathml(ast.value))
 end
 
--- mdx flow expression, unused
-function defaults.mdxFlowExpression()
-  return fragment()
+-- mdx flow expression
+function defaults.mdxFlowExpression(ast)
+  return fragment("{" .. ast.value .. "}")
 end
 
 -- heading (# c), outputs up to h6

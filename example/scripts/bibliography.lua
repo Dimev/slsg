@@ -1,24 +1,40 @@
 local mod = {}
 
 -- Add a citation to the list
--- TODO: figure out a nice way to generate citation key indices
-function mod.addCitation(list, name)
-	list[name] = true
+-- this should be run during setup when using the markdown renderer from the cookbook
+function mod.addCitation(name, list, bib)
+	-- add the citation to the list
+	table.insert(list, name)
+
+	-- sort the list, based on the author name
+	table.sort(list, function(l, r)
+		return bib[l].tags.author < bib[r].tags.author
+	end)
+end
+
+-- Render a citation from the list
+function mod.renderCitation(name, list)
+	-- look up the index of the author
+	local index = 0
+	for key, value in ipairs(list) do
+		-- stop when found
+		if value == name then index = key break end
+	end
+
+	-- draw the citation
+	return h.p('[' .. index ..']')
 end
 
 -- Generate the bibliography
 -- Optionally accepts a list to only pick citations from that list
 function mod.generateBibHtml(bib, list)
-	-- parse the bib
-	local bibtex = bib:parseBibtex()
-
 	-- output html
 	local html = h.ol()
 
 	-- generate the bibs
-	for key, ref in pairs(bibtex.bibliographies) do
-		-- skip if not in list
-		if list and not list[key] then  
+	for key, ref in pairs(bib.bibliographies) do
+		-- skip if not in list, and the list was given
+		if list and not list[key] then
 			-- nothing
 		elseif ref.type == 'book' then
 			html = html:sub(h.li():sub(

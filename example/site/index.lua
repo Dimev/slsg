@@ -39,8 +39,11 @@ for key, value in pairs(script.colocated.files) do
     -- get the front matter for the title of the page
     local front = md:front()
 
+    -- functions for the markdown renderer
+    local markdownFns = { code = codeHighlight }
+
     -- render out
-    local mdHtml = markdown.compileMd(md:ast(), { code = codeHighlight }):renderHtml()
+    local mdHtml = markdown.compileMd(md:ast(), markdownFns):renderHtml()
     local html = components.page(front.title, script.styles.style, pagelinks, rawHtml(mdHtml))
 
     -- and the actual page file
@@ -49,19 +52,33 @@ for key, value in pairs(script.colocated.files) do
   end
 end
 
+-- citation list
+local citations = {}
+
+-- bibliography
+local bibtex = script.static.files['references.bib']:parseBibtex()
+
 -- render out
 local indexHtml = markdown.compileMd(
   script.colocated.files['index.md']
     :parseMd()
     :ast(), 
-  { code = codeHighlight }
+  { 
+    code = codeHighlight,
+    mdxTextExpressionSetup = function(ast, context)
+      bib.addCitation(ast.value, citations, bibtex)
+    end,
+    mdxTextExpression = function(ast, context)
+      return bib.renderCitation(ast.value, citations)
+    end
+  }
 )
 
 -- index page
 local html = components.page(
   config.name, script.styles.style, pagelinks, h.main():sub(
     indexHtml,
-    bib.generateBibHtml(script.static.files["references.bib"])
+    bib.generateBibHtml(bibtex)
   )
 ):renderHtml()
 
