@@ -52,15 +52,15 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
     // styles to use
     let warn_div = "font: 16px monospace; color: #F5871F";
     let err_div = "font: 16px monospace; color: #C82829";
-    let button_style = "float: right; font: 16px monospace; border: none; padding: 8px";
+    let button_style = "font: 16px monospace; border: none; padding: 8px";
     let close_button = format!(
-        r#"<button onclick="document.getElementById(&quot;long-warning-box-remove-name&quot;).remove()" style="{button_style}">Close</button>"#
+        r#"<form method="dialog"><button style="{button_style}">Close</button></form>"#
     );
 
     let center_div =
         "display: flex; justify-content: center; align-items: center; width: 100vw; height: 100vh; border: 0px; margin: 0px; position: fixed; top: 0px; left: 0px; pointer-events: none";
     let inner_div =
-        "border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll; box-shadow: 2px 2px 60px #0005; pointer-events: auto";
+        "border: none; border-left: #4271AE 5px solid; background: white; max-width: 60%; max-height: 80%; padding: 10px; overflow: scroll; box-shadow: 2px 2px 60px #0005; pointer-events: auto";
 
     // format the warnings
     let warns: String = warnings.iter().fold(String::new(), |acc, x| {
@@ -93,7 +93,7 @@ pub(crate) fn warning_and_error_html(warnings: &[String], errors: &[String]) -> 
         String::new()
     } else {
         format!(
-            r#"<div id="long-warning-box-remove-name" style="{center_div}"><div style="{inner_div}">{close_button}{errs}{warns}</div></div>"#
+            r#"<div style="{center_div}"><dialog open style="{inner_div}">{close_button}{errs}{warns}</dialog></div>"#
         )
     }
 }

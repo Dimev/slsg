@@ -6,3 +6,4 @@ pub(crate) mod markdown;
 pub(crate) mod page;
 pub(crate) mod script;
 pub(crate) mod styles;
+pub(crate) mod tex;

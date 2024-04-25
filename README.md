@@ -130,3 +130,8 @@ everything under the `[config]` section is loaded into the `config` global.
 - [ ] atom/rss
 - [ ] search index?
 - [ ] bibtex bibliography
+
+# Alternative:
+Possible alternative (simpler) implementation:
+simply a lua interpreter + file loader/parser
+runs index.lua, expects a table with files and settings as return
