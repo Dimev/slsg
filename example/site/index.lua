@@ -43,7 +43,7 @@ for key, value in pairs(script.colocated.files) do
     local markdownFns = { code = codeHighlight }
 
     -- render out
-    local mdHtml = markdown.compileMd(md:ast(), markdownFns):renderHtml()
+    local mdHtml = markdown.compileMd(md:ast(true), markdownFns):renderHtml()
     local html = components.page(front.title, script.styles.style, pagelinks, rawHtml(mdHtml))
 
     -- and the actual page file
@@ -62,7 +62,7 @@ local bibtex = script.static.files['references.bib']:parseBibtex()
 local indexHtml = markdown.compileMd(
   script.colocated.files['index.md']
     :parseMd()
-    :ast(), 
+    :ast(true), 
   { 
     code = codeHighlight,
     mdxTextExpressionSetup = function(ast, context)
