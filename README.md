@@ -116,7 +116,7 @@ everything under the `[config]` section is loaded into the `config` global.
 - [X] figure out a way to do spacing between strings nicely
 - [ ] have example site also serve as short intro to slsg (show some features)
 - [ ] code highlighting rules for common language set
-- [ ] Either fix markdown shenanigans (so citations are easier), or add a latex parser
+- [X] Mdx flow
 - [X] image resizing
 - [ ] minification/bundling(?)
 - [ ] finish docs
@@ -133,5 +133,6 @@ everything under the `[config]` section is loaded into the `config` global.
 
 # Alternative:
 Possible alternative (simpler) implementation:
-simply a lua interpreter + file loader/parser
+simply a lua interpreter + file loader/parser (+ sandbox?)
+Also use asciidoc or derivative?
 runs index.lua, expects a table with files and settings as return
