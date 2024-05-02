@@ -1,192 +1,43 @@
-mod api;
-mod cmd;
-mod cookbook;
-mod pretty_print;
-
-use anyhow::anyhow;
 use clap::Parser;
-use cmd::{
-    generate::{GenerateError, Site},
-    serve::serve,
-};
-use cookbook::lookup;
-use pretty_print::{print_entry, print_error, print_markdown};
-use std::{env, fs, path::PathBuf};
+use std::path::PathBuf;
 
-use crate::{cookbook::entries, pretty_print::print_warning};
+mod file;
+mod generate;
 
 #[derive(Parser)]
 enum Args {
-    /// Build the site, from the site.toml file in the current or given directory
-    Build {
-        /// directory to the site.toml file of the site to build, current working directory by default
-        dir: Option<PathBuf>,
-
-        /// directory to write the resulting site to, public/ by default
-        #[clap(short, long)]
-        output: Option<PathBuf>,
-
-        /// Whether we want to render a standalone lua file
-        /// expects either a path to a directory with an index.lua file, allowing colocated files, or a single lua file, without colocated files
-        #[clap(short, long, action)]
-        standalone: bool,
-    },
-
-    /// Serve the site locally, for development
-    /// Automatically reloads the site preview when a file in either the current directory, or given directory changes
+    /// Build the site, and run a development server that reloads when a change is detected
     Dev {
-        /// directory to the site.toml file of the site to build, current working directory by default
-        dir: Option<PathBuf>,
-
-        /// Adress to listen on for connections, defaults to 127.0.0.1:1111
-        #[clap(short, long)]
-        address: Option<String>,
-
-        /// Whether we want to render a standalone lua file
-        /// expects either a path to a directory with an index.lua file, allowing colocated files, or a single lua file, without colocated files
-        #[clap(short, long, action)]
-        standalone: bool,
-
-        /// Whether to treat the generated site as a single page app, and reroute everything to index.html if the file is not found
-        #[clap(long, action)]
-        spa: bool,
+        /// Optional path to either a directory containing `site.lua`, or a lua file that builds the site
+        path: Option<PathBuf>,
     },
 
-    /// Lookup an included example script
-    Cookbook { name: Option<String> },
+    /// Build the site, and output the resulting files to a directory
+    Build {
+        /// Optional path to either a directory containing `site.lua`, or a lua file that builds the site
+        path: Option<PathBuf>,
 
-    /// Print the readme
-    Readme,
+        /// Optional path to the directory to put the resulting files in, defaults to public/
+        output: Option<PathBuf>,
+    },
 
-    /// Create a new site
-    New { path: PathBuf },
+    /// Create a new site with the given name
+    New { name: String },
 
-    /// Init a site in the current directory
+    /// Init the current directory as a site
     Init,
+
+    /// Show the API documentation (README)
+    Api,
 }
 
-fn main() -> Result<(), anyhow::Error> {
-    let args = Args::parse();
-
-    // run the command
-    match args {
-        Args::Build {
-            dir,
-            output,
-            standalone,
-        } => match if standalone {
-            Site::generate_standalone(dir, false)
-        } else {
-            Site::generate(dir, false)
-        } {
-            Ok(site) => {
-                // success, print any warnings
-                for warning in site.warnings.iter() {
-                    print_warning(warning);
-                }
-
-                site.write_to_directory(output)?;
-            }
-            // Fail, print the errors
-            Err(GenerateError { warnings, error }) => {
-                print_error(&format!("{:?}", error));
-                for warning in warnings {
-                    print_warning(&warning);
-                }
-            }
-        },
-        Args::Dev {
-            dir,
-            address,
-            standalone,
-            spa,
-        } => {
-            serve(dir, address, standalone, spa)?;
-        }
-        Args::Cookbook { name } => {
-            if let Some(entry) = name.and_then(|x| lookup(&x)) {
-                print_entry(entry);
-            } else {
-                println!("Could not find the given entry. Available entries are:");
-                for entry in entries() {
-                    println!(" - {}: {}", entry.name, entry.description);
-                }
-            }
-        }
-        Args::Readme => print_markdown(include_str!("../README.md")),
-        Args::New { path } => {
-            init_folder(&path)?;
-            println!("site created at {:?}", path);
-        }
-        Args::Init {} => {
-            init_folder(&env::current_dir()?)?;
-            println!("site created in current directory");
-        }
+#[async_std::main]
+async fn main() {
+    match Args::parse() {
+        Args::Dev { path } => todo!("Not done yet!"),
+        Args::Build { path, output } => todo!(),
+        Args::New { name } => todo!(),
+        Args::Init => todo!(),
+        Args::Api => todo!("Not done yet!"),
     }
-
-    Ok(())
-}
-
-const EX_CONFIG: &'static str = "# dev-404: \"404.html\"
-
-[config]
-# sitename = \"My website\"
-";
-
-const EX_LUA: &'static str = "local html = fragment(
-    h.style(script.styles.style:parseTxt()),
-    h.title('My website'),
-    h.div():sub(
-        h.h1('Hello, world!'),
-        h.img():attrs({ class = 'logo', alt = 'logo', src = 'logo.svg' })
-    )
-):renderHtml()
-
-return page()
-    :withHtml(html)
-    :withManyFiles(script.static.files)
-";
-
-const EX_CSS: &'static str = "html {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    font-family: sans-serif;
-}
-";
-
-fn init_folder(path: &PathBuf) -> Result<(), anyhow::Error> {
-    // check if the directory is empty
-    if let Ok(mut dir) = path.read_dir() {
-        if dir.next().is_some() {
-            Err(anyhow!("Directory is not empty!"))?
-        }
-    }
-
-    // make the directory
-    fs::create_dir_all(&path)?;
-
-    // create the site directories
-    fs::write(path.join("site.toml"), EX_CONFIG)?;
-
-    fs::create_dir(path.join("site"))?;
-    fs::write(path.join("site/index.lua"), EX_LUA)?;
-
-    fs::create_dir(path.join("static"))?;
-    fs::write(
-        path.join("static/logo.svg"),
-        include_str!("../example/static/logo.svg"),
-    )?;
-
-    fs::create_dir(path.join("styles"))?;
-    fs::write(path.join("styles/style.scss"), EX_CSS)?;
-
-    // TODO: basic component script here (markdown blog?)
-    fs::create_dir(path.join("scripts"))?;
-
-    // gitignore to ignore public directory used for builds
-    fs::write(path.join(".gitignore"), "public/\n")?;
-
-    Ok(())
 }
