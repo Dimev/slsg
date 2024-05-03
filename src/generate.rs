@@ -6,7 +6,7 @@ use std::{fs, path::Path};
 use crate::file::File;
 
 /// Generate the site from the given lua file
-pub async fn generate(path: &Path) -> anyhow::Result<HashMap<String, File>> {
+pub fn generate(path: &Path) -> anyhow::Result<HashMap<String, File>> {
     // lua
     let lua = Lua::new_with(
         StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH,
@@ -104,11 +104,10 @@ pub async fn generate(path: &Path) -> anyhow::Result<HashMap<String, File>> {
     )?;
 
     // run file
-    let script = async_std::fs::read_to_string(path).await?;
+    let script = fs::read_to_string(path)?;
     lua.load(script)
         .set_name("site.lua")
-        .eval_async()
-        .await
+        .eval()
         .map_err(|x| x.into())
 }
 

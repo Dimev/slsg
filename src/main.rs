@@ -31,8 +31,7 @@ enum Args {
     Api,
 }
 
-#[async_std::main]
-async fn main() {
+fn main() {
     match Args::parse() {
         Args::Dev { path } => todo!("Not done yet!"),
         Args::Build { path, output } => todo!(),
