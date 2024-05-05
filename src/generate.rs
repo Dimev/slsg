@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use anyhow::anyhow;
 use fancy_regex::Regex;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
-use mlua::{Lua, LuaOptions, StdLib, Value};
+use mlua::{ErrorContext, FromLua, Lua, LuaOptions, StdLib, Table, Value};
 use std::{fs, path::Path};
 
 use crate::file::File;
@@ -14,18 +14,87 @@ enum HighlightRule {
     Compiled(String, Regex),
 }
 
+/// Resulting website that is generated
+pub struct Site {
+    /// Files in the site
+    pub files: HashMap<String, File>,
+
+    /// 404 page, if any
+    pub not_found: Option<String>,
+
+    /// Emitted warnings
+    pub warnings: Vec<String>,
+}
+
+impl<'lua> FromLua<'lua> for Site {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+        // it's a table
+        let table = Table::from_lua(value, lua)
+            .context("Result needs to be a table with a table of files, and a NotFound entry")?;
+
+        let files = table.get("files")?;
+        let not_found = table.get("NotFound")?;
+
+        Ok(Site {
+            files,
+            not_found,
+            warnings: Vec::new(),
+        })
+    }
+}
+
+/// Error when generation fails
+pub struct GenerateError {
+    /// Emitted warnings
+    pub warnings: Vec<String>,
+
+    /// Emitted errors
+    pub error: anyhow::Error,
+}
+
+trait WithWarn<T, E> {
+    fn with_warns<'a, I: Iterator<Item = &'a String>>(
+        self,
+        warnings: I,
+    ) -> Result<T, GenerateError>;
+}
+
+impl<T, E: Into<GenerateError>> WithWarn<T, E> for Result<T, E> {
+    fn with_warns<'a, I: Iterator<Item = &'a String>>(
+        self,
+        warnings: I,
+    ) -> Result<T, GenerateError> {
+        self.map_err(|x| {
+            let mut gen = x.into();
+            gen.warnings = warnings.map(|x| x.to_owned()).collect();
+            gen
+        })
+    }
+}
+
+impl<E: Into<anyhow::Error>> From<E> for GenerateError {
+    fn from(value: E) -> Self {
+        Self {
+            warnings: Vec::new(),
+            error: value.into(),
+        }
+    }
+}
+
 /// Generate the site from the given lua file
-pub fn generate(path: &Path, dev: bool) -> anyhow::Result<HashMap<String, File>> {
+pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // lua
     let lua = Lua::new_with(
         StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH,
         LuaOptions::new(),
     )?;
 
+    todo!("Setup the file path correctly in case it points to a file");
+
     // set up our own require function to only load files from this directory
     let path_owned = path.to_owned();
     let require = lua.create_function(move |lua, script: String| {
-        let path = path_owned.join("scripts").join(&script);
+        let path = path_owned.join(&script);
         let code = fs::read_to_string(path).map_err(mlua::Error::external)?;
         let function = lua.load(code).into_function()?;
         lua.load_from_function::<Value>(&script, function)
@@ -173,7 +242,14 @@ pub fn generate(path: &Path, dev: bool) -> anyhow::Result<HashMap<String, File>>
     lua.load(script)
         .set_name("site.lua")
         .eval()
-        .map_err(|x| x.into())
+        .map(|x| Site {
+            warnings: warnings.take(),
+            ..x
+        })
+        .map_err(|x| GenerateError {
+            warnings: warnings.take(),
+            error: x.into(),
+        })
 }
 
 // TODO: mdl

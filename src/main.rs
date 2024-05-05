@@ -1,8 +1,11 @@
 use clap::Parser;
+use serve::serve;
 use std::path::PathBuf;
 
 mod file;
 mod generate;
+mod serve;
+mod pretty_print;
 
 #[derive(Parser)]
 enum Args {
@@ -10,6 +13,9 @@ enum Args {
     Dev {
         /// Optional path to either a directory containing `site.lua`, or a lua file that builds the site
         path: Option<PathBuf>,
+
+        /// Address to serve on, defaults to 127.0.0.1:1111
+        address: Option<String>
     },
 
     /// Build the site, and output the resulting files to a directory
@@ -31,9 +37,9 @@ enum Args {
     Api,
 }
 
-fn main() {
+fn main() -> Result<(), anyhow::Error>{
     match Args::parse() {
-        Args::Dev { path } => todo!("Not done yet!"),
+        Args::Dev { path, address } => serve(path, address),
         Args::Build { path, output } => todo!(),
         Args::New { name } => todo!(),
         Args::Init => todo!(),
