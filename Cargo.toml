@@ -25,3 +25,4 @@ latex2mathml = "0.2.3"
 fancy-regex = "0.13.0"
 serde-tuple-vec-map = "1.0.1"
 image = "0.25.1"
+grass = { version = "0.13.2", default-features = false }
