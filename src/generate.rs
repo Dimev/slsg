@@ -117,6 +117,8 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
     // read file
     // TODO: file api(?)
+    // TODO: maybe only support loading to string, not have a full file
+    // so pages are easier to do
 
     // new file
 
