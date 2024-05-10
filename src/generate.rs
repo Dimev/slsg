@@ -1,18 +1,28 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    iter::{FilterMap, Peekable},
+    rc::Rc,
+};
 
 use anyhow::anyhow;
-use fancy_regex::Regex;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, FromLua, Lua, LuaOptions, StdLib, Table, Value};
 use nom_bibtex::Bibtex;
+use serde::Deserialize;
 use std::{fs, path::Path};
 
-use crate::file::File;
+use crate::{
+    file::File,
+    highlight::{self, highlight, highlight_html, HighlightRule},
+};
 
-// rule for the highlighter
-enum HighlightRule {
-    Raw(String, String),
-    Compiled(String, Regex),
+/// Single set of regex rules, as strings
+#[derive(Deserialize)]
+struct Rules {
+    /// Regex rules
+    #[serde(flatten, with = "tuple_vec_map")]
+    rules: Vec<(String, String)>,
 }
 
 /// Resulting website that is generated
@@ -92,7 +102,8 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
     // path to the working directory
     let working_dir = if path.is_file() {
-        path.parent().expect("File does not have a parent in it's path")
+        path.parent()
+            .expect("File does not have a parent in it's path")
     } else {
         path
     };
@@ -132,15 +143,12 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // so pages are easier to do
 
     // new file
-    let file = lua.create_function(|lua, content| {
-        Ok(File::New(content))
-    })?;
+    let file = lua.create_function(|_, content| Ok(File::New(content)))?;
 
     // parse toml
     // parse yaml
     // parse json
     // parse bibtex
-
     let parse_bibtex = lua.create_function(|lua, text: String| {
         let bib = Bibtex::parse(&text)
             .map_err(|x| mlua::Error::external(anyhow!("Failed to parse bibtex: {:?}", x)))?;
@@ -169,8 +177,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     let highlighters_cloned = highlighters.clone();
     let add_highlighters = lua.create_function(move |_, text: String| {
         // parse the highlighter
-        let raw = toml::from_str::<HashMap<String, Vec<(String, String)>>>(&text)
-            .map_err(mlua::Error::external)?;
+        let raw = toml::from_str::<HashMap<String, Rules>>(&text).map_err(mlua::Error::external)?;
         let mut highlight = highlighters_cloned.borrow_mut();
 
         // add the language to the highlighters
@@ -178,6 +185,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
             highlight.insert(
                 key,
                 value
+                    .rules
                     .into_iter()
                     .map(|(rule, regex)| HighlightRule::Raw(rule, regex))
                     .collect(),
@@ -189,20 +197,44 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
     // highlight code
     let highlighters_cloned = highlighters.clone();
-    let highlight_code = lua.create_function(move |_, (lang, code): (String, String)| {
-        // get the language
-        let rules = highlighters_cloned
-            .borrow()
-            .get(&lang)
-            .ok_or(mlua::Error::external(anyhow!(
+    let highlight_code = lua.create_function(
+        move |_, (lang, code, prefix): (String, String, Option<String>)| {
+            // get the language
+            let mut rules = highlighters_cloned.borrow_mut();
+            let mut rules = rules.get_mut(&lang).ok_or(mlua::Error::external(anyhow!(
                 "Language {lang} not in highlighters!"
-            )));
+            )))?;
+
+            // highlight
+            highlight_html(&mut rules, &code, prefix)
+                .map_err(|x| mlua::Error::external(x.context("Failed to highlight code")))
+        },
+    )?;
+
+    // highlight code to ast
+    let highlighters_cloned = highlighters.clone();
+    let highlight_ast = lua.create_function(move |lua, (lang, code): (String, String)| {
+        // get the language
+        let mut rules = highlighters_cloned.borrow_mut();
+        let mut rules = rules.get_mut(&lang).ok_or(mlua::Error::external(anyhow!(
+            "Language {lang} not in highlighters!"
+        )))?;
 
         // highlight
+        let ranges = highlight(&mut rules, &code)
+            .map_err(|x| mlua::Error::external(x.context("Failed to highlight code")))?;
 
-        Ok("sus mogus")
+        // make it into a table
+        let table = lua.create_table()?;
+        for range in ranges {
+            let t = lua.create_table()?;
+            t.set("text", range.text)?;
+            t.set("style", range.style)?;
+            table.push(t)?;
+        }
+
+        Ok(table)
     })?;
-    // highlight code to ast
 
     // highlight latex math as mathml
     let mathml = lua.create_function(|_, (text, inline): (String, Option<bool>)| {
@@ -223,9 +255,11 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("dev", dev)?;
 
     // add all to the site
+    // TODO: better naming?
     lib.set("latex2Mathml", mathml)?;
     lib.set("addHighlighters", add_highlighters)?;
-    lib.set("highlightCodeToHtml", highlight_code)?;
+    lib.set("highlightCodeHtml", highlight_code)?;
+    lib.set("highlightCodeAst", highlight_ast)?;
 
     lib.set("parseBibtex", parse_bibtex)?;
 
