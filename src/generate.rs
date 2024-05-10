@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use fancy_regex::Regex;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, FromLua, Lua, LuaOptions, StdLib, Table, Value};
+use nom_bibtex::Bibtex;
 use std::{fs, path::Path};
 
 use crate::file::File;
@@ -89,10 +90,20 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         LuaOptions::new(),
     )?;
 
-    todo!("Setup the file path correctly in case it points to a file");
+    // path to the working directory
+    let working_dir = if path.is_file() {
+        path.parent().expect("File does not have a parent in it's path")
+    } else {
+        path
+    };
+    let script_path = if path.is_file() {
+        path.to_owned()
+    } else {
+        path.join("index.lua")
+    };
 
     // set up our own require function to only load files from this directory
-    let path_owned = path.to_owned();
+    let path_owned = working_dir.to_owned();
     let require = lua.create_function(move |lua, script: String| {
         let path = path_owned.join(&script);
         let code = fs::read_to_string(path).map_err(mlua::Error::external)?;
@@ -122,12 +133,34 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
     // new file
 
-    // read toml
-    // read yaml
-    // read json
-    // read bibtex
+    // parse toml
+    // parse yaml
+    // parse json
+    // parse bibtex
+
+    let parse_bibtex = lua.create_function(|lua, text: String| {
+        let bib = Bibtex::parse(&text)
+            .map_err(|x| mlua::Error::external(anyhow!("Failed to parse bibtex: {:?}", x)))?;
+        let table = lua.create_table()?;
+        table.set("comments", bib.comments())?;
+        table.set("variables", bib.variables().clone())?;
+
+        // add all entries
+        let bibliographies = lua.create_table()?;
+        for biblio in bib.bibliographies() {
+            let entry = lua.create_table()?;
+            entry.set("type", biblio.entry_type())?;
+            entry.set("tags", biblio.tags().clone())?;
+            bibliographies.set(biblio.citation_key(), entry)?;
+        }
+
+        table.set("bibliographies", bibliographies)?;
+
+        Ok(table)
+    })?;
 
     // read and eval mdl
+    // TODO
 
     // add highlighters
     let highlighters_cloned = highlighters.clone();
@@ -191,6 +224,8 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("addHighlighters", add_highlighters)?;
     lib.set("highlightCodeToHtml", highlight_code)?;
 
+    lib.set("parseBibtex", parse_bibtex)?;
+
     lua.globals().set("site", lib)?;
 
     // set our own warning function
@@ -240,7 +275,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     )?;
 
     // run file
-    let script = fs::read_to_string(path)?;
+    let script = fs::read_to_string(script_path)?;
     lua.load(script)
         .set_name("site.lua")
         .eval()

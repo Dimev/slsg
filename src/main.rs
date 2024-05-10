@@ -6,6 +6,7 @@ mod file;
 mod generate;
 mod serve;
 mod pretty_print;
+mod mdl;
 
 #[derive(Parser)]
 enum Args {

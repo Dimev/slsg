@@ -118,25 +118,6 @@ impl File {
     }
 }
 
-fn biblatex_to_table(lua: &Lua, bib: Bibtex) -> Result<Table, mlua::Error> {
-    let table = lua.create_table()?;
-    table.set("comments", bib.comments())?;
-    table.set("variables", bib.variables().clone())?;
-
-    // add all entries
-    let bibliographies = lua.create_table()?;
-    for biblio in bib.bibliographies() {
-        let entry = lua.create_table()?;
-        entry.set("type", biblio.entry_type())?;
-        entry.set("tags", biblio.tags().clone())?;
-        bibliographies.set(biblio.citation_key(), entry)?;
-    }
-
-    table.set("bibliographies", bibliographies)?;
-
-    Ok(table)
-}
-
 impl UserData for File {
     fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
         fields.add_field_method_get("stem", |_, this| {
@@ -206,14 +187,20 @@ impl UserData for File {
 }
 
 impl<'lua> FromLua<'lua> for File {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
         // it's userdata
-        let userdata = AnyUserData::from_lua(value, lua)?;
+        if let Some(userdata) = value.as_userdata() {
+            // get the file out of the userdata, and clone it
+            let file: File = userdata.borrow::<File>()?.clone();
 
-        // get the file out of the userdata, and clone it
-        let file: File = userdata.borrow::<File>()?.clone();
-
-        // success
-        Ok(file)
+            // success
+            Ok(file)
+        } else if let Some(string) = value.as_str() {
+            Ok(File::New(string.to_owned()))
+        } else {
+            Err(mlua::Error::external(anyhow!(
+                "Expected either a string, or a file created with the `site.file` function"
+            )))
+        }
     }
 }
