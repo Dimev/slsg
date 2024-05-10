@@ -132,6 +132,9 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // so pages are easier to do
 
     // new file
+    let file = lua.create_function(|lua, content| {
+        Ok(File::New(content))
+    })?;
 
     // parse toml
     // parse yaml
@@ -225,6 +228,8 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("highlightCodeToHtml", highlight_code)?;
 
     lib.set("parseBibtex", parse_bibtex)?;
+
+    lib.set("file", file)?;
 
     lua.globals().set("site", lib)?;
 

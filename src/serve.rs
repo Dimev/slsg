@@ -42,9 +42,8 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                 let mut pages: HashMap<PathBuf, File> = res
                     .files
                     .into_iter()
-                    .map(|x| todo!("Convert to pathbuf somewhere"))
+                    .map(|(key, value)| (PathBuf::from("/").join(key), value))
                     .collect();
-                // TODO: fix
 
                 // set the 404 error page
                 if let Some(dev_404) = res.not_found {
@@ -110,7 +109,7 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
                     let mut pages: HashMap<PathBuf, File> = res
                         .files
                         .into_iter()
-                        .map(|x| todo!("Convert to pathbuf somewhere"))
+                        .map(|(key, value)| (PathBuf::from("/").join(key), value))
                         .collect();
 
                     // set the 404 error page
@@ -164,7 +163,15 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
     // watch the current dir
     if let Some(path) = &path {
-        debouncer.watcher().watch(path, RecursiveMode::Recursive)?;
+        debouncer.watcher().watch(
+            if path.is_file() {
+                path.parent()
+                    .expect("File does not have a parent directory")
+            } else {
+                path
+            },
+            RecursiveMode::Recursive,
+        )?;
     } else {
         debouncer
             .watcher()
