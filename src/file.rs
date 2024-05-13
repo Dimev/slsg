@@ -5,10 +5,9 @@ use std::{
 };
 
 use anyhow::anyhow;
-use mlua::{AnyUserData, FromLua, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
+use mlua::{FromLua, Lua, UserData, UserDataFields, UserDataMethods, Value};
 
 use image::{imageops::FilterType, io::Reader as ImageReader};
-use nom_bibtex::Bibtex;
 
 /// File for the file tree
 #[derive(Clone, Debug)]

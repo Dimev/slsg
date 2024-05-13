@@ -1,20 +1,15 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    iter::{FilterMap, Peekable},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
 use anyhow::anyhow;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
-use mlua::{ErrorContext, FromLua, Lua, LuaOptions, StdLib, Table, Value};
+use mlua::{ErrorContext, FromLua, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value};
 use nom_bibtex::Bibtex;
 use serde::Deserialize;
 use std::{fs, path::Path};
 
 use crate::{
     file::File,
-    highlight::{self, highlight, highlight_html, HighlightRule},
+    highlight::{highlight, highlight_html, HighlightRule},
 };
 
 /// Single set of regex rules, as strings
@@ -114,6 +109,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     };
 
     // set up our own require function to only load files from this directory
+    // TODO: path resolution, so absolute paths are relative to working dir
     let path_owned = working_dir.to_owned();
     let require = lua.create_function(move |lua, script: String| {
         let path = path_owned.join(&script);
@@ -138,16 +134,42 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // list all files
 
     // read file
+    let open_file = lua.create_function(|_, path: String| {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            Ok(File::from_path(&path))
+        } else {
+            Err(mlua::Error::external(anyhow!(
+                "File {:?} does not exist",
+                path
+            )))
+        }
+    })?;
     // TODO: file api(?)
     // TODO: maybe only support loading to string, not have a full file
     // so pages are easier to do
 
     // new file
-    let file = lua.create_function(|_, content| Ok(File::New(content)))?;
+    let new_file = lua.create_function(|_, content| Ok(File::New(content)))?;
 
     // parse toml
+    let parse_toml = lua.create_function(|lua, text: String| {
+        let toml: toml::Value = toml::from_str(&text).map_err(mlua::Error::external)?;
+        lua.to_value(&toml)
+    })?;
+
     // parse yaml
+    let parse_yaml = lua.create_function(|lua, text: String| {
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&text).map_err(mlua::Error::external)?;
+        lua.to_value(&yaml)
+    })?;
+
     // parse json
+    let parse_json = lua.create_function(|lua, text: String| {
+        let json: serde_json::Value = serde_json::from_str(&text).map_err(mlua::Error::external)?;
+        lua.to_value(&json)
+    })?;
+
     // parse bibtex
     let parse_bibtex = lua.create_function(|lua, text: String| {
         let bib = Bibtex::parse(&text)
@@ -261,9 +283,14 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("highlightCodeHtml", highlight_code)?;
     lib.set("highlightCodeAst", highlight_ast)?;
 
+    lib.set("parseToml", parse_toml)?;
+    lib.set("parseYaml", parse_yaml)?;
+    lib.set("parseJson", parse_json)?;
     lib.set("parseBibtex", parse_bibtex)?;
 
-    lib.set("file", file)?;
+    lib.set("openFile", open_file)?;
+    lib.set("newFile", new_file)?;
+    //lib.set("newBinaryFile", file)?;
 
     lua.globals().set("site", lib)?;
 

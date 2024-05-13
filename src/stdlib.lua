@@ -15,6 +15,8 @@ function site.escapeHtml(html)
   return escaped
 end
 
+-- TODO: make site/page
+
 -- make a node
 function El(ty, void, ...)
   local element = {
