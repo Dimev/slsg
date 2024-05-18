@@ -9,6 +9,7 @@ mod highlight;
 mod mdl;
 mod pretty_print;
 mod serve;
+mod path;
 
 #[derive(Parser)]
 enum Args {

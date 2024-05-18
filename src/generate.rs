@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use anyhow::anyhow;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
@@ -10,6 +10,7 @@ use std::{fs, path::Path};
 use crate::{
     file::File,
     highlight::{highlight, highlight_html, HighlightRule},
+    path::{concat_path, resolve_path},
 };
 
 /// Single set of regex rules, as strings
@@ -112,7 +113,11 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // TODO: path resolution, so absolute paths are relative to working dir
     let path_owned = working_dir.to_owned();
     let require = lua.create_function(move |lua, script: String| {
-        let path = path_owned.join(&script);
+        // find script
+        let path = path_owned
+            .join(resolve_path(&script).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+
+        // load script
         let code = fs::read_to_string(path).map_err(mlua::Error::external)?;
         let function = lua.load(code).into_function()?;
         lua.load_from_function::<Value>(&script, function)
@@ -127,15 +132,61 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     let lib = lua.create_table()?;
 
     // TODO
-    // list directories
-    // list all directories
+    // list directories in directory
+    let path_owned = working_dir.to_owned();
+    let list_dirs = lua.create_function(move |lua, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
 
-    // list files
-    // list all files
+        let entries = lua.create_table()?;
+
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+
+            // append entry if it's a directory
+            if entry.file_type()?.is_dir() {
+                entries.push(entry.file_name().into_string().map_err(|x| {
+                    mlua::Error::external(anyhow!(
+                        "Directory {:?} can't be converted to a UTF-8 string",
+                        x
+                    ))
+                })?)?;
+            }
+        }
+
+        Ok(entries)
+    })?;
+
+    // list files in directory
+    let path_owned = working_dir.to_owned();
+    let list_files = lua.create_function(move |lua, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+
+        let entries = lua.create_table()?;
+
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+
+            // append entry if it's a directory
+            if entry.file_type()?.is_file() {
+                entries.push(entry.file_name().into_string().map_err(|x| {
+                    mlua::Error::external(anyhow!(
+                        "File {:?} can't be converted to a UTF-8 string",
+                        x
+                    ))
+                })?)?;
+            }
+        }
+
+        Ok(entries)
+    })?;
 
     // read file
-    let open_file = lua.create_function(|_, path: String| {
-        let path = PathBuf::from(path);
+    let path_owned = working_dir.to_owned();
+    let open_file = lua.create_function(move |_, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
         if path.is_file() {
             Ok(File::from_path(&path))
         } else {
@@ -145,6 +196,32 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
             )))
         }
     })?;
+
+    // does a file exist
+    let path_owned = working_dir.to_owned();
+    let file_exists = lua.create_function(move |_, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+
+        Ok(path.is_file())
+    })?;
+
+    // does a directory exist
+    let path_owned = working_dir.to_owned();
+    let dir_exists = lua.create_function(move |_, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+
+        Ok(path.is_dir())
+    })?;
+
+    // concat file paths
+    let concat_paths = lua.create_function(|_, (left, right): (String, String)| {
+        concat_path(&left, &right).ok_or(mlua::Error::external(anyhow!(
+            "Paths could not be concatted"
+        )))
+    })?;
+
     // TODO: file api(?)
     // TODO: maybe only support loading to string, not have a full file
     // so pages are easier to do
@@ -287,10 +364,23 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("parseYaml", parse_yaml)?;
     lib.set("parseJson", parse_json)?;
     lib.set("parseBibtex", parse_bibtex)?;
+    //lib.set("parseMdl")?;
 
     lib.set("openFile", open_file)?;
     lib.set("newFile", new_file)?;
     //lib.set("newBinaryFile", file)?;
+    //lib.set("newBase64File", file)?;
+    
+    lib.set("listFiles", list_files)?;
+    lib.set("listDirectories", list_dirs)?;
+
+    lib.set("fileExists", file_exists)?;
+    lib.set("dirExists", dir_exists)?;
+
+    lib.set("concatPath", concat_paths)?;
+    //lib.set("filename")
+    //lib.set("fileExtention")
+    //lib.set("fileStem")
 
     lua.globals().set("site", lib)?;
 
