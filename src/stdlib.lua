@@ -15,7 +15,46 @@ function site.escapeHtml(html)
   return escaped
 end
 
--- TODO: make site/page
+-- file tree for a single directory
+function Filetree()
+  local tree = {
+    files = {},
+  }
+
+  -- Add an index.html file
+  function tree:withHtml(html)
+    self.files['index.html'] = html
+
+    return self
+  end
+
+  -- Add a file to the tree
+  function tree:withFile(name, content)
+    self.files[name] = content
+
+    return self
+  end
+
+  -- Add an entire subtree to the file tree
+  function tree:withSubtree(directory, subtree)
+    for name, file in pairs(subtree.files) do
+      -- add the concatted path
+      self.files[site.concatPath(directory, name)] = file
+    end
+
+    return self
+  end
+
+  -- Add a filepath to use when a page is not found
+  -- This only works if it's the root
+  function tree:withNotFoundPath(path)
+    self.notFound = path
+  
+    return self
+  end
+
+  return tree
+end
 
 -- make a node
 function El(ty, void, ...)

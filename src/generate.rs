@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use anyhow::anyhow;
+use grass::OutputStyle;
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, FromLua, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value};
 use nom_bibtex::Bibtex;
@@ -40,7 +41,7 @@ impl<'lua> FromLua<'lua> for Site {
             .context("Result needs to be a table with a table of files, and a NotFound entry")?;
 
         let files = table.get("files")?;
-        let not_found = table.get("NotFound")?;
+        let not_found = table.get("notFound")?;
 
         Ok(Site {
             files,
@@ -110,7 +111,6 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     };
 
     // set up our own require function to only load files from this directory
-    // TODO: path resolution, so absolute paths are relative to working dir
     let path_owned = working_dir.to_owned();
     let require = lua.create_function(move |lua, script: String| {
         // find script
@@ -131,12 +131,13 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // load our library functions
     let lib = lua.create_table()?;
 
-    // TODO
     // list directories in directory
     let path_owned = working_dir.to_owned();
     let list_dirs = lua.create_function(move |lua, path: String| {
-        let path = path_owned
-            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+        let resolved =
+            resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?;
+
+        let path = path_owned.join(&resolved);
 
         let entries = lua.create_table()?;
 
@@ -145,12 +146,30 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
             // append entry if it's a directory
             if entry.file_type()?.is_dir() {
-                entries.push(entry.file_name().into_string().map_err(|x| {
-                    mlua::Error::external(anyhow!(
-                        "Directory {:?} can't be converted to a UTF-8 string",
-                        x
-                    ))
-                })?)?;
+                let name = entry
+                    .file_name()
+                    .to_os_string()
+                    .into_string()
+                    .map_err(|x| {
+                        mlua::Error::external(anyhow!(
+                            "Name {:?} can't be converted to a UTF-8 string",
+                            x
+                        ))
+                    })?;
+
+                entries.set(
+                    name,
+                    resolved
+                        .join(entry.file_name())
+                        .into_os_string()
+                        .into_string()
+                        .map_err(|x| {
+                            mlua::Error::external(anyhow!(
+                                "Directory {:?} can't be converted to a UTF-8 string",
+                                x
+                            ))
+                        })?,
+                )?;
             }
         }
 
@@ -160,22 +179,42 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // list files in directory
     let path_owned = working_dir.to_owned();
     let list_files = lua.create_function(move |lua, path: String| {
-        let path = path_owned
-            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+        let resolved =
+            resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?;
+
+        let path = path_owned.join(&resolved);
 
         let entries = lua.create_table()?;
 
-        for entry in fs::read_dir(path)? {
+        for entry in fs::read_dir(&path)? {
             let entry = entry?;
 
-            // append entry if it's a directory
+            // append entry if it's a file
             if entry.file_type()?.is_file() {
-                entries.push(entry.file_name().into_string().map_err(|x| {
-                    mlua::Error::external(anyhow!(
-                        "File {:?} can't be converted to a UTF-8 string",
-                        x
-                    ))
-                })?)?;
+                let name = entry
+                    .file_name()
+                    .to_os_string()
+                    .into_string()
+                    .map_err(|x| {
+                        mlua::Error::external(anyhow!(
+                            "Name {:?} can't be converted to a UTF-8 string",
+                            x
+                        ))
+                    })?;
+
+                entries.set(
+                    name,
+                    resolved
+                        .join(entry.file_name())
+                        .into_os_string()
+                        .into_string()
+                        .map_err(|x| {
+                            mlua::Error::external(anyhow!(
+                                "File {:?} can't be converted to a UTF-8 string",
+                                x
+                            ))
+                        })?,
+                )?;
             }
         }
 
@@ -269,6 +308,18 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         Ok(table)
     })?;
 
+    // parse sass, from a given working directory
+    let parse_sass = lua.create_function(|_, (sass, directory): (String, Option<String>)| {
+        // parse options
+        // TODO: directory
+        let options = grass::Options::default().style(OutputStyle::Compressed);
+
+        // make css
+        let css = grass::from_string(sass, &options).map_err(mlua::Error::external)?;
+
+        Ok(css)
+    })?;
+
     // read and eval mdl
     // TODO
 
@@ -359,18 +410,18 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("addHighlighters", add_highlighters)?;
     lib.set("highlightCodeHtml", highlight_code)?;
     lib.set("highlightCodeAst", highlight_ast)?;
-
     lib.set("parseToml", parse_toml)?;
     lib.set("parseYaml", parse_yaml)?;
     lib.set("parseJson", parse_json)?;
     lib.set("parseBibtex", parse_bibtex)?;
+    lib.set("parseSass", parse_sass)?;
     //lib.set("parseMdl")?;
 
     lib.set("openFile", open_file)?;
     lib.set("newFile", new_file)?;
     //lib.set("newBinaryFile", file)?;
     //lib.set("newBase64File", file)?;
-    
+
     lib.set("listFiles", list_files)?;
     lib.set("listDirectories", list_dirs)?;
 

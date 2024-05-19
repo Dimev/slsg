@@ -118,30 +118,6 @@ impl File {
 }
 
 impl UserData for File {
-    fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("stem", |_, this| {
-            Ok(this
-                .get_path()
-                .and_then(|x| x.file_stem())
-                .and_then(|x| x.to_str())
-                .map(|x| x.to_owned()))
-        });
-        fields.add_field_method_get("name", |_, this| {
-            Ok(this
-                .get_path()
-                .and_then(|x| x.file_name())
-                .and_then(|x| x.to_str())
-                .map(|x| x.to_owned()))
-        });
-        fields.add_field_method_get("extention", |_, this| {
-            Ok(this
-                .get_path()
-                .and_then(|x| x.extension())
-                .and_then(|x| x.to_str())
-                .map(|x| x.to_owned()))
-        });
-    }
-
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("readString", |_, this, ()| {
             this.get_string().map_err(mlua::Error::external)

@@ -1,46 +1,6 @@
-local css = [[
-html {
-	font-size: 200%;
-	font-family: Latin Modern Roman;
-}
-
-math {
-	font-family: Latin Modern Math;
-}
-
-.code {
-	font-family: Latin Modern Mono, monospace;
-}
-
-.code--comment {
-	color: #888;
-	font-style: italic;
-}
-
-.code--keyword {
-	color: #D00;
-}
-
-.code--macro {
-	color: #D0D;
-}
-
-.code--constant {
-	color: blue;
-}
-
-.code--type {
-	color: purple;
-}
-
-.code--string {
-	color: green;
-}
-
-.code--function {
-	color: blue;
-}
-]]
+local css = site.parseSass(
+	site.openFile('styles/style.scss'):readString()
+)
 
 local math = site.latex2Mathml("\\int_0^1 x dx")
 
@@ -58,14 +18,29 @@ fun fibbonachi n = when n
   is n then fibbonachi (n - 1) (n - 2)
 ]], 'code--')
 
-local html = Fragment(
-	h.title('hello!'),
-	h.meta():attrs({ charset = 'UTF-8' }),
-	h.style(css),
+local content = h.div():attrs({ class = 'content' }):sub(
 	h.h1('Hello world'),
 	h.p('This is SLSG new!'),
 	RawHtml(math),
 	h.pre():attrs({ class = 'code' }):sub(RawHtml(code))
+)
+
+local html = Fragment(
+	h.title('hello!'),
+	h.meta():attrs({ charset = 'UTF-8' }),
+	h.style(css),
+	content
 ):renderHtml()
 
-return { files = { ['index.html'] = html } }
+local static = Filetree()
+
+-- load all static files
+for name, path in pairs(site.listFiles('static')) do
+	static:withFile(name, site.openFile(path))
+end
+
+return Filetree()
+		:withHtml(html)
+		:withFile('404.html', html)
+		:withNotFoundPath('404.html')
+		:withSubtree('.', static)
