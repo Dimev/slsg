@@ -12,7 +12,7 @@ use std::{fs, path::Path};
 use crate::{
     file::File,
     highlight::{highlight, highlight_html, HighlightRule},
-    path::{concat_path, resolve_path},
+    path::{concat_path, file_extension, file_name, file_stem, resolve_path},
 };
 
 /// Single set of regex rules, as strings
@@ -344,6 +344,18 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         )))
     })?;
 
+    // file name
+    let file_name =
+        lua.create_function(|_, path: String| Ok(file_name(&path).map(|x| x.to_owned())))?;
+
+    // file extention
+    let file_extension =
+        lua.create_function(|_, path: String| Ok(file_extension(&path).map(|x| x.to_owned())))?;
+
+    // file stem
+    let file_stem =
+        lua.create_function(|_, path: String| Ok(file_stem(&path).map(|x| x.to_owned())))?;
+
     // new file
     let new_file = lua.create_function(|_, content| Ok(File::New(content)))?;
 
@@ -536,9 +548,9 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("dirExists", dir_exists)?;
 
     lib.set("concatPath", concat_paths)?;
-    //lib.set("filename")
-    //lib.set("fileExtention")
-    //lib.set("fileStem")
+    lib.set("filename", file_name)?;
+    lib.set("fileExtension", file_extension)?;
+    lib.set("fileStem", file_stem)?;
 
     lib.set("openFile", open_file)?;
     lib.set("readFile", read_file)?;

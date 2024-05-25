@@ -1,35 +1,21 @@
-local css = site.parseSass(
-	site.openFile('styles/style.scss'):readString()
-)
+local comps = require 'scripts/components.lua'
 
-local math = site.latex2Mathml("\\int_0^1 x dx")
+-- parse the CSS
+local css = site.parseSass(site.readFile('styles/style.scss'))
 
-site.addHighlighters([[
-[funlang]
-keyword = '\<(fun|when|is|then)\>'
-comment = '--.*'
-]])
+-- Make all pages
+local pages = {}
+for name, path in pairs(site.listFiles('site')) do
+	-- parse it and make it a page
+	local page = comps.page(name, css, { mogus = '/index.html' }, RawHtml(site.readFile(path)))
 
-local code = site.highlightCodeHtml('funlang', [[
--- fibbonachi sequence
-fun fibbonachi n = when n
-  is 0 then 0
-  is 1 then 1
-  is n then fibbonachi (n - 1) (n - 2)
-]], 'code--')
-
-local content = h.div():attrs({ class = 'content' }):sub(
-	h.h1('Hello world'),
-	h.p('This is SLSG new!'),
-	RawHtml(math),
-	h.pre():attrs({ class = 'code' }):sub(RawHtml(code))
-)
+	pages[name] = page
+end
 
 local html = Fragment(
 	h.title('hello!'),
 	h.meta():attrs({ charset = 'UTF-8' }),
-	h.style(css),
-	content
+	h.style(css)
 ):renderHtml()
 
 local static = Filetree()
@@ -40,7 +26,7 @@ for name, path in pairs(site.listFiles('static')) do
 end
 
 return Filetree()
-		:withHtml(html)
+		:withHtml(pages['index.lua']:renderHtml())
 		:withFile('404.html', html)
 		:withNotFoundPath('404.html')
 		:withSubtree('.', static)

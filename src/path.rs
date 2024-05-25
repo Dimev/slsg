@@ -4,9 +4,9 @@ use std::path::PathBuf;
 pub fn resolve_path(path: &str) -> Option<PathBuf> {
     // backslashes means it's invalid
     if path.contains('\\') {
-        return None
+        return None;
     }
-    
+
     // trim any initial /
     let path = path.trim_start_matches('/');
 
@@ -42,9 +42,9 @@ pub fn concat_path(left: &str, right: &str) -> Option<String> {
 
     // backslashes means it's invalid
     if path.contains('\\') {
-        return None
+        return None;
     }
-    
+
     // resolve path
     let mut resolved = Vec::new();
     for component in path.trim_start_matches('/').split('/') {
@@ -63,5 +63,26 @@ pub fn concat_path(left: &str, right: &str) -> Option<String> {
             .to_owned(),
     )
 }
+
+// TODO: fix
+
+/// Get the file name
+pub fn file_name(path: &str) -> Option<&str> {
+    let last = path.rsplit('/').next()?;
+    Some(last)
+}
+
+/// Get the file extention
+pub fn file_extension(path: &str) -> Option<&str> {
+    let name = path.rsplit('/').next()?;
+    let after = path.rsplit('.').next()?;
+    Some(after).filter(|_| after != name.trim_matches('.') && !name.starts_with('.'))
+}
+
+/// Get the file stem
+pub fn file_stem(path: &str) -> Option<&str> {
+    let last = path.rsplit('/').next()?;
+    Some(last)
+} 
 
 // TODO: tests
