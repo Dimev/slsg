@@ -2,6 +2,11 @@ use std::path::PathBuf;
 
 /// Resolves a program path to a path relative to the project root
 pub fn resolve_path(path: &str) -> Option<PathBuf> {
+    // backslashes means it's invalid
+    if path.contains('\\') {
+        return None
+    }
+    
     // trim any initial /
     let path = path.trim_start_matches('/');
 
@@ -20,7 +25,6 @@ pub fn resolve_path(path: &str) -> Option<PathBuf> {
         else if component != "." {
             resolved.push(component);
         }
-        // TODO: don't allow backslashes in the path
     }
 
     Some(resolved)
@@ -36,6 +40,11 @@ pub fn concat_path(left: &str, right: &str) -> Option<String> {
         format!("{left}/{right}")
     };
 
+    // backslashes means it's invalid
+    if path.contains('\\') {
+        return None
+    }
+    
     // resolve path
     let mut resolved = Vec::new();
     for component in path.trim_start_matches('/').split('/') {
@@ -44,7 +53,6 @@ pub fn concat_path(left: &str, right: &str) -> Option<String> {
         } else if component != "." {
             resolved.push(component);
         }
-        // TODO: don't allow backslashes in the path
     }
 
     Some(

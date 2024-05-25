@@ -1,7 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
 use anyhow::anyhow;
-use grass::OutputStyle;
+use base64::Engine;
+use grass::{Fs, OutputStyle};
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, FromLua, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value};
 use nom_bibtex::Bibtex;
@@ -86,6 +87,73 @@ impl<E: Into<anyhow::Error>> From<E> for GenerateError {
             warnings: Vec::new(),
             error: value.into(),
         }
+    }
+}
+
+/// Grass file system to resolve file paths
+#[derive(Debug)]
+struct GrassFS {
+    /// Working directory for the program
+    working_dir: PathBuf,
+
+    /// Relative path to load from
+    relative: PathBuf,
+}
+
+impl Fs for GrassFS {
+    fn is_dir(&self, path: &Path) -> bool {
+        let rel = self.relative.join(path);
+        let path = if let Some(x) = rel.as_os_str().to_str() {
+            x
+        } else {
+            return false;
+        };
+
+        let resolved = if let Some(x) = resolve_path(path) {
+            x
+        } else {
+            return false;
+        };
+
+        self.working_dir.join(resolved).is_dir()
+    }
+
+    fn is_file(&self, path: &Path) -> bool {
+        let rel = self.relative.join(path);
+        let path = if let Some(x) = rel.as_os_str().to_str() {
+            x
+        } else {
+            return false;
+        };
+
+        let resolved = if let Some(x) = resolve_path(path) {
+            x
+        } else {
+            return false;
+        };
+
+        self.working_dir.join(resolved).is_file()
+    }
+
+    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        let rel = self.relative.join(path);
+        let path = if let Some(x) = rel.as_os_str().to_str() {
+            x
+        } else {
+            return Err(std::io::Error::other(anyhow!(
+                "Could not represent path as UTF-8 string!"
+            )));
+        };
+
+        let resolved = if let Some(x) = resolve_path(path) {
+            x
+        } else {
+            return Err(std::io::Error::other(anyhow!(
+                "Could not represent path as UTF-8 string!"
+            )));
+        };
+
+        fs::read(self.working_dir.join(resolved))
     }
 }
 
@@ -221,13 +289,28 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         Ok(entries)
     })?;
 
-    // read file
+    // open file file
     let path_owned = working_dir.to_owned();
     let open_file = lua.create_function(move |_, path: String| {
         let path = path_owned
             .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
         if path.is_file() {
             Ok(File::from_path(&path))
+        } else {
+            Err(mlua::Error::external(anyhow!(
+                "File {:?} does not exist",
+                path
+            )))
+        }
+    })?;
+
+    // read file to string
+    let path_owned = working_dir.to_owned();
+    let read_file = lua.create_function(move |_, path: String| {
+        let path = path_owned
+            .join(resolve_path(&path).ok_or(mlua::Error::external(anyhow!("Invalid path!")))?);
+        if path.is_file() {
+            Ok(fs::read_to_string(&path)?)
         } else {
             Err(mlua::Error::external(anyhow!(
                 "File {:?} does not exist",
@@ -261,12 +344,29 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         )))
     })?;
 
-    // TODO: file api(?)
-    // TODO: maybe only support loading to string, not have a full file
-    // so pages are easier to do
-
     // new file
     let new_file = lua.create_function(|_, content| Ok(File::New(content)))?;
+
+    // new binary file
+    let new_binary_file = lua.create_function(|_, content| Ok(File::NewBin(content)))?;
+
+    // new base64 file
+    let new_base64_file = lua.create_function(|_, text: String| {
+        let base = base64::prelude::BASE64_STANDARD
+            .decode(text)
+            .map_err(mlua::Error::external)?;
+
+        Ok(File::NewBin(base))
+    })?;
+
+    let encode_base64 = lua
+        .create_function(|_, bytes: Vec<u8>| Ok(base64::prelude::BASE64_STANDARD.encode(bytes)))?;
+
+    let decode_base64 = lua.create_function(|_, text: String| {
+        base64::prelude::BASE64_STANDARD
+            .decode(text)
+            .map_err(mlua::Error::external)
+    })?;
 
     // parse toml
     let parse_toml = lua.create_function(|lua, text: String| {
@@ -309,16 +409,27 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     })?;
 
     // parse sass, from a given working directory
-    let parse_sass = lua.create_function(|_, (sass, directory): (String, Option<String>)| {
-        // parse options
-        // TODO: directory
-        let options = grass::Options::default().style(OutputStyle::Compressed);
+    let path_owned = working_dir.to_owned();
+    let parse_sass =
+        lua.create_function(move |_, (sass, directory): (String, Option<String>)| {
+            // filesystem to use
+            let fs = GrassFS {
+                working_dir: path_owned.clone(),
+                relative: directory
+                    .map(|x| PathBuf::from(x))
+                    .unwrap_or(PathBuf::new()),
+            };
 
-        // make css
-        let css = grass::from_string(sass, &options).map_err(mlua::Error::external)?;
+            // parse options
+            let options = grass::Options::default()
+                .style(OutputStyle::Compressed)
+                .fs(&fs);
 
-        Ok(css)
-    })?;
+            // make css
+            let css = grass::from_string(sass, &options).map_err(mlua::Error::external)?;
+
+            Ok(css)
+        })?;
 
     // read and eval mdl
     // TODO
@@ -410,17 +521,13 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("addHighlighters", add_highlighters)?;
     lib.set("highlightCodeHtml", highlight_code)?;
     lib.set("highlightCodeAst", highlight_ast)?;
+
     lib.set("parseToml", parse_toml)?;
     lib.set("parseYaml", parse_yaml)?;
     lib.set("parseJson", parse_json)?;
     lib.set("parseBibtex", parse_bibtex)?;
     lib.set("parseSass", parse_sass)?;
     //lib.set("parseMdl")?;
-
-    lib.set("openFile", open_file)?;
-    lib.set("newFile", new_file)?;
-    //lib.set("newBinaryFile", file)?;
-    //lib.set("newBase64File", file)?;
 
     lib.set("listFiles", list_files)?;
     lib.set("listDirectories", list_dirs)?;
@@ -432,6 +539,19 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     //lib.set("filename")
     //lib.set("fileExtention")
     //lib.set("fileStem")
+
+    lib.set("openFile", open_file)?;
+    lib.set("readFile", read_file)?;
+    lib.set("newFile", new_file)?;
+    lib.set("newBinaryFile", new_binary_file)?;
+    lib.set("newBase64File", new_base64_file)?;
+
+    //lib.set("filename")
+    //lib.set("fileExtention")
+    //lib.set("fileStem")
+
+    lib.set("encodeBase64", encode_base64)?;
+    lib.set("decodeBase64", decode_base64)?;
 
     lua.globals().set("site", lib)?;
 

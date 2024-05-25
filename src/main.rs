@@ -1,15 +1,19 @@
 use anyhow::anyhow;
 use clap::Parser;
+use generate::generate;
+use pretty_print::{print_error, print_warning};
 use serve::serve;
 use std::{env, fs, path::PathBuf};
+
+use crate::path::resolve_path;
 
 mod file;
 mod generate;
 mod highlight;
 mod mdl;
+mod path;
 mod pretty_print;
 mod serve;
-mod path;
 
 #[derive(Parser)]
 enum Args {
@@ -44,7 +48,39 @@ enum Args {
 fn main() -> Result<(), anyhow::Error> {
     match Args::parse() {
         Args::Dev { path, address } => serve(path, address),
-        Args::Build { path, output } => todo!(),
+        Args::Build { path, output } => {
+            match generate(&path.clone().unwrap_or(PathBuf::new()), false) {
+                Ok(x) => {
+                    // path to write all files to
+                    let root = output.unwrap_or(path.unwrap_or(PathBuf::new()).join("public"));
+
+                    // create the dir if it does not exist
+                    // TODO
+
+                    // remove all existing files there
+
+                    for warning in x.warnings {
+                        print_warning(&warning);
+                    }
+
+                    for (path, file) in x.files {
+                        // resolve the path relative to the root
+                        let path = resolve_path(&path).ok_or(anyhow!("Invalid path!"))?;
+
+                        // write out the path
+                        file.write(root.join(path))?;
+                    }
+                }
+                Err(x) => {
+                    print_error(&format!("{:?}", x.error));
+                    for warning in x.warnings {
+                        print_warning(&warning);
+                    }
+                }
+            }
+
+            Ok(())
+        }
         Args::New { path } => {
             init_folder(&path)?;
             println!("Created new site at {:?}", path);
