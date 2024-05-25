@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use mlua::{FromLua, Lua, UserData, UserDataFields, UserDataMethods, Value};
+use mlua::{FromLua, Lua, UserData, UserDataMethods, Value};
 
 use image::{imageops::FilterType, io::Reader as ImageReader};
 
@@ -101,18 +101,6 @@ impl File {
                 resized.write_to(&mut Cursor::new(&mut bytes), format)?;
                 Ok(bytes)
             }
-        }
-    }
-
-    /// Get the path used, if any
-    fn get_path(&self) -> Option<&Path> {
-        match self {
-            Self::New(_) => None,
-            Self::NewBin(_) => None,
-            Self::RelPath(p) => Some(p),
-            Self::ResizePercentage(p, _) => Some(p),
-            Self::ResizeX(p, _) => Some(p),
-            Self::ResizeY(p, _) => Some(p),
         }
     }
 }

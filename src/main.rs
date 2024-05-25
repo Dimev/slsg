@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use generate::generate;
 use pretty_print::{print_error, print_warning};
@@ -23,6 +23,7 @@ enum Args {
         path: Option<PathBuf>,
 
         /// Address to serve on, defaults to 127.0.0.1:1111
+        #[clap(short, long)]
         address: Option<String>,
     },
 
@@ -32,6 +33,7 @@ enum Args {
         path: Option<PathBuf>,
 
         /// Optional path to the directory to put the resulting files in, defaults to public/
+        #[clap(short, long)]
         output: Option<PathBuf>,
     },
 
@@ -54,22 +56,28 @@ fn main() -> Result<(), anyhow::Error> {
                     // path to write all files to
                     let root = output.unwrap_or(path.unwrap_or(PathBuf::new()).join("public"));
 
-                    // create the dir if it does not exist
-                    // TODO
-
-                    // remove all existing files there
-
+                    // show all warnings
                     for warning in x.warnings {
                         print_warning(&warning);
                     }
 
+                    // remove all existing files there
+                    if root.exists() {
+                        fs::remove_dir_all(&root)?;
+                    }
+
                     for (path, file) in x.files {
                         // resolve the path relative to the root
-                        let path = resolve_path(&path).ok_or(anyhow!("Invalid path!"))?;
+                        let path = root.join(resolve_path(&path).ok_or(anyhow!("Invalid path!"))?);
+                        
+                        // create all dirs
+                        fs::create_dir_all(path.parent().expect("No parent for the file path!")).context("adawhidawiuhd")?;
 
                         // write out the path
-                        file.write(root.join(path))?;
+                        file.write(path).context("no file")?;
                     }
+
+                    println!("Site written to {root:?}");
                 }
                 Err(x) => {
                     print_error(&format!("{:?}", x.error));
