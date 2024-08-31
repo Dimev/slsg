@@ -10,7 +10,7 @@ use crate::path::resolve_path;
 mod file;
 mod generate;
 mod highlight;
-mod mdl;
+mod texparse;
 mod path;
 mod pretty_print;
 mod serve;
