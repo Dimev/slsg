@@ -78,8 +78,6 @@ pub(crate) fn serve(path: Option<PathBuf>, addr: Option<String>) -> Result<(), a
 
     // stream to notify when an update happens
     let update_notify = Arc::new(Mutex::new(Vec::<TcpStream>::new()));
-
-    // update the site if any file changed TODO
     let site_cloned = site.clone();
     let path_cloned = path.clone();
     let warnings_cloned = warnings.clone();

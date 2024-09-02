@@ -10,6 +10,158 @@ use std::collections::HashMap;
 use anyhow::anyhow;
 use mlua::{Error, Function, Lua, Table, Value};
 
+struct Lexer<'a> {
+    chars: std::str::Chars<'a>,
+    cur: Option<char>,
+    peek: Option<char>,
+}
+
+impl<'a> Lexer<'a> {
+    fn new(chars: &'a str) -> Self {
+        let mut out = Self {
+            chars: chars.chars(),
+            cur: None,
+            peek: None,
+        };
+
+        out.next();
+        out.next();
+
+        out
+    }
+
+    fn next(&mut self) -> Option<char> {
+        let cur = self.cur;
+        self.cur = self.peek;
+        self.peek = self.chars.next();
+        cur
+    }
+
+    fn skip_comment(&mut self) {
+        while let Some(c) = self.next() {
+            if c == '\n' {
+                break;
+            }
+        }
+    }
+
+    // assumes cur is $
+    fn inline_math(&mut self) -> String {
+        let mut math = String::new();
+
+        // read until the closing $
+        while let Some(c) = self.next() {
+            // if c is the closing $, stop
+            if c == '$' {
+                break;
+            }
+            // if the current one is \$, append $
+            else if c == '\\' && self.peek == Some('$') {
+                // skip the \
+                self.next();
+
+                // append
+                math.push(c);
+            }
+            // just append
+            else {
+                math.push(c);
+            }
+        }
+
+        math
+    }
+
+    // assumes cur is $ and next is $
+    fn math(&mut self) -> String {
+        let mut math = String::new();
+
+        // read until the closing $
+        while let Some(c) = self.next() {
+            // if c is the closing $, stop
+            if c == '$' && (self.peek == Some('$') || self.peek.is_none()) {
+                self.next();
+                break;
+            }
+            // if the current one is \$, append $
+            else if c == '\\' && self.peek == Some('$') {
+                // skip the \
+                self.next();
+
+                // append
+                math.push(c);
+            }
+            // just append
+            else {
+                math.push(c);
+            }
+        }
+
+        math
+    }
+
+    // assumes cur is \
+    fn command<'lua>(
+        &mut self,
+        lua: &'lua Lua,
+        functions: Table<'lua>,
+    ) -> Result<Value<'lua>, Error> {
+        // read the command name
+        let mut name = String::new();
+        while let Some(c) = self.next() {
+            // stop if it's not alphanum or _
+            if !(c.is_alphanumeric() || c == '_') {
+                break;
+            } else {
+                name.push(c);
+            }
+        }
+
+        // verbatim means we directly copy the content
+        if name == "verb" {
+            // read the verbatim character we use to stop
+            let delim = self.next();
+            let mut verb = String::new();
+            while let Some(c) = self.next() {
+                if Some(c) == delim {
+                    break;
+                } else {
+                    verb.push(c)
+                }
+            }
+
+            // eval the verbatim, if any
+            let fun: Option<Function> = functions.get("verb")?;
+            if let Some(f) = fun {
+                Ok(f.call((functions, verb))?)
+            } else {
+                Ok(Value::Nil)
+            }
+        } else {
+            // parse arguments
+            let args = lua.create_table()?;
+            if self.next() == Some('{') {
+                let mut text = String::new();
+                while let Some(c) = self.next() {
+                    // stop if it's the closing bracket
+                    if c == '}' {
+                        break;
+                    }
+
+                    // skip if it's escape
+                    if c == '\\' && self.cur == Some('$') {
+                        // TODO
+                    }
+
+                    // , delimit
+                }
+            }
+
+            Ok(Value::Nil)
+        }
+    }
+}
+
 pub(crate) fn parse_tex<'lua>(
     lua: &'lua Lua,
     tex: &str,
