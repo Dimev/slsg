@@ -443,7 +443,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
             Ok(css)
         })?;
 
-    // read and eval mdl
+    // parse tex
     // TODO
 
     // add highlighters
@@ -628,9 +628,3 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
         })
 }
 
-// TODO: mdl
-// file consists of paragraphs
-// you can do some standard markdown functions
-// per paragraph, a function is called to eval the paragraph
-// => evals an inline lua function
-// ==> evals a block lua function (outside paragraph)
