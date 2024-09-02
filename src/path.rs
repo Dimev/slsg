@@ -55,16 +55,14 @@ pub fn concat_path(left: &str, right: &str) -> Option<String> {
         }
     }
 
-    Some(
-        resolved
+    Some(format!(
+        "./{}",
+        &resolved
             .into_iter()
             .map(|x| format!("/{x}"))
             .collect::<String>()[1..]
-            .to_owned(),
-    )
+    ))
 }
-
-// TODO: fix
 
 /// Get the file name
 pub fn file_name(path: &str) -> Option<&str> {
@@ -83,6 +81,4 @@ pub fn file_extension(path: &str) -> Option<&str> {
 pub fn file_stem(path: &str) -> Option<&str> {
     let last = path.rsplit('/').next()?;
     Some(last)
-} 
-
-// TODO: tests
+}

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use base64::Engine;
 use grass::{Fs, OutputStyle};
 use latex2mathml::{latex_to_mathml, DisplayStyle};
@@ -38,8 +38,7 @@ pub struct Site {
 impl<'lua> FromLua<'lua> for Site {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
         // it's a table
-        let table = Table::from_lua(value, lua)
-            .context("Result needs to be a table with a table of files, and a NotFound entry")?;
+        let table = ErrorContext::context(Table::from_lua(value, lua), "Result needs to be a table with a table of files, and a NotFound entry")?;
 
         let files = table.get("files")?;
         let not_found = table.get("notFound")?;
@@ -614,7 +613,7 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     )?;
 
     // run file
-    let script = fs::read_to_string(script_path)?;
+    let script = fs::read_to_string(script_path).context("Loading index.lua")?;
     lua.load(script)
         .set_name("site.lua")
         .eval()
