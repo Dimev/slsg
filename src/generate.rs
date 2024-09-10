@@ -1,12 +1,11 @@
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
 use anyhow::{anyhow, Context};
-use base64::Engine;
+
 use grass::{Fs, OutputStyle};
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, FromLua, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value};
-use nom_bibtex::Bibtex;
-use serde::Deserialize;
+
 use std::{fs, path::Path};
 
 use crate::{
@@ -14,14 +13,6 @@ use crate::{
     highlight::{highlight, highlight_html, HighlightRule},
     path::{concat_path, file_extension, file_name, file_stem, resolve_path},
 };
-
-/// Single set of regex rules, as strings
-#[derive(Deserialize)]
-struct Rules {
-    /// Regex rules
-    #[serde(flatten, with = "tuple_vec_map")]
-    rules: Vec<(String, String)>,
-}
 
 /// Resulting website that is generated
 pub struct Site {
@@ -38,7 +29,10 @@ pub struct Site {
 impl<'lua> FromLua<'lua> for Site {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
         // it's a table
-        let table = ErrorContext::context(Table::from_lua(value, lua), "Result needs to be a table with a table of files, and a NotFound entry")?;
+        let table = ErrorContext::context(
+            Table::from_lua(value, lua),
+            "Result needs to be a table with a table of files, and a NotFound entry",
+        )?;
 
         let files = table.get("files")?;
         let not_found = table.get("notFound")?;
@@ -361,64 +355,6 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // new binary file
     let new_binary_file = lua.create_function(|_, content| Ok(File::NewBin(content)))?;
 
-    // new base64 file
-    let new_base64_file = lua.create_function(|_, text: String| {
-        let base = base64::prelude::BASE64_STANDARD
-            .decode(text)
-            .map_err(mlua::Error::external)?;
-
-        Ok(File::NewBin(base))
-    })?;
-
-    let encode_base64 = lua
-        .create_function(|_, bytes: Vec<u8>| Ok(base64::prelude::BASE64_STANDARD.encode(bytes)))?;
-
-    let decode_base64 = lua.create_function(|_, text: String| {
-        base64::prelude::BASE64_STANDARD
-            .decode(text)
-            .map_err(mlua::Error::external)
-    })?;
-
-    // parse toml
-    let parse_toml = lua.create_function(|lua, text: String| {
-        let toml: toml::Value = toml::from_str(&text).map_err(mlua::Error::external)?;
-        lua.to_value(&toml)
-    })?;
-
-    // parse yaml
-    let parse_yaml = lua.create_function(|lua, text: String| {
-        let yaml: serde_yaml::Value = serde_yaml::from_str(&text).map_err(mlua::Error::external)?;
-        lua.to_value(&yaml)
-    })?;
-
-    // parse json
-    let parse_json = lua.create_function(|lua, text: String| {
-        let json: serde_json::Value = serde_json::from_str(&text).map_err(mlua::Error::external)?;
-        lua.to_value(&json)
-    })?;
-
-    // parse bibtex
-    let parse_bibtex = lua.create_function(|lua, text: String| {
-        let bib = Bibtex::parse(&text)
-            .map_err(|x| mlua::Error::external(anyhow!("Failed to parse bibtex: {:?}", x)))?;
-        let table = lua.create_table()?;
-        table.set("comments", bib.comments())?;
-        table.set("variables", bib.variables().clone())?;
-
-        // add all entries
-        let bibliographies = lua.create_table()?;
-        for biblio in bib.bibliographies() {
-            let entry = lua.create_table()?;
-            entry.set("type", biblio.entry_type())?;
-            entry.set("tags", biblio.tags().clone())?;
-            bibliographies.set(biblio.citation_key(), entry)?;
-        }
-
-        table.set("bibliographies", bibliographies)?;
-
-        Ok(table)
-    })?;
-
     // parse sass, from a given working directory
     let path_owned = working_dir.to_owned();
     let parse_sass =
@@ -447,25 +383,19 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
 
     // add highlighters
     let highlighters_cloned = highlighters.clone();
-    let add_highlighters = lua.create_function(move |_, text: String| {
-        // parse the highlighter
-        let raw = toml::from_str::<HashMap<String, Rules>>(&text).map_err(mlua::Error::external)?;
-        let mut highlight = highlighters_cloned.borrow_mut();
-
-        // add the language to the highlighters
-        for (key, value) in raw.into_iter() {
-            highlight.insert(
-                key,
-                value
-                    .rules
+    let add_highlighter = lua.create_function(
+        move |_, (language, rules): (String, HashMap<String, String>)| {
+            highlighters_cloned.borrow_mut().insert(
+                language,
+                rules
                     .into_iter()
                     .map(|(rule, regex)| HighlightRule::Raw(rule, regex))
                     .collect(),
             );
-        }
 
-        Ok(())
-    })?;
+            Ok(())
+        },
+    )?;
 
     // highlight code
     let highlighters_cloned = highlighters.clone();
@@ -529,16 +459,13 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     // add all to the site
     // TODO: better naming?
     lib.set("latex2Mathml", mathml)?;
-    lib.set("addHighlighters", add_highlighters)?;
+    lib.set("addHighlighter", add_highlighter)?;
     lib.set("highlightCodeHtml", highlight_code)?;
     lib.set("highlightCodeAst", highlight_ast)?;
 
-    lib.set("parseToml", parse_toml)?;
-    lib.set("parseYaml", parse_yaml)?;
-    lib.set("parseJson", parse_json)?;
-    lib.set("parseBibtex", parse_bibtex)?;
+    // keep this one ofc
     lib.set("parseSass", parse_sass)?;
-    //lib.set("parseMdl")?;
+    //lib.set("parseLuamark")?;
 
     lib.set("listFiles", list_files)?;
     lib.set("listDirectories", list_dirs)?;
@@ -555,14 +482,6 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
     lib.set("readFile", read_file)?;
     lib.set("newFile", new_file)?;
     lib.set("newBinaryFile", new_binary_file)?;
-    lib.set("newBase64File", new_base64_file)?;
-
-    //lib.set("filename")
-    //lib.set("fileExtention")
-    //lib.set("fileStem")
-
-    lib.set("encodeBase64", encode_base64)?;
-    lib.set("decodeBase64", decode_base64)?;
 
     lua.globals().set("site", lib)?;
 
@@ -626,4 +545,3 @@ pub fn generate(path: &Path, dev: bool) -> Result<Site, GenerateError> {
             error: x.into(),
         })
 }
-

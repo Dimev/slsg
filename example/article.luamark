@@ -1,0 +1,21 @@
+@article(Hello world!, 1-1-1970)
+
+-- Comment
+This is a paragraph.
+It consists of multiple lines
+
+This is a second paragraph
+Again, multiple lines
+
+@section(And a third paragraph)
+Now with a header if it's set up that way
+
+@code(lua, [[
+-- and some lua sample code!
+print("Hello, world!")
+]])
+
+And math!
+
+$$ \frac{4}{3} \pi r^3 $$
+
