@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context};
 
 use grass::{Fs, OutputStyle};
 use latex2mathml::{latex_to_mathml, DisplayStyle};
-use mlua::{ErrorContext, FromLua, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, Value};
+use mlua::{ErrorContext, FromLua, Lua, LuaOptions, StdLib, Table, Value};
 
 use std::{fs, path::Path};
 
