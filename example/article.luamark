@@ -15,7 +15,4 @@ Now with a header if it's set up that way
 print("Hello, world!")
 ]])
 
-And math!
-
-$$ \frac{4}{3} \pi r^3 $$
 
