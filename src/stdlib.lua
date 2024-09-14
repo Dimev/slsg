@@ -4,21 +4,45 @@ local api = {}
 api.dev = internal.dev
 
 -- read files and directories
-api.dir = internal.dir
-api.read = internal.read
+api.dir = internal.dir or print
+api.read = internal.read or print
 
 -- emit files to the site generator
-api.emit = internal.emit
-api.emit_file = internal.emit_file
-api.emit_command = internal.emit_command
+api.emit = internal.emit or print
+api.emit_file = internal.emit_file or print
+api.emit_command = internal.emit_command or print
 
--- TODO: escaping
+-- latex to mathml
+api.latex_to_mathml = internal.latex_to_mathml
+
+-- TODO
 -- minification (css)
--- html
--- mathml
--- files
 -- parser
 -- highlighting
+
+-- escape html
+function api.escape_html(html)
+  local subst = {
+    ["&"] = "&amp;",
+    ['"'] = "&quot;",
+    ["'"] = "&apos;",
+    ["<"] = "&lt;",
+    [">"] = "&gt;",
+  }
+  return string.gsub(html, '.', subst)
+end
+
+-- unescape html
+function api.unescape_html(html)
+  local subst = {
+    ["&amp;"] = "&",
+    ['&quot;'] = '"',
+    ["&apos;"] = "'",
+    ["&lt;"] = "<",
+    ["&gt;"] = ">",
+  }
+  return string.gsub(html, '.', subst)
+end
 
 -- html
 -- void elements don't need closing tags as they can't have children
@@ -41,33 +65,59 @@ local void_elements = {
 
 -- create an html element from a table
 -- pairs are the attributes, ipairs are the children
-function api.h(type)
-  return function(elem)
-    -- TODO
+api.html = {}
 
-    return '<' .. type .. '>' .. '</' .. type .. '>'
+-- TODO: deal with string values
+
+local html_meta = {}
+function html_meta:__call(element)
+  return '<!DOCTYPE html>' .. table.concat(element)
+end
+
+function html_meta:__index(element)
+  return function(inside)
+    -- if we get a string, put it inside an element with no styling
+    if type(inside) == 'string' and void_elements[element] then
+      error 'Cannot have a void element with content'
+    elseif type(inside) == 'string' then
+      return '<' .. element .. '>' .. api.escape_html(inside) .. '</' .. element .. '>'
+    end
+
+    local attributes = {}
+    local elements = {}
+
+    for key, value in pairs(inside) do
+      if type(key) == 'string' then
+        table.insert(attributes, key .. '="' .. value .. '"')
+      end
+    end
+
+    for _, value in ipairs(inside) do
+      table.insert(elements, value)
+    end
+
+    -- <open>inner</end>
+    local open = '<' .. element .. ((#attributes > 0 and ' ') or '') .. table.concat(attributes, ' ') .. '>'
+    local inner = table.concat(elements)
+    local close = '</' .. element .. '>'
+
+    -- no closing tag if we are a void element
+    if void_elements[element] and #elements > 0 then
+      error 'Cannot have a void element with content'
+    elseif void_elements[element] then
+      return open .. inner
+    else
+      return open .. inner .. close
+    end
   end
 end
 
--- add the doctype around html
-function api.html(html)
-  return '<!DOCTYPE html>' .. html
+-- add nothing
+function html_meta:__newindex()
 end
 
--- escape html
-function api.escape_html(html)
-  local subst = {
-    ["&"] = "&amp;",
-    ['"'] = "&quot;",
-    ["'"] = "&apos;",
-    ["<"] = "&lt;",
-    [">"] = "&gt;",
-  }
-  return string.gsub(html, '.', subst)
-end
-
--- unescape html
--- TODO
+-- meta table for this to work
+setmetatable(api.html, html_meta)
 
 -- SLSG logo
 api.logo = [[
@@ -80,7 +130,6 @@ api.logo = [[
   <text x="110" y="70">Site</text>
   <text x="100" y="95">Generator</text>
 </g>
-</svg>
-]]
+</svg>]]
 
 return api

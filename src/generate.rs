@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Value};
 
 /// Generate the site from the given directory or lua file
@@ -23,6 +24,23 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
 
     // emit file using command
     // TODO
+
+    // latex to mathml
+    internal.set(
+        "latex_to_mathml",
+        lua.create_function(|_, (latex, inline): (String, Option<bool>)| {
+            latex_to_mathml(
+                &latex,
+                if inline.unwrap_or(false) {
+                    DisplayStyle::Inline
+                } else {
+                    DisplayStyle::Block
+                },
+            )
+            .into_lua_err()
+            .context("Failed to convert latex to mathml")
+        })?,
+    )?;
 
     // whether we are in dev mode
     internal.set("dev", dev)?;

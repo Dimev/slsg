@@ -4,40 +4,25 @@ use generate::generate;
 
 mod generate;
 
+// TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\
-SLSG [MODE] [OPTION]
+Scriptable Lua Site Generator
 
-sus amogus
+Usage:
+  slsg dev [path] [--address]
+  slsg build [path] [--output]
+  slsg new [path]
+  slsg api
+
+Options:
+  -h --help     Show this screen
+  -v --version  Print version and quit
+  -a --address  Address and port to use when hosting the dev server
+  -o --output   Output directory to use when building the site
 ";
 
-const NEW_LUA: &str = "\
--- parse our sass
-local css = site.sass(site.read(./style.css))
-
--- make an example page
-local html = site.html(
-    h.head {
-        h.style(style),
-        h.title 'My Website',
-    },
-    h.body {
-        h.div {
-            h.h1 'Hello, world!',
-            h.img { class = 'logo', alt = 'SLSG logo', src = 'logo.svg' }
-        }   
-    }
-)
-
--- emit it to the generator
-site.emit('index.html', html)
-
--- emit the logo of SLSG to the generator
-site.emit('logo.svg', site.logo)
-";
-
-const NEW_META: &str = "\
-
-";
+const NEW_LUA: &str = include_str!("new.lua");
+const NEW_META: &str = include_str!("meta.lua");
 
 const NEW_GITIGNORE: &str = "\
 public
@@ -47,50 +32,76 @@ const API_DOCS: &[(&str, &str)] = &[];
 
 fn main() {
     let mut pargs = pico_args::Arguments::from_env();
-    let sub = pargs.subcommand().expect("torrstohen");
 
+    // print help
+    if pargs.contains(["-h", "--help"]) {
+        println!("{}", HELP);
+        return
+    }
+
+    // print version
+    if pargs.contains(["-v", "--version"]) {
+        println!("slsg {}", env!("CARGO_PKG_VERSION"));
+        return
+    }
+
+    let sub = pargs.subcommand().expect("Failed to parse arguments");
     match sub.as_deref() {
         Some("dev") => {
-            let path = pargs
-                .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .unwrap()
-                .unwrap_or(PathBuf::from("."));
-
             let addr = pargs
                 .opt_value_from_os_str::<_, OsString, String>(["-a", "--address"], |x| {
                     Ok(OsString::from(x))
                 })
-                .unwrap()
+                .expect("Failed to parse arguments")
                 .unwrap_or(OsString::from("127.0.0.1:1111"));
-        }
-        Some("build") => {
+
             let path = pargs
                 .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .unwrap()
+                .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
+            println!("{:?} {:?}", path, addr);
+        }
+        Some("build") => {
             let output_path = pargs
                 .opt_value_from_os_str::<_, OsString, String>(["-o", "--output"], |x| {
                     Ok(OsString::from(x))
                 })
-                .unwrap()
+                .expect("Failed to parse arguments")
                 .unwrap_or(OsString::from("./public"));
 
-            generate(path.as_path(), true).expect("breh");
+            let path = pargs
+                .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
+                .expect("Failed to parse arguments")
+                .unwrap_or(PathBuf::from("."));
+
+            generate(path.as_path(), true).expect("Lua machine broke");
+
+            println!("{:?}", output_path);
         }
         Some("new") => {
             let path = pargs
                 .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .unwrap()
+                .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
             // make the directories
-            std::fs::create_dir_all(&path);
+            std::fs::create_dir_all(&path)
+                .expect(&format!("Failed to create directory {:?}", path));
 
             // example file
-            std::fs::write(path.join("main.lua"), NEW_LUA);
-            std::fs::write(path.join("stdlib.meta"), NEW_META);
-            std::fs::write(path.join(".gitignore"), NEW_GITIGNORE);
+            std::fs::write(path.join("main.lua"), NEW_LUA).expect(&format!(
+                "Failed to create file {:?}",
+                path.join("main.lua")
+            ));
+            std::fs::write(path.join("stdlib.meta"), NEW_META).expect(&format!(
+                "Failed to create directory {:?}",
+                path.join("stdlib.meta")
+            ));
+            std::fs::write(path.join(".gitignore"), NEW_GITIGNORE).expect(&format!(
+                "Failed to create directory {:?}",
+                path.join(".gitignore")
+            ));
 
             println!("Created new site in {:?}", path);
             println!("Run `slsl dev` in the directory to start making your site!");
