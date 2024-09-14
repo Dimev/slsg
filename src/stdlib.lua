@@ -4,13 +4,20 @@ local api = {}
 api.dev = internal.dev
 
 -- read files and directories
-api.dir = internal.dir or print
-api.read = internal.read or print
+api.dir = internal.dir
+api.read = internal.read
+
+-- file names
+api.filename = internal.filename
+api.filestem = internal.filestem
+api.fileext = internal.fileext
 
 -- emit files to the site generator
+-- TODO: proper
+-- we can probably try and get a table to put these in passed in
 api.emit = internal.emit or print
-api.emit_file = internal.emit_file or print
-api.emit_command = internal.emit_command or print
+api.emitfile = internal.emit_file or print
+api.emitcommand = internal.emit_command or print
 
 -- latex to mathml
 api.latex_to_mathml = internal.latex_to_mathml

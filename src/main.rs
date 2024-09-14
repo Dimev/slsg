@@ -3,6 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 use generate::generate;
 
 mod generate;
+mod stdlib;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\
@@ -36,13 +37,13 @@ fn main() {
     // print help
     if pargs.contains(["-h", "--help"]) {
         println!("{}", HELP);
-        return
+        return;
     }
 
     // print version
     if pargs.contains(["-v", "--version"]) {
         println!("slsg {}", env!("CARGO_PKG_VERSION"));
-        return
+        return;
     }
 
     let sub = pargs.subcommand().expect("Failed to parse arguments");
@@ -75,9 +76,12 @@ fn main() {
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
-            generate(path.as_path(), true).expect("Lua machine broke");
+            match generate(path.as_path(), false) {
+                Ok(_) => println!("Success!"),
+                Err(e) => println!("{}", e),
+            }
 
-            println!("{:?}", output_path);
+            println!("output to: {:?}", output_path);
         }
         Some("new") => {
             let path = pargs
@@ -87,21 +91,17 @@ fn main() {
 
             // make the directories
             std::fs::create_dir_all(&path)
-                .expect(&format!("Failed to create directory {:?}", path));
+                .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path));
 
             // example file
-            std::fs::write(path.join("main.lua"), NEW_LUA).expect(&format!(
-                "Failed to create file {:?}",
-                path.join("main.lua")
-            ));
-            std::fs::write(path.join("stdlib.meta"), NEW_META).expect(&format!(
-                "Failed to create directory {:?}",
-                path.join("stdlib.meta")
-            ));
-            std::fs::write(path.join(".gitignore"), NEW_GITIGNORE).expect(&format!(
-                "Failed to create directory {:?}",
-                path.join(".gitignore")
-            ));
+            std::fs::write(path.join("main.lua"), NEW_LUA)
+                .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
+            std::fs::write(path.join("stdlib.meta"), NEW_META).unwrap_or_else(|_| {
+                panic!("Failed to create directory {:?}", path.join("stdlib.meta"))
+            });
+            std::fs::write(path.join(".gitignore"), NEW_GITIGNORE).unwrap_or_else(|_| {
+                panic!("Failed to create directory {:?}", path.join(".gitignore"))
+            });
 
             println!("Created new site in {:?}", path);
             println!("Run `slsl dev` in the directory to start making your site!");
