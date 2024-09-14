@@ -1,4 +1,3 @@
-#!/usr/bin/env lua
 
 -- hello world website
 local new_script = [=[
