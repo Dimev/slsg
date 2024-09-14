@@ -1,8 +1,15 @@
 [package]
 name = "slsg"
-version = "0.1.0"
+description = "Scriptable Lua Site Generator"
+version = "0.2.0"
+license = "GPL-3.0-only"
+repository = "https://github.com/Dimev/slsg"
+keywords = ["lua", "website", "html", "javascript"]
+categories = ["web-programming", "template-engine", "command-line-utilities"]
 edition = "2021"
 
 [dependencies]
+crossterm = "0.28.1"
 mlua = { version = "0.9.9", features = ["lua54"] }
 pico-args = "0.5.0"
+rsass = "0.28.10"
