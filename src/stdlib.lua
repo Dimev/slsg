@@ -12,12 +12,22 @@ api.filename = internal.filename
 api.filestem = internal.filestem
 api.fileext = internal.fileext
 
+-- where to output files to
+-- provided from the rust side, but is removed before the site is run
+local out = output
+
 -- emit files to the site generator
--- TODO: proper
--- we can probably try and get a table to put these in passed in
-api.emit = internal.emit or print
-api.emitfile = internal.emit_file or print
-api.emitcommand = internal.emit_command or print
+function api.emit(path, data)
+  out[path] = { type = 'data', data = data }
+end
+
+function api.emitfile(path, original)
+  out[path] = { type = 'file', original = original }
+end
+
+function api.emitcommand(path, original, command, placeholder)
+  out[path] = { type = 'command', original = original, command = command, placeholder = placeholder }
+end
 
 -- latex to mathml
 api.latex_to_mathml = internal.latex_to_mathml
@@ -75,7 +85,7 @@ local void_elements = {
 api.html = {}
 
 -- TODO: deal with string values
-
+-- TODO: deal with escaping
 local html_meta = {}
 function html_meta:__call(element)
   return '<!DOCTYPE html>' .. table.concat(element)

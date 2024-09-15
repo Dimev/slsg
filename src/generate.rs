@@ -1,10 +1,60 @@
-use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Value};
-use std::path::Path;
+use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use crate::stdlib::stdlib;
 
+/// Output result
+#[derive(Debug)]
+pub(crate) enum Output {
+    /// Export the data in a string
+    Data(Vec<u8>),
+
+    /// Copy a file
+    File { path: PathBuf, original: PathBuf },
+
+    /// Run a command on a file
+    Command {
+        path: PathBuf,
+        original: PathBuf,
+        command: String,
+        placeholder: Vec<u8>,
+    },
+}
+
+fn contain_path(path: String) -> Result<PathBuf> {
+    // backslashes means it's invalid
+    if path.contains('\\') {
+        return Err(Error::external("Path contains a \\, which is not allowed"));
+    }
+
+    // trim any initial /
+    let path = path.trim_start_matches('/');
+
+    // parts of the path
+    let mut resolved = PathBuf::new();
+
+    // go over all parts of the original path
+    for component in path.split('/') {
+        if component == ".." {
+            // break if this path is not valid due to not being able to drop a component
+            if !resolved.pop() {
+                return Err(Error::external("Path tries to escape directory using .."));
+            }
+        }
+        // only advance if this is not the current directory
+        else if component != "." {
+            resolved.push(component);
+        }
+    }
+
+    Ok(resolved)
+}
+
 /// Generate the site from the given directory or lua file
-pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
+pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>> {
     let lua = unsafe { Lua::unsafe_new() };
 
     // load our custom functions
@@ -16,6 +66,10 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
     // add custom functions to global scope
     lua.globals().set("internal", internal)?;
 
+    // add the table we read our output from to the global scope
+    let output = lua.create_table()?;
+    lua.globals().set("output", &output)?;
+
     // load our standard library
     let stdlib: Value = lua
         .load(include_str!("stdlib.lua"))
@@ -25,11 +79,14 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
     // unload our custom functions as they are no longer needed in the global scope
     lua.globals().set("internal", Value::Nil)?;
 
+    // unload the output table
+    lua.globals().set("output", Value::Nil)?;
+
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;
 
     // load the script
-    let script = if path.is_dir() {
+    let (script, name) = if path.is_dir() {
         let code = std::fs::read_to_string(path.join("main.lua"))
             .into_lua_err()
             .context(format!(
@@ -37,16 +94,20 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
                 path.join("main.lua")
             ))?;
 
+        let name = path.join("main.lua").into_os_string();
+
         // move to the directory the script is in for lua to work properly
         std::env::set_current_dir(path)
             .into_lua_err()
             .context("Failed to change directory to the given path")?;
 
-        code
+        (code, name)
     } else {
         let code = std::fs::read_to_string(path)
             .into_lua_err()
             .context(format!("Failed to load the file {:?}", path))?;
+
+        let name = path.as_os_str().to_os_string();
 
         // move to the directory the script is in for lua to work properly
         std::env::set_current_dir(path.parent().ok_or(Error::external(format!(
@@ -56,15 +117,47 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<()> {
         .into_lua_err()
         .context("Failed to change directory to the given path")?;
 
-        code
+        (code, name)
     };
 
     // run the script
-    lua.load(script).set_name(path.to_string_lossy()).exec()?;
+    lua.load(script).set_name(name.to_string_lossy()).exec()?;
 
-    // TODO: read out emitted files
+    // read the files we emitted
+    let mut files = HashMap::with_capacity(output.len()? as usize);
+    for pair in output.pairs() {
+        let (key, value): (String, Table) =
+            pair.context("Failed to read pair of the emitted files")?;
 
-    Ok(())
+        let value = match value.get::<&str, String>("type")?.as_str() {
+            "data" => Output::Data(
+                value
+                    .get::<&str, mlua::String>("data")?
+                    .as_bytes()
+                    .to_owned(),
+            ),
+            "file" => Output::File {
+                path: contain_path(value.get("path")?)?,
+                original: contain_path(value.get("original")?)?,
+            },
+            "command" => Output::Command {
+                path: contain_path(value.get("path")?)?,
+                original: contain_path(value.get("original")?)?,
+                command: value.get("command")?,
+                placeholder: value
+                    .get::<&str, mlua::String>("placeholder")?
+                    .as_bytes()
+                    .to_owned(),
+            },
+            _ => {
+                return Err(Error::external(
+                    "Unknown type of output in the output table",
+                ))
+            }
+        };
+
+        files.insert(key, value);
+    }
+
+    Ok(files)
 }
-
-// TODO: report error

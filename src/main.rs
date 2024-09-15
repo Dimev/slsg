@@ -1,7 +1,10 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use message::print_error;
 use generate::generate;
+use mlua::ErrorContext;
 
+mod message;
 mod generate;
 mod stdlib;
 
@@ -77,11 +80,11 @@ fn main() {
                 .unwrap_or(PathBuf::from("."));
 
             match generate(path.as_path(), false) {
-                Ok(_) => println!("Success!"),
-                Err(e) => println!("{}", e),
+                Ok(files) => {
+                    println!("{:?}", files)
+                }
+                Err(err) => print_error(err.context("Failed to build site")),
             }
-
-            println!("output to: {:?}", output_path);
         }
         Some("new") => {
             let path = pargs

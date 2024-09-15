@@ -1,4 +1,8 @@
-use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    os::unix::ffi::OsStringExt,
+    path::{Path, PathBuf},
+};
 
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, ExternalResult, Lua, Result, Table};
@@ -11,8 +15,8 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     // list files
     api.set(
         "dir",
-        lua.create_function(|lua, path: mlua::String| {
-            let path = PathBuf::from(OsString::from_vec(path.as_bytes().into()));
+        lua.create_function(|lua, path: String| {
+            let path = PathBuf::from(path);
 
             // TODO: prevent escaping the folder?
 
@@ -37,44 +41,47 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     // read file
     api.set(
         "read",
-        lua.create_function(|_, path: Vec<u8>| {
-            let path = PathBuf::from(OsString::from_vec(path));
+        lua.create_function(|lua: &Lua, path: String| {
+            let path = PathBuf::from(path);
 
             // TODO: prevent escaping the folder?
 
-            std::fs::read(&path)
+            let bytes = std::fs::read(&path)
                 .into_lua_err()
-                .context(format!("Failed to read file {:?}", path))
+                .context(format!("Failed to read file {:?}", path))?;
+
+            // as raw bytes
+            lua.create_string(bytes)
         })?,
     )?;
 
     // file name
     api.set(
         "filename",
-        lua.create_function(|_, path: Vec<u8>| {
-            Ok(PathBuf::from(OsString::from_vec(path))
+        lua.create_function(|_, path: String| {
+            Ok(PathBuf::from(path)
                 .file_name()
-                .map(|x| x.to_os_string().into_encoded_bytes()))
+                .map(|x| x.to_str().map(String::from)))
         })?,
     )?;
 
     // file stem
     api.set(
         "filestem",
-        lua.create_function(|_, path: Vec<u8>| {
-            Ok(PathBuf::from(OsString::from_vec(path))
+        lua.create_function(|_, path: String| {
+            Ok(PathBuf::from(path)
                 .file_stem()
-                .map(|x| x.to_os_string().into_encoded_bytes()))
+                .map(|x| x.to_str().map(String::from)))
         })?,
     )?;
 
     // file extention
     api.set(
         "fileext",
-        lua.create_function(|_, path: Vec<u8>| {
-            Ok(PathBuf::from(OsString::from_vec(path))
+        lua.create_function(|_, path: String| {
+            Ok(PathBuf::from(path)
                 .extension()
-                .map(|x| x.to_os_string().into_encoded_bytes()))
+                .map(|x| x.to_str().map(String::from)))
         })?,
     )?;
 
