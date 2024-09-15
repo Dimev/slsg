@@ -98,7 +98,7 @@ fn main() {
                         );
                     }
                 }
-                Err(err) => print_error(err.context("Failed to build site")),
+                Err(err) => print_error(&err.context("Failed to build site")),
             }
         }
         Some("new") => {

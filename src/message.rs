@@ -8,7 +8,7 @@ use crossterm::{
 };
 
 /// Print an error to the terminal
-pub(crate) fn print_error(error: Error) {
+pub(crate) fn print_error(error: &Error) {
     let text = error.to_string();
     execute!(
         stdout(),
@@ -24,6 +24,6 @@ pub(crate) fn print_error(error: Error) {
 }
 
 /// Produce an error page for html
-pub(crate) fn html_error(error: Error) -> String {
-    String::new()
+pub(crate) fn html_error(error: &Error) -> String {
+    format!(include_str!("error_template.html"), error)
 }
