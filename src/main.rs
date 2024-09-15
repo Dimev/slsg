@@ -3,9 +3,11 @@ use std::{ffi::OsString, path::PathBuf};
 use generate::{generate, Output};
 use message::print_error;
 use mlua::ErrorContext;
+use serve::serve;
 
 mod generate;
 mod message;
+mod serve;
 mod stdlib;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
@@ -53,18 +55,16 @@ fn main() {
     match sub.as_deref() {
         Some("dev") => {
             let addr = pargs
-                .opt_value_from_os_str::<_, OsString, String>(["-a", "--address"], |x| {
-                    Ok(OsString::from(x))
-                })
+                .opt_value_from_str(["-a", "--address"])
                 .expect("Failed to parse arguments")
-                .unwrap_or(OsString::from("127.0.0.1:1111"));
+                .unwrap_or(String::from("127.0.0.1:1111"));
 
             let path = pargs
                 .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
-            println!("{:?} {:?}", path, addr);
+            serve(&path, addr);
         }
         Some("build") => {
             let output_path = pargs
@@ -87,10 +87,9 @@ fn main() {
                             path,
                             match value {
                                 Output::Data(x) => String::from_utf8_lossy(&x).to_string(),
-                                Output::File { path, original } =>
+                                Output::File(original) =>
                                     std::fs::read_to_string(original).unwrap().to_string(),
                                 Output::Command {
-                                    path,
                                     original,
                                     command,
                                     placeholder,

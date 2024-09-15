@@ -12,11 +12,10 @@ pub(crate) enum Output {
     Data(Vec<u8>),
 
     /// Copy a file
-    File { path: PathBuf, original: PathBuf },
+    File (PathBuf),
 
     /// Run a command on a file
     Command {
-        path: PathBuf,
         original: PathBuf,
         command: String,
         placeholder: Vec<u8>,
@@ -40,7 +39,7 @@ fn contain_path(path: String) -> Result<PathBuf> {
         if component == ".." {
             // break if this path is not valid due to not being able to drop a component
             if !resolved.pop() {
-                return Err(Error::external("Path tries to escape directory using .."));
+                return Err(Error::external("Path tries to escape directory using `..`"));
             }
         }
         // only advance if this is not the current directory
@@ -53,7 +52,7 @@ fn contain_path(path: String) -> Result<PathBuf> {
 }
 
 /// Generate the site from the given directory or lua file
-pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>> {
+pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
     let lua = unsafe { Lua::unsafe_new() };
 
     // load our custom functions
@@ -140,12 +139,12 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>
                     .as_bytes()
                     .to_owned(),
             ),
-            "file" => Output::File {
-                path: contain_path(value.get("path")?)?,
-                original: contain_path(value.get("original")?)?,
-            },
+            "file" => Output::File (
+                
+                contain_path(value.get("original")?)?,
+            ),
             "command" => Output::Command {
-                path: contain_path(value.get("path")?)?,
+                
                 original: contain_path(value.get("original")?)?,
                 command: value.get("command")?,
                 placeholder: value
@@ -160,7 +159,7 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>
             }
         };
 
-        files.insert(key, value);
+        files.insert(contain_path(key)?, value);
     }
 
     // restore the current directory

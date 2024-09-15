@@ -14,3 +14,4 @@ latex2mathml = "0.2.3"
 mlua = { version = "0.9.9", features = ["lua54"] }
 pico-args = "0.5.0"
 rsass = "0.28.10"
+tiny_http = "0.12.0"
