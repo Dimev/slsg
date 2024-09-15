@@ -1,11 +1,11 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use generate::{generate, Output};
 use message::print_error;
-use generate::generate;
 use mlua::ErrorContext;
 
-mod message;
 mod generate;
+mod message;
 mod stdlib;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
@@ -81,7 +81,23 @@ fn main() {
 
             match generate(path.as_path(), false) {
                 Ok(files) => {
-                    println!("{:?}", files)
+                    for (path, value) in files {
+                        println!(
+                            "{:?}: {}",
+                            path,
+                            match value {
+                                Output::Data(x) => String::from_utf8_lossy(&x).to_string(),
+                                Output::File { path, original } =>
+                                    std::fs::read_to_string(original).unwrap().to_string(),
+                                Output::Command {
+                                    path,
+                                    original,
+                                    command,
+                                    placeholder,
+                                } => String::from_utf8_lossy(&placeholder).to_string(),
+                            }
+                        );
+                    }
                 }
                 Err(err) => print_error(err.context("Failed to build site")),
             }
@@ -91,6 +107,17 @@ fn main() {
                 .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
+
+            // ensure the path does not exist yet
+            if let Ok(mut dir) = path.read_dir() {
+                if dir.next().is_some() {
+                    println!(
+                        "Failed to create new site: target directory {:?} is not empty!",
+                        path
+                    );
+                    return;
+                }
+            }
 
             // make the directories
             std::fs::create_dir_all(&path)

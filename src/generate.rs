@@ -7,7 +7,6 @@ use std::{
 use crate::stdlib::stdlib;
 
 /// Output result
-#[derive(Debug)]
 pub(crate) enum Output {
     /// Export the data in a string
     Data(Vec<u8>),
@@ -85,6 +84,11 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;
 
+    // current directory so we can restore it
+    let current_dir = std::env::current_dir()
+        .into_lua_err()
+        .context("Failed to get current directory, making it impossible to restore later on")?;
+
     // load the script
     let (script, name) = if path.is_dir() {
         let code = std::fs::read_to_string(path.join("main.lua"))
@@ -158,6 +162,11 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<String, Output>
 
         files.insert(key, value);
     }
+
+    // restore the current directory
+    std::env::set_current_dir(current_dir)
+        .into_lua_err()
+        .context("Failed to restore current directory")?;
 
     Ok(files)
 }
