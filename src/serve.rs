@@ -5,8 +5,10 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
+        mpsc::channel,
         Arc,
     },
+    thread::spawn,
     time::{Duration, Instant},
 };
 
@@ -25,16 +27,22 @@ pub(crate) fn serve(addr: String) {
     let listener = TcpListener::bind(&addr)
         .unwrap_or_else(|e| panic!("Failed to serve site on {}: {}", addr, e));
 
-    // set nonblocking, to avoid the server freezing
-    listener
-        .set_nonblocking(true)
-        .unwrap_or_else(|e| panic!("Failed to set listener to nonblocking: {}", e));
-
     // we are live
     println!(
         "Serving on {} - change a file to reload the site",
         listener.local_addr().map(|x| x.to_string()).unwrap_or(addr)
     );
+
+    // start the listening thread
+    let (sender, incoming) = channel();
+    spawn(move || {
+        for stream in listener.incoming().filter_map(|x| x.ok()) {
+            // directly send them back
+            sender
+                .send(stream)
+                .unwrap_or_else(|e| println!("Error while serving: {}", e));
+        }
+    });
 
     // detect changes, we only care when it's changed
     let changed = Arc::new(AtomicBool::new(false));
@@ -65,22 +73,13 @@ pub(crate) fn serve(addr: String) {
     // requests to notify when there's an update
     let mut update_notify = Vec::new();
 
-    for stream in listener.incoming() {
+    loop {
+        let stream = incoming.recv_timeout(Duration::from_millis(200));
         match stream {
             Ok(s) => respond(s, &site, &mut update_notify),
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // reload the server
-                reload(&changed, &mut site, &mut update_notify);
-
-                // wait a bit so we don't pin the CPU
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            Err(e) => println!("Error while serving: {}", e),
+            Err(_) => reload(&changed, &mut site, &mut update_notify),
         }
     }
-
-    // manually drop to ensure it lives until here
-    std::mem::drop(watcher);
 }
 
 fn respond(
