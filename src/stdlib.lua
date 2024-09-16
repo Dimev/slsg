@@ -25,8 +25,8 @@ function api.emitfile(path, original)
   out[path] = { type = 'file', original = original }
 end
 
-function api.emitcommand(path, original, command, placeholder)
-  out[path] = { type = 'command', original = original, command = command, placeholder = placeholder }
+function api.emitcommand(path, original, command)
+  out[path] = { type = 'command', original = original, command = command }
 end
 
 -- latex to mathml

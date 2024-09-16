@@ -1,0 +1,5 @@
+<script>
+  const src = new EventSource("/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs");
+  src.onmessage = e => e.data == "update" && location.reload();
+  window.onbeforeunload = () => src.close();
+</script>

@@ -81,22 +81,7 @@ fn main() {
 
             match generate(path.as_path(), false) {
                 Ok(files) => {
-                    for (path, value) in files {
-                        println!(
-                            "{:?}: {}",
-                            path,
-                            match value {
-                                Output::Data(x) => String::from_utf8_lossy(&x).to_string(),
-                                Output::File(original) =>
-                                    std::fs::read_to_string(original).unwrap().to_string(),
-                                Output::Command {
-                                    original,
-                                    command,
-                                    placeholder,
-                                } => String::from_utf8_lossy(&placeholder).to_string(),
-                            }
-                        );
-                    }
+                    todo!()
                 }
                 Err(err) => print_error(&err.context("Failed to build site")),
             }

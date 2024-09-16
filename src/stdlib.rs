@@ -18,8 +18,8 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
         lua.create_function(|lua, path: String| {
             let path = PathBuf::from(path);
 
-            // TODO: prevent escaping the folder?
-
+            // TODO: iterator
+            
             let entries = lua.create_table()?;
             for entry in std::fs::read_dir(&path)
                 .into_lua_err()
@@ -43,9 +43,6 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
         "read",
         lua.create_function(|lua: &Lua, path: String| {
             let path = PathBuf::from(path);
-
-            // TODO: prevent escaping the folder?
-
             let bytes = std::fs::read(&path)
                 .into_lua_err()
                 .context(format!("Failed to read file {:?}", path))?;

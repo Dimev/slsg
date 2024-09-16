@@ -1,6 +1,8 @@
 use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
 use std::{
     collections::HashMap,
+    fs::File,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -15,12 +17,17 @@ pub(crate) enum Output {
     File(PathBuf),
 
     /// Run a command on a file
-    Command {
-        original: PathBuf,
-        command: String,
-        placeholder: Vec<u8>,
-    },
+    Command { original: PathBuf, command: String },
 }
+
+/*impl Output {
+    pub(crate) fn as_stream(&self, path: &Path) -> Box<dyn Read> {
+        match self {
+            Self::Data(vec) => Box::new(vec.as_slice()),
+            Self::File(local) => Box::new(File::open(path.join(local))),
+        }
+    }
+}*/
 
 fn contain_path(path: String) -> Result<PathBuf> {
     // backslashes means it's invalid
@@ -53,6 +60,28 @@ fn contain_path(path: String) -> Result<PathBuf> {
 
 /// Generate the site from the given directory or lua file
 pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
+    // current directory so we can restore it
+    // required for lua's require to work
+    let current_dir = dbg!(std::env::current_dir())
+        .into_lua_err()
+        .context("Failed to get current directory, making it impossible to restore later on")?;
+
+    // TODO: seems like this breaks things, try to not move directory
+
+    // actually generate the site
+    let res = generate_site(path, dev);
+
+    // restore the current directory
+    std::env::set_current_dir(current_dir)
+        .into_lua_err()
+        .context("Failed to restore current directory")?;
+
+    // result
+    res
+}
+
+/// Run the lua code
+fn generate_site(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
     let lua = unsafe { Lua::unsafe_new() };
 
     // load our custom functions
@@ -71,7 +100,7 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
     // load our standard library
     let stdlib: Value = lua
         .load(include_str!("stdlib.lua"))
-        .set_name("stdlib.lua")
+        .set_name("=stdlib.lua")
         .call(())?;
 
     // unload our custom functions as they are no longer needed in the global scope
@@ -82,11 +111,6 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
 
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;
-
-    // current directory so we can restore it
-    let current_dir = std::env::current_dir()
-        .into_lua_err()
-        .context("Failed to get current directory, making it impossible to restore later on")?;
 
     // load the script
     let (script, name) = if path.is_dir() {
@@ -124,7 +148,7 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
     };
 
     // run the script
-    lua.load(script).set_name(name.to_string_lossy()).exec()?;
+    lua.load(script).set_name(format!("={}", name.to_string_lossy())).exec()?;
 
     // read the files we emitted
     let mut files = HashMap::with_capacity(output.len()? as usize);
@@ -143,10 +167,6 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
             "command" => Output::Command {
                 original: contain_path(value.get("original")?)?,
                 command: value.get("command")?,
-                placeholder: value
-                    .get::<&str, mlua::String>("placeholder")?
-                    .as_bytes()
-                    .to_owned(),
             },
             _ => {
                 return Err(Error::external(
@@ -157,11 +177,6 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
 
         files.insert(contain_path(key)?, value);
     }
-
-    // restore the current directory
-    std::env::set_current_dir(current_dir)
-        .into_lua_err()
-        .context("Failed to restore current directory")?;
 
     Ok(files)
 }

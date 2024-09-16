@@ -1,5 +1,7 @@
 use std::{
     collections::HashMap,
+    io::{self, BufRead, BufReader, Write},
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -17,13 +19,25 @@ use crate::{
     message::{html_error, print_error},
 };
 
+const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
+const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
+
 pub(crate) fn serve(path: &Path, addr: String) {
     // run the server
-    let server = tiny_http::Server::http(&addr)
+    let listener = TcpListener::bind(&addr)
         .unwrap_or_else(|e| panic!("Failed to serve site {:?} on {}: {}", path, addr, e));
 
+    // set nonblocking, to avoid the server freezing
+    listener
+        .set_nonblocking(true)
+        .unwrap_or_else(|e| panic!("Failed to set listener to nonblocking: {}", e));
+
     // we are live
-    println!("Serving {:?} on {}", path, server.server_addr());
+    println!(
+        "Serving {:?} on {}",
+        path,
+        listener.local_addr().map(|x| x.to_string()).unwrap_or(addr)
+    );
 
     // detect changes, we only care when it's changed
     let changed = Arc::new(AtomicBool::new(false));
@@ -45,7 +59,7 @@ pub(crate) fn serve(path: &Path, addr: String) {
     };
 
     // generate the initial site
-    let mut site = generate(path, true).map_err(|e| e.context("Failed to build site"));
+    let mut site = generate(path, true);
 
     // notify if it went bad
     if let Err(ref e) = site {
@@ -53,65 +67,128 @@ pub(crate) fn serve(path: &Path, addr: String) {
     }
 
     // requests to notify when there's an update
-    let mut update_notify = Vec::<()>::new();
+    let mut update_notify = Vec::new();
 
-    loop {
-        // timeout, so we can check for changes
-        match server.recv_timeout(Duration::from_millis(300)) {
-            // normal request
-            Ok(Some(rq)) => respond(rq, &site, path),
-            // timeout, so no request, see if we need to reload
-            Ok(None) => reload(&changed, &mut site, path),
-            // something went wrong, we'll report it and ignore
-            // TODO: colors
-            Err(e) => println!("[ERR] While serving: {}", e),
+    for stream in listener.incoming() {
+        match stream {
+            Ok(s) => respond(s, &site, path, &mut update_notify),
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // reload the server
+                reload(&changed, &mut site, path, &mut update_notify);
+
+                // wait a bit so we don't pin the CPU
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => println!("Error while serving: {}", e),
         }
     }
+
+    // manually drop to ensure it lives until here
+    std::mem::drop(watcher);
 }
 
-fn respond(rq: Request, site: &Result<HashMap<PathBuf, Output>, mlua::Error>, path: &Path) {
-    let url = rq.url();
-    /*match site {
-        Ok(pages) => {
-            if let Some(x) = pages.get(&PathBuf::from(url.trim_matches('/'))) {
-                match x {
-                    Output::Data(data) => rq.respond(Response::from_data(data.clone())),
-                    Output::File(original) => rq.respond(Response::from_file(
-                        std::fs::File::open(path.join(original)).unwrap(),
-                    )),
-                    Output::Command {
-                        original,
-                        command,
-                        placeholder,
-                    } => rq.respond(Response::from_string("empty")),
-                };
-            }
+fn respond(
+    mut stream: TcpStream,
+    site: &Result<HashMap<PathBuf, Output>, mlua::Error>,
+    path: &Path,
+    update_notify: &mut Vec<TcpStream>,
+) {
+    // read the url
+    let reader = BufReader::new(&mut stream);
+    let request = reader
+        .lines()
+        .next()
+        .map(|x| x.unwrap_or(String::new()))
+        .unwrap_or(String::new());
+
+    // get the url
+    let file_path = request
+        .trim_start_matches("GET")
+        .trim_end_matches(|x: char| x.is_numeric() || x == '.')
+        .trim_end_matches("HTTP/")
+        .trim();
+
+    // get the file
+    let (content, status, mime) = if let Some(file) = site
+        .as_ref()
+        .ok()
+        .and_then(|x| x.get(&PathBuf::from(file_path)))
+    {
+        ("sus", 200, Some("sus"))
+    }
+    // see if it's on index.html
+    else if let Some(file) = site
+        .as_ref()
+        .ok()
+        .and_then(|x| x.get(&PathBuf::from(file_path).join("index.html")))
+    {
+        ("sus", 200, Some("sus"))
+    }
+    // if it's the update notifier, set the update stream
+    else if file_path == VERY_LONG_PATH {
+        // don't wait to send things
+        stream
+            .set_nodelay(true)
+            .unwrap_or_else(|e| println!("Failed to set nodelay on stream: {}", e));
+
+        // send the response
+        stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
+            ).unwrap_or_else(|e| println!("Failed to write on stream: {}", e));
+        stream
+            .write_all(b"data: initial\n\n")
+            .unwrap_or_else(|e| println!("Failed to write on stream: {}", e));
+        stream
+            .flush()
+            .unwrap_or_else(|e| println!("Failed to flush stream: {}", e));
+
+        // put it on the update notify list
+        update_notify.push(stream);
+
+        // no need to write
+        return;
+
+    // if the site is an error, push the error page
+    } else if let Err(ref error) = site {
+        ("sus", 200, Some("sus"))
+
+    // otherwise, push the 404 page
+    } else {
+        ("sus", 200, Some("sus"))
+    };
+
+    // update notify script
+    let update_notify = if mime == Some("text/html") {
+        UPDATE_NOTIFY_SCRIPT
+    } else {
+        ""
+    };
+
+    // send the page back
+    let length = content.len();
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n{}\r\n",
+        if let Some(mime) = mime {
+            format!("Content-Type: {mime}\r\n")
+        } else {
+            String::new()
         }
-        Err(e) => {
-            rq.respond(Response::from_string(html_error(e)));
-        }
-    }*/
-    let response = Response::new(
-        StatusCode(200),
-        Vec::new(),
-        "sus mogus".as_bytes(),
-        Some("sus mogus".len()),
-        None,
     );
 
-    if let Err(e) = rq.respond(response) {
-        println!("Failed while responding: {}", e);
-    }
+    // write the page back
+    stream.write(&response.as_bytes());
+    stream.write(&content.as_bytes());
 }
 
 fn reload(
     changed: &Arc<AtomicBool>,
     site: &mut Result<std::collections::HashMap<PathBuf, Output>, mlua::Error>,
     path: &Path,
+    update_notify: &mut Vec<TcpStream>,
 ) {
     // went ok and there is no request, check if the site needs reloading
     if changed.swap(false, Ordering::Relaxed) {
-        *site = generate(path, true).map_err(|e| e.context("Failed to build site"));
+        *site = generate(path, true);
 
         // notify if it went bad
         if let Err(ref e) = *site {
