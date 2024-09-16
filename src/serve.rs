@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Cursor, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
@@ -10,7 +10,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-
 use notify::Watcher;
 
 use crate::{
@@ -18,7 +17,7 @@ use crate::{
     message::{html_error, print_error, print_success},
 };
 
-const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
+const VERY_LONG_PATH: &str = "very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
 const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
 pub(crate) fn serve(addr: String) {
@@ -74,7 +73,7 @@ pub(crate) fn serve(addr: String) {
                 reload(&changed, &mut site, &mut update_notify);
 
                 // wait a bit so we don't pin the CPU
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(10));
             }
             Err(e) => println!("Error while serving: {}", e),
         }
@@ -102,15 +101,21 @@ fn respond(
         .trim_start_matches("GET")
         .trim_end_matches(|x: char| x.is_numeric() || x == '.')
         .trim_end_matches("HTTP/")
-        .trim();
+        .trim()
+        // all paths in the site are relative
+        .trim_start_matches('/');
 
     // get the file
-    let (content, status, mime) = if let Some(file) = site
+    let (mut content, status, mime): (Box<dyn Read>, u16, Option<&str>) = if let Some(file) = site
         .as_ref()
         .ok()
-        .and_then(|x| x.get(&PathBuf::from(file_path)))
+        .and_then(|x| x.get(&PathBuf::from(&file_path)))
     {
-        ("sus", 200, Some("sus"))
+        (
+            file.as_stream().unwrap(),
+            200,
+            get_mime_type(PathBuf::from(&file_path)),
+        )
     }
     // see if it's on index.html
     else if let Some(file) = site
@@ -118,7 +123,7 @@ fn respond(
         .ok()
         .and_then(|x| x.get(&PathBuf::from(file_path).join("index.html")))
     {
-        ("sus", 200, Some("sus"))
+        (file.as_stream().unwrap(), 200, Some("text/html"))
     }
     // if it's the update notifier, set the update stream
     else if file_path == VERY_LONG_PATH {
@@ -146,14 +151,15 @@ fn respond(
 
     // if the site is an error, push the error page
     } else if let Err(ref error) = site {
-        ("sus", 200, Some("sus"))
+        let error_page = html_error(error);
+        (Box::new(Cursor::new(error_page)), 200, Some("text/html"))
 
     // otherwise, push the 404 page
     } else {
-        ("sus", 200, Some("sus"))
+        (Box::new(b"rstoeh".as_slice()), 200, Some("text/html"))
     };
 
-    // update notify script
+    // update notify script, allows reloading the page when we send a message
     let update_notify = if mime == Some("text/html") {
         UPDATE_NOTIFY_SCRIPT
     } else {
@@ -161,9 +167,10 @@ fn respond(
     };
 
     // send the page back
-    let length = content.len();
+    //let length = content.len();
+    // TODO: lenght estimates
     let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Length: {length}\r\nCache-Control: no-cache\r\n{}\r\n",
+        "HTTP/1.1 {status}\r\nCache-Control: no-cache\r\n{}\r\n",
         if let Some(mime) = mime {
             format!("Content-Type: {mime}\r\n")
         } else {
@@ -172,8 +179,25 @@ fn respond(
     );
 
     // write the page back
-    stream.write(&response.as_bytes());
-    stream.write(&content.as_bytes());
+    stream
+        .write(&response.as_bytes())
+        .map(|_| ())
+        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+
+    // copy the stream
+    io::copy(&mut content, &mut stream)
+        .map(|_| ())
+        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+
+    // add the update notify script
+    stream
+        .write(update_notify.as_bytes())
+        .map(|_| ())
+        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+
+    stream
+        .flush()
+        .unwrap_or_else(|e| println!("Failed to flush stream: {}", e));
 }
 
 fn reload(
@@ -189,19 +213,23 @@ fn reload(
         // notify if it went bad
         if let Err(ref e) = *site {
             print_error("Failed to build site", e);
-
-            // notify the listeners it went bad as well
-            // TODO
         } else {
             print_success(&format!("Rebuilt in {}ms", start.elapsed().as_millis()));
         }
+        // notify the listeners we got updated as well
+        // only retain the ones that haven't errored out due to likely not being connected anymore
+        update_notify.retain_mut(|s| {
+            s.write_all(b"data: update\n\n")
+                .and_then(|_| s.flush())
+                .is_ok()
+        });
     }
 }
 
 /// Get a mime type from a file path
-fn get_mime_type<P: AsRef<Path>>(path: &P) -> Option<&str> {
+fn get_mime_type(path: PathBuf) -> Option<&'static str> {
     // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
-    match path.as_ref().extension()?.to_str()? {
+    match path.extension()?.to_str()? {
         "aac" => Some("audio/aac"),
         "abw" => Some("application/x-abiword"),
         "apng" => Some("image/apng"),

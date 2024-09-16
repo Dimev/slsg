@@ -7,6 +7,8 @@ use crossterm::{
     style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
 };
 
+// TODO: macros for these
+
 /// Print an error to the terminal
 pub(crate) fn print_error(context: &str, error: &Error) {
     let text = error.to_string();
@@ -14,7 +16,6 @@ pub(crate) fn print_error(context: &str, error: &Error) {
         stdout(),
         SetAttribute(Attribute::Bold),
         SetForegroundColor(Color::Red),
-        Print("[ERR] "),
         Print(context),
         SetAttribute(Attribute::Reset),
         SetForegroundColor(Color::Red),

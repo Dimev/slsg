@@ -1,5 +1,5 @@
-use mlua::{Error, ErrorContext, Lua, Result, Table, Value};
-use std::{collections::HashMap, path::PathBuf};
+use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
+use std::{collections::HashMap, fs::File, io::{self, Read}, path::PathBuf};
 
 use crate::stdlib::stdlib;
 
@@ -15,14 +15,15 @@ pub(crate) enum Output {
     Command { original: PathBuf, command: String },
 }
 
-/*impl Output {
-    pub(crate) fn as_stream(&self, path: &Path) -> Box<dyn Read> {
-        match self {
+impl Output {
+    pub(crate) fn as_stream<'a>(&'a self) -> std::result::Result<Box<dyn Read + 'a>, io::Error> {
+        Ok(match self {
             Self::Data(vec) => Box::new(vec.as_slice()),
-            Self::File(local) => Box::new(File::open(path.join(local))),
-        }
+            Self::File(path) => Box::new(File::open(path)?),
+            Self::Command { original, command } => Box::new(File::open(original)?),
+        })
     }
-}*/
+}
 
 fn contain_path(path: String) -> Result<PathBuf> {
     // backslashes means it's invalid
@@ -85,8 +86,22 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;
 
+    // get the current directory
+    let current_dir = std::env::current_dir()
+        .into_lua_err()
+        .context("Failed to get the current directory")?;
+
     // run the script
-    lua.load(PathBuf::from("./main.lua")).exec()?;
+    let res = lua.load(PathBuf::from("./main.lua")).exec();
+
+    // reset the current directory in case it changed
+    std::env::set_current_dir(current_dir)
+        .into_lua_err()
+        .context("Failed to reset the current directory")?;
+
+    // emit the error,
+    // doing this now in order to ensure we reset the directory
+    res?;
 
     // read the files we emitted
     let mut files = HashMap::with_capacity(output.len()? as usize);
