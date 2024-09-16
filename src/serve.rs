@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    io::BufReader,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -21,10 +20,10 @@ use crate::{
 pub(crate) fn serve(path: &Path, addr: String) {
     // run the server
     let server = tiny_http::Server::http(&addr)
-        .expect(&format!("Failed to serve site {:?} on `{}`", path, addr));
+        .unwrap_or_else(|e| panic!("Failed to serve site {:?} on {}: {}", path, addr, e));
 
     // we are live
-    println!("Serving {:?} on `{:?}`", path, server.server_addr());
+    println!("Serving {:?} on {}", path, server.server_addr());
 
     // detect changes, we only care when it's changed
     let changed = Arc::new(AtomicBool::new(false));
@@ -36,10 +35,11 @@ pub(crate) fn serve(path: &Path, addr: String) {
         notify::recommended_watcher(move |_| changed_clone.store(true, Ordering::Relaxed))
         // wrap the result ok with the watcher because we don't want it to drop out of scope
         .and_then(|mut watcher| {
-            watcher.watch(dbg!(path), notify::RecursiveMode::Recursive).map(|_| watcher)
+            println!("Watchin for changes in {:?}", path);
+            watcher.watch(path, notify::RecursiveMode::Recursive).map(|_| watcher)
         });
 
-    // notify for an error
+    // notify for an error, borrow to let it live
     if let Err(e) = &watcher {
         println!("Failed to watch for changes: {:?}", e)
     };
