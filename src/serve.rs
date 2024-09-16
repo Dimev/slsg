@@ -111,6 +111,7 @@ fn respond(
         .and_then(|x| x.get(&PathBuf::from(&file_path)))
     {
         (
+            // TODO: fix unwrap
             file.as_stream().unwrap(),
             200,
             get_mime_type(PathBuf::from(&file_path)),
