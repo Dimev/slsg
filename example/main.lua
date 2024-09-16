@@ -1,10 +1,8 @@
 local h = site.html
 
-local l = require 'sumogus'
-
 -- CSS for our site
 -- site.css automatically minifies it
-local style = site.css [[
+local style =  [[
 html {
   display: flex;
   justify-content: center;

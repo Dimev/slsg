@@ -7,25 +7,24 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use mlua::ErrorContext;
+
 use notify::Watcher;
-use tiny_http::{Request, Response, StatusCode};
 
 use crate::{
     generate::{generate, Output},
-    message::{html_error, print_error},
+    message::{html_error, print_error, print_success},
 };
 
 const VERY_LONG_PATH: &str = "/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
 const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
-pub(crate) fn serve(path: &Path, addr: String) {
+pub(crate) fn serve(addr: String) {
     // run the server
     let listener = TcpListener::bind(&addr)
-        .unwrap_or_else(|e| panic!("Failed to serve site {:?} on {}: {}", path, addr, e));
+        .unwrap_or_else(|e| panic!("Failed to serve site on {}: {}", addr, e));
 
     // set nonblocking, to avoid the server freezing
     listener
@@ -34,8 +33,7 @@ pub(crate) fn serve(path: &Path, addr: String) {
 
     // we are live
     println!(
-        "Serving {:?} on {}",
-        path,
+        "Serving on {} - change a file to reload the site",
         listener.local_addr().map(|x| x.to_string()).unwrap_or(addr)
     );
 
@@ -49,8 +47,7 @@ pub(crate) fn serve(path: &Path, addr: String) {
         notify::recommended_watcher(move |_| changed_clone.store(true, Ordering::Relaxed))
         // wrap the result ok with the watcher because we don't want it to drop out of scope
         .and_then(|mut watcher| {
-            println!("Watchin for changes in {:?}", path);
-            watcher.watch(path, notify::RecursiveMode::Recursive).map(|_| watcher)
+            watcher.watch(&PathBuf::from("."), notify::RecursiveMode::Recursive).map(|_| watcher)
         });
 
     // notify for an error, borrow to let it live
@@ -59,11 +56,11 @@ pub(crate) fn serve(path: &Path, addr: String) {
     };
 
     // generate the initial site
-    let mut site = generate(path, true);
+    let mut site = generate(true);
 
     // notify if it went bad
     if let Err(ref e) = site {
-        print_error(e)
+        print_error("Failed to build site", e)
     }
 
     // requests to notify when there's an update
@@ -71,10 +68,10 @@ pub(crate) fn serve(path: &Path, addr: String) {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(s) => respond(s, &site, path, &mut update_notify),
+            Ok(s) => respond(s, &site, &mut update_notify),
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // reload the server
-                reload(&changed, &mut site, path, &mut update_notify);
+                reload(&changed, &mut site, &mut update_notify);
 
                 // wait a bit so we don't pin the CPU
                 std::thread::sleep(Duration::from_millis(100));
@@ -90,7 +87,6 @@ pub(crate) fn serve(path: &Path, addr: String) {
 fn respond(
     mut stream: TcpStream,
     site: &Result<HashMap<PathBuf, Output>, mlua::Error>,
-    path: &Path,
     update_notify: &mut Vec<TcpStream>,
 ) {
     // read the url
@@ -183,19 +179,21 @@ fn respond(
 fn reload(
     changed: &Arc<AtomicBool>,
     site: &mut Result<std::collections::HashMap<PathBuf, Output>, mlua::Error>,
-    path: &Path,
     update_notify: &mut Vec<TcpStream>,
 ) {
     // went ok and there is no request, check if the site needs reloading
     if changed.swap(false, Ordering::Relaxed) {
-        *site = generate(path, true);
+        let start = Instant::now();
+        *site = generate(true);
 
         // notify if it went bad
         if let Err(ref e) = *site {
-            print_error(e);
+            print_error("Failed to build site", e);
 
             // notify the listeners it went bad as well
             // TODO
+        } else {
+            print_success(&format!("Rebuilt in {}ms", start.elapsed().as_millis()));
         }
     }
 }

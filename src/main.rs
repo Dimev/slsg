@@ -64,7 +64,16 @@ fn main() {
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
-            serve(&path, addr);
+            // move to where the main.lua file is
+            if !path.is_dir() {
+                panic!("Expected a directory for the path, not a file!");
+            } else {
+                std::env::set_current_dir(path)
+                    .unwrap_or_else(|e| panic!("Failed to change path: {}", e));
+            }
+
+            // run the development server
+            serve(addr);
         }
         Some("build") => {
             let output_path = pargs
@@ -79,11 +88,19 @@ fn main() {
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
 
-            match generate(path.as_path(), false) {
+            // move to where the main.lua file is
+            if !path.is_dir() {
+                panic!("Expected a directory for the path, not a file!");
+            } else {
+                std::env::set_current_dir(path)
+                    .unwrap_or_else(|e| panic!("Failed to change path: {}", e));
+            }
+
+            match generate(false) {
                 Ok(files) => {
                     todo!()
                 }
-                Err(err) => print_error(&err.context("Failed to build site")),
+                Err(err) => print_error("Failed to build site", &err),
             }
         }
         Some("new") => {

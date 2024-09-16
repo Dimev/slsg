@@ -1,10 +1,5 @@
-use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use mlua::{Error, ErrorContext, Lua, Result, Table, Value};
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::stdlib::stdlib;
 
@@ -58,31 +53,8 @@ fn contain_path(path: String) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-/// Generate the site from the given directory or lua file
-pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
-    // current directory so we can restore it
-    // required for lua's require to work
-    /*let current_dir = dbg!(std::env::current_dir())
-            .into_lua_err()
-            .context("Failed to get current directory, making it impossible to restore later on")?;
-    */
-    // TODO: seems like this breaks things, try to not move directory
-
-    // actually generate the site
-    let res = generate_site(path, dev);
-    /*
-    // restore the current directory
-    std::env::set_current_dir(current_dir)
-        .into_lua_err()
-        .context("Failed to restore current directory")?;
-
-    // result
-    */
-    res
-}
-
-/// Run the lua code
-fn generate_site(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
+/// Generate the site from the ./main.lua file
+pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
     let lua = unsafe { Lua::unsafe_new() };
 
     // load our custom functions
@@ -113,15 +85,8 @@ fn generate_site(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;
 
-    // load the script
-    let path = if path.is_dir() {
-        path.join("main.lua")
-    } else {
-        path.to_path_buf()
-    };
-
     // run the script
-    lua.load(path).exec()?;
+    lua.load(PathBuf::from("./main.lua")).exec()?;
 
     // read the files we emitted
     let mut files = HashMap::with_capacity(output.len()? as usize);

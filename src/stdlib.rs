@@ -19,7 +19,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
             let path = PathBuf::from(path);
 
             // TODO: iterator
-            
+
             let entries = lua.create_table()?;
             for entry in std::fs::read_dir(&path)
                 .into_lua_err()
