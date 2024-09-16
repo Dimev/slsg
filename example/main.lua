@@ -1,5 +1,7 @@
 local h = site.html
 
+local l = require 'sumogus'
+
 -- CSS for our site
 -- site.css automatically minifies it
 local style = site.css [[

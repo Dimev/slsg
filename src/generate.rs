@@ -62,21 +62,22 @@ fn contain_path(path: String) -> Result<PathBuf> {
 pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
     // current directory so we can restore it
     // required for lua's require to work
-    let current_dir = dbg!(std::env::current_dir())
-        .into_lua_err()
-        .context("Failed to get current directory, making it impossible to restore later on")?;
-
+    /*let current_dir = dbg!(std::env::current_dir())
+            .into_lua_err()
+            .context("Failed to get current directory, making it impossible to restore later on")?;
+    */
     // TODO: seems like this breaks things, try to not move directory
 
     // actually generate the site
     let res = generate_site(path, dev);
-
+    /*
     // restore the current directory
     std::env::set_current_dir(current_dir)
         .into_lua_err()
         .context("Failed to restore current directory")?;
 
     // result
+    */
     res
 }
 
@@ -113,42 +114,14 @@ fn generate_site(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output>> {
     lua.globals().set("site", stdlib)?;
 
     // load the script
-    let (script, name) = if path.is_dir() {
-        let code = std::fs::read_to_string(path.join("main.lua"))
-            .into_lua_err()
-            .context(format!(
-                "Failed to load the file {:?}",
-                path.join("main.lua")
-            ))?;
-
-        let name = path.join("main.lua").into_os_string();
-
-        // move to the directory the script is in for lua to work properly
-        std::env::set_current_dir(path)
-            .into_lua_err()
-            .context("Failed to change directory to the given path")?;
-
-        (code, name)
+    let path = if path.is_dir() {
+        path.join("main.lua")
     } else {
-        let code = std::fs::read_to_string(path)
-            .into_lua_err()
-            .context(format!("Failed to load the file {:?}", path))?;
-
-        let name = path.as_os_str().to_os_string();
-
-        // move to the directory the script is in for lua to work properly
-        std::env::set_current_dir(path.parent().ok_or(Error::external(format!(
-            "No parent directory for path {:?}",
-            path
-        )))?)
-        .into_lua_err()
-        .context("Failed to change directory to the given path")?;
-
-        (code, name)
+        path.to_path_buf()
     };
 
     // run the script
-    lua.load(script).set_name(format!("={}", name.to_string_lossy())).exec()?;
+    lua.load(path).exec()?;
 
     // read the files we emitted
     let mut files = HashMap::with_capacity(output.len()? as usize);
