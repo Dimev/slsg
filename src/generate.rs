@@ -12,7 +12,7 @@ pub(crate) enum Output {
     Data(Vec<u8>),
 
     /// Copy a file
-    File (PathBuf),
+    File(PathBuf),
 
     /// Run a command on a file
     Command {
@@ -139,12 +139,8 @@ pub(crate) fn generate(path: &Path, dev: bool) -> Result<HashMap<PathBuf, Output
                     .as_bytes()
                     .to_owned(),
             ),
-            "file" => Output::File (
-                
-                contain_path(value.get("original")?)?,
-            ),
+            "file" => Output::File(contain_path(value.get("original")?)?),
             "command" => Output::Command {
-                
                 original: contain_path(value.get("original")?)?,
                 command: value.get("command")?,
                 placeholder: value

@@ -1,13 +1,17 @@
 use std::{
-    borrow::Borrow, collections::HashMap, path::{Path, PathBuf}, sync::{
+    collections::HashMap,
+    io::BufReader,
+    path::{Path, PathBuf},
+    sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
-    }, time::Duration
+    },
+    time::Duration,
 };
 
 use mlua::ErrorContext;
 use notify::Watcher;
-use tiny_http::{Request, Response};
+use tiny_http::{Request, Response, StatusCode};
 
 use crate::{
     generate::{generate, Output},
@@ -27,13 +31,18 @@ pub(crate) fn serve(path: &Path, addr: String) {
     let changed_clone = changed.clone();
 
     // watch for changes
-    if let Err(e) =
+    let watcher =
         // we only care about updates, so set the atomic to true if anything happened
         notify::recommended_watcher(move |_| changed_clone.store(true, Ordering::Relaxed))
-                .and_then(|mut watcher| watcher.watch(path, notify::RecursiveMode::Recursive))
-    {
+        // wrap the result ok with the watcher because we don't want it to drop out of scope
+        .and_then(|mut watcher| {
+            watcher.watch(dbg!(path), notify::RecursiveMode::Recursive).map(|_| watcher)
+        });
+
+    // notify for an error
+    if let Err(e) = &watcher {
         println!("Failed to watch for changes: {:?}", e)
-    }
+    };
 
     // generate the initial site
     let mut site = generate(path, true).map_err(|e| e.context("Failed to build site"));
@@ -60,14 +69,9 @@ pub(crate) fn serve(path: &Path, addr: String) {
     }
 }
 
-fn respond(
-    rq: Request,
-    site: &Result<HashMap<PathBuf, Output>, mlua::Error>,
-    path: &Path,
-) {
+fn respond(rq: Request, site: &Result<HashMap<PathBuf, Output>, mlua::Error>, path: &Path) {
     let url = rq.url();
-
-    match site {
+    /*match site {
         Ok(pages) => {
             if let Some(x) = pages.get(&PathBuf::from(url.trim_matches('/'))) {
                 match x {
@@ -86,6 +90,17 @@ fn respond(
         Err(e) => {
             rq.respond(Response::from_string(html_error(e)));
         }
+    }*/
+    let response = Response::new(
+        StatusCode(200),
+        Vec::new(),
+        "sus mogus".as_bytes(),
+        Some("sus mogus".len()),
+        None,
+    );
+
+    if let Err(e) = rq.respond(response) {
+        println!("Failed while responding: {}", e);
     }
 }
 
