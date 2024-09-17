@@ -1,4 +1,4 @@
-use std::io::stdout;
+use std::{fmt::Display, io::stdout};
 
 use mlua::Error;
 
@@ -10,7 +10,7 @@ use crossterm::{
 // TODO: macros for these
 
 /// Print an error to the terminal
-pub(crate) fn print_error(context: &str, error: &Error) {
+pub(crate) fn print_error<E: Display>(context: &str, error: &E) {
     let text = error.to_string();
     execute!(
         stdout(),
@@ -19,6 +19,24 @@ pub(crate) fn print_error(context: &str, error: &Error) {
         Print(context),
         SetAttribute(Attribute::Reset),
         SetForegroundColor(Color::Red),
+        Print(":\n"),
+        Print(text),
+        Print("\n"),
+        ResetColor,
+    )
+    .expect("Failed to print error");
+}
+
+/// Print a warning to the terminal
+pub(crate) fn print_warning<E: Display>(context: &str, error: &E) {
+    let text = error.to_string();
+    execute!(
+        stdout(),
+        SetAttribute(Attribute::Bold),
+        SetForegroundColor(Color::Yellow),
+        Print(context),
+        SetAttribute(Attribute::Reset),
+        SetForegroundColor(Color::Yellow),
         Print(":\n"),
         Print(text),
         Print("\n"),

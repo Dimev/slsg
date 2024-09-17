@@ -12,12 +12,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use mlua::{ErrorContext, ExternalError};
 use notify::Watcher;
 
 use crate::{
     generate::{generate, Output},
-    message::{html_error, print_error},
+    message::{html_error, print_error, print_warning},
 };
 
 const VERY_LONG_PATH: &str = "very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
@@ -41,7 +40,7 @@ pub(crate) fn serve(addr: String) {
             // directly send them back
             listen_sender
                 .send(stream)
-                .unwrap_or_else(|e| println!("Error while serving: {}", e));
+                .unwrap_or_else(|e| print_warning("Error while serving", &e));
         }
     });
 
@@ -60,7 +59,7 @@ pub(crate) fn serve(addr: String) {
 
     // notify for an error, borrow to let it live
     if let Err(e) = &watcher {
-        println!("Failed to watch for changes: {:?}", e)
+        print_warning("Failed to watch for changes", e);
     };
 
     // generate the initial site
@@ -114,10 +113,7 @@ fn respond(
         match file.as_stream() {
             Ok(stream) => (stream, 200, get_mime_type(PathBuf::from(&file_path))),
             Err(e) => {
-                print_error(
-                    "Failed to serve file",
-                    &e.into_lua_err().context(format!("For path {}", file_path)),
-                );
+                print_warning(&format!("Failed to serve file {}", file_path), &e);
                 (Box::new("Error!".as_bytes()), 500, Some("text/html"))
             }
         }
@@ -131,10 +127,7 @@ fn respond(
         match file.as_stream() {
             Ok(stream) => (stream, 200, Some("text/html")),
             Err(e) => {
-                print_error(
-                    "Failed to serve file",
-                    &e.into_lua_err().context(format!("For path {}", file_path)),
-                );
+                print_warning(&format!("Failed to serve file {}", file_path), &e);
                 (Box::new("Error!".as_bytes()), 500, Some("text/html"))
             }
         }
@@ -144,18 +137,18 @@ fn respond(
         // don't wait to send things
         stream
             .set_nodelay(true)
-            .unwrap_or_else(|e| println!("Failed to set nodelay on stream: {}", e));
+            .unwrap_or_else(|e| print_warning("Failed to set nodelay on stream", &e));
 
         // send the response
         stream.write_all(
                 b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
-            ).unwrap_or_else(|e| println!("Failed to write on stream: {}", e));
+            ).unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
         stream
             .write_all(b"data: initial\n\n")
-            .unwrap_or_else(|e| println!("Failed to write on stream: {}", e));
+            .unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
         stream
             .flush()
-            .unwrap_or_else(|e| println!("Failed to flush stream: {}", e));
+            .unwrap_or_else(|e| print_warning("Failed to flush stream", &e));
 
         // put it on the update notify list
         update_notify.push(stream);
@@ -197,22 +190,22 @@ fn respond(
     stream
         .write(&response.as_bytes())
         .map(|_| ())
-        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+        .unwrap_or_else(|e| print_warning("Error while writing response", &e));
 
     // copy the stream
     io::copy(&mut content, &mut stream)
         .map(|_| ())
-        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+        .unwrap_or_else(|e| print_warning("Error while writing response", &e));
 
     // add the update notify script
     stream
         .write(update_notify.as_bytes())
         .map(|_| ())
-        .unwrap_or_else(|e| println!("Error while writing response: {}", e));
+        .unwrap_or_else(|e| print_warning("Error while writing response", &e));
 
     stream
         .flush()
-        .unwrap_or_else(|e| println!("Failed to flush stream: {}", e));
+        .unwrap_or_else(|e| print_warning("Failed to flush stream", &e));
 }
 
 fn reload(
