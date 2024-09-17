@@ -1,8 +1,10 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    fs::{create_dir_all, read_dir, remove_dir_all},
+    path::PathBuf,
+};
 
-use generate::{generate, Output};
+use generate::generate;
 use message::print_error;
-use mlua::ErrorContext;
 use serve::serve;
 
 mod generate;
@@ -77,16 +79,64 @@ fn main() {
         }
         Some("build") => {
             let output_path = pargs
-                .opt_value_from_os_str::<_, OsString, String>(["-o", "--output"], |x| {
-                    Ok(OsString::from(x))
+                .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| {
+                    Ok(PathBuf::from(x))
                 })
-                .expect("Failed to parse arguments")
-                .unwrap_or(OsString::from("./public"));
+                .expect("Failed to parse arguments");
 
             let path = pargs
                 .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
                 .expect("Failed to parse arguments")
                 .unwrap_or(PathBuf::from("."));
+
+            // force clear the directory, only if we are building the current site's ./public folder
+            // or are passed the --force argument
+            let force_clear = pargs.contains(["-f", "--force"]) || output_path.is_some();
+
+            // clear the output
+            if let Some(ref output_path) = output_path {
+                // only clear if it's allowed
+                if force_clear {
+                    remove_dir_all(&output_path).unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to remove the content of output directory {:?}: {}",
+                            output_path, e
+                        )
+                    });
+
+                // else, crash if it's not empty
+                } else if read_dir(&output_path)
+                    .map(|mut x| x.next().is_some())
+                    .unwrap_or(false)
+                {
+                    panic!("Output directory has items in it!");
+                }
+            } else {
+                // remove if it's relative to the input, as we are in our own directory now
+                remove_dir_all(path.join("public")).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to remove the content of output directory {:?}: {}",
+                        output_path, e
+                    )
+                });
+            }
+
+            // make sure the path exists
+            create_dir_all(&output_path.as_ref().unwrap_or(&path.join("public"))).unwrap_or_else(
+                |e| panic!("Failed to create output directory {:?}: {}", output_path, e),
+            );
+
+            // make it canonical
+            let output_path = output_path
+                .as_ref()
+                .unwrap_or(&path.join("public"))
+                .canonicalize()
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to canonicalize output directory path {:?}: {}",
+                        output_path, e
+                    )
+                });
 
             // move to where the main.lua file is
             if !path.is_dir() {
@@ -98,7 +148,9 @@ fn main() {
 
             match generate(false) {
                 Ok(files) => {
-                    todo!()
+                    for (path, file) in files {
+                        file.to_file(&output_path.join(path)).expect("balls");
+                    }
                 }
                 Err(err) => print_error("Failed to build site", &err),
             }

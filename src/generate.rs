@@ -1,5 +1,11 @@
 use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
-use std::{collections::HashMap, fs::File, io::{self, Read}, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{self, Read},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 use crate::stdlib::stdlib;
 
@@ -12,16 +18,66 @@ pub(crate) enum Output {
     File(PathBuf),
 
     /// Run a command on a file
-    Command { original: PathBuf, command: String },
+    Command {
+        original: PathBuf,
+        command: String,
+        arguments: Vec<String>,
+    },
 }
 
 impl Output {
-    pub(crate) fn as_stream<'a>(&'a self) -> std::result::Result<Box<dyn Read + 'a>, io::Error> {
+    pub(crate) fn as_stream<'a>(&'a self) -> std::io::Result<Box<dyn Read + 'a>> {
         Ok(match self {
             Self::Data(vec) => Box::new(vec.as_slice()),
             Self::File(path) => Box::new(File::open(path)?),
-            Self::Command { original, command } => Box::new(File::open(original)?),
+            Self::Command {
+                original,
+                command,
+                arguments,
+            } => {
+                let file = File::open(original)?;
+                let stream = Stdio::piped();
+                let mut child = Command::new(command)
+                    .args(arguments)
+                    .stdin(file)
+                    .stdout(stream)
+                    .spawn()?;
+
+                // TODO: proper error handling
+                let stdout = child.stdout.take().unwrap();
+                Box::new(stdout)
+            }
         })
+    }
+
+    pub(crate) fn to_file(&self, path: &Path) -> std::io::Result<()> {
+        match self {
+            Self::Data(vec) => fs::write(path, vec)?,
+            Self::File(original) => {
+                fs::copy(original, path)?;
+            }
+            Self::Command {
+                original,
+                command,
+                arguments,
+            } => {
+                let file = File::open(original)?;
+                let stream = Stdio::piped();
+                let mut child = Command::new(command)
+                    .args(arguments)
+                    .stdin(file)
+                    .stdout(stream)
+                    .spawn()?;
+
+                // TODO: proper error handling
+                let mut stdout = child.stdout.take().unwrap();
+                let mut new = File::open(path)?;
+                io::copy(&mut stdout, &mut new)?;
+
+                ()
+            }
+        }
+        Ok(())
     }
 }
 
@@ -120,6 +176,7 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
             "command" => Output::Command {
                 original: contain_path(value.get("original")?)?,
                 command: value.get("command")?,
+                arguments: value.get("arguments")?,
             },
             _ => {
                 return Err(Error::external(

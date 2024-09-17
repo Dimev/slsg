@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{self, BufRead, BufReader, Cursor, Read, Write},
     net::{TcpListener, TcpStream},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::channel,
@@ -34,11 +34,11 @@ pub(crate) fn serve(addr: String) {
     );
 
     // start the listening thread
-    let (sender, incoming) = channel();
+    let (listen_sender, incoming) = channel();
     spawn(move || {
         for stream in listener.incoming().filter_map(|x| x.ok()) {
             // directly send them back
-            sender
+            listen_sender
                 .send(stream)
                 .unwrap_or_else(|e| println!("Error while serving: {}", e));
         }

@@ -1,8 +1,4 @@
-use std::{
-    ffi::{OsStr, OsString},
-    os::unix::ffi::OsStringExt,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use latex2mathml::{latex_to_mathml, DisplayStyle};
 use mlua::{ErrorContext, ExternalResult, Lua, Result, Table};
