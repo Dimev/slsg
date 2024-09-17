@@ -12,11 +12,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+use mlua::{ErrorContext, ExternalError};
 use notify::Watcher;
 
 use crate::{
     generate::{generate, Output},
-    message::{html_error, print_error, print_success},
+    message::{html_error, print_error},
 };
 
 const VERY_LONG_PATH: &str = "very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
@@ -110,12 +111,16 @@ fn respond(
         .ok()
         .and_then(|x| x.get(&PathBuf::from(&file_path)))
     {
-        (
-            // TODO: fix unwrap
-            file.as_stream().unwrap(),
-            200,
-            get_mime_type(PathBuf::from(&file_path)),
-        )
+        match file.as_stream() {
+            Ok(stream) => (stream, 200, get_mime_type(PathBuf::from(&file_path))),
+            Err(e) => {
+                print_error(
+                    "Failed to serve file",
+                    &e.into_lua_err().context(format!("For path {}", file_path)),
+                );
+                (Box::new("Error!".as_bytes()), 500, Some("text/html"))
+            }
+        }
     }
     // see if it's on index.html
     else if let Some(file) = site
@@ -123,7 +128,16 @@ fn respond(
         .ok()
         .and_then(|x| x.get(&PathBuf::from(file_path).join("index.html")))
     {
-        (file.as_stream().unwrap(), 200, Some("text/html"))
+        match file.as_stream() {
+            Ok(stream) => (stream, 200, Some("text/html")),
+            Err(e) => {
+                print_error(
+                    "Failed to serve file",
+                    &e.into_lua_err().context(format!("For path {}", file_path)),
+                );
+                (Box::new("Error!".as_bytes()), 500, Some("text/html"))
+            }
+        }
     }
     // if it's the update notifier, set the update stream
     else if file_path == VERY_LONG_PATH {
@@ -156,6 +170,7 @@ fn respond(
 
     // otherwise, push the 404 page
     } else {
+        // TODO: not found page template, have it show all links
         (Box::new(b"rstoeh".as_slice()), 200, Some("text/html"))
     };
 
@@ -207,15 +222,18 @@ fn reload(
 ) {
     // went ok and there is no request, check if the site needs reloading
     if changed.swap(false, Ordering::Relaxed) {
+        println!("Files changed, regenerating ...");
+
         let start = Instant::now();
         *site = generate(true);
 
         // notify if it went bad
         if let Err(ref e) = *site {
             print_error("Failed to build site", e);
-        } else {
-            print_success(&format!("Rebuilt in {}ms", start.elapsed().as_millis()));
         }
+
+        println!("... Done ({}ms)", start.elapsed().as_millis());
+
         // notify the listeners we got updated as well
         // only retain the ones that haven't errored out due to likely not being connected anymore
         update_notify.retain_mut(|s| {

@@ -170,7 +170,7 @@ fn build(pargs: &mut pico_args::Arguments) {
         std::env::set_current_dir(path).unwrap_or_else(|e| panic!("Failed to change path: {}", e));
     }
 
-    // generate the site, 
+    // generate the site,
     match generate(false) {
         Ok(files) => {
             // write out all files

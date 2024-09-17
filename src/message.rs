@@ -27,19 +27,6 @@ pub(crate) fn print_error(context: &str, error: &Error) {
     .expect("Failed to print error");
 }
 
-/// Print a success to the terminal
-pub(crate) fn print_success(context: &str) {
-    execute!(
-        stdout(),
-        SetAttribute(Attribute::Bold),
-        SetForegroundColor(Color::Green),
-        Print(context),
-        Print("\n"),
-        SetAttribute(Attribute::Reset),
-        ResetColor,
-    )
-    .expect("Failed to print error");
-}
 /// Produce an error page for html
 pub(crate) fn html_error(error: &Error) -> String {
     format!(include_str!("error_template.html"), error)
