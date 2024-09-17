@@ -35,6 +35,7 @@ impl Output {
                 command,
                 arguments,
             } => {
+                // TODO: make the file optional?
                 let file = File::open(original)?;
                 let stream = Stdio::piped();
                 let mut child = Command::new(command)
@@ -61,6 +62,7 @@ impl Output {
                 command,
                 arguments,
             } => {
+                // TODO: make the file optional?
                 let file = File::open(original)?;
                 let stream = Stdio::piped();
                 let mut child = Command::new(command)

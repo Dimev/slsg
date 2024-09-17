@@ -5,9 +5,6 @@ use mlua::{ErrorContext, ExternalResult, Lua, Result, Table};
 
 pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     let api = lua.create_table()?;
-
-    // TODO: just use utf8 strings?
-
     // list files
     api.set(
         "dir",

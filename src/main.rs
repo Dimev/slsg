@@ -36,7 +36,9 @@ const NEW_GITIGNORE: &str = "\
 public
 ";
 
-const API_DOCS: &[(&str, &str)] = &[];
+const API_DOCS: &str = "\
+# Example!
+";
 
 fn main() {
     let mut pargs = pico_args::Arguments::from_env();
@@ -55,141 +57,150 @@ fn main() {
 
     let sub = pargs.subcommand().expect("Failed to parse arguments");
     match sub.as_deref() {
-        Some("dev") => {
-            let addr = pargs
-                .opt_value_from_str(["-a", "--address"])
-                .expect("Failed to parse arguments")
-                .unwrap_or(String::from("127.0.0.1:1111"));
-
-            let path = pargs
-                .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .expect("Failed to parse arguments")
-                .unwrap_or(PathBuf::from("."));
-
-            // move to where the main.lua file is
-            if !path.is_dir() {
-                panic!("Expected a directory for the path, not a file!");
-            } else {
-                std::env::set_current_dir(path)
-                    .unwrap_or_else(|e| panic!("Failed to change path: {}", e));
-            }
-
-            // run the development server
-            serve(addr);
-        }
-        Some("build") => {
-            let output_path = pargs
-                .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| {
-                    Ok(PathBuf::from(x))
-                })
-                .expect("Failed to parse arguments");
-
-            let path = pargs
-                .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .expect("Failed to parse arguments")
-                .unwrap_or(PathBuf::from("."));
-
-            // force clear the directory, only if we are building the current site's ./public folder
-            // or are passed the --force argument
-            let force_clear = pargs.contains(["-f", "--force"]) || output_path.is_some();
-
-            // clear the output
-            if let Some(ref output_path) = output_path {
-                // only clear if it's allowed
-                if force_clear {
-                    remove_dir_all(&output_path).unwrap_or_else(|e| {
-                        panic!(
-                            "Failed to remove the content of output directory {:?}: {}",
-                            output_path, e
-                        )
-                    });
-
-                // else, crash if it's not empty
-                } else if read_dir(&output_path)
-                    .map(|mut x| x.next().is_some())
-                    .unwrap_or(false)
-                {
-                    panic!("Output directory has items in it!");
-                }
-            } else {
-                // remove if it's relative to the input, as we are in our own directory now
-                remove_dir_all(path.join("public")).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to remove the content of output directory {:?}: {}",
-                        output_path, e
-                    )
-                });
-            }
-
-            // make sure the path exists
-            create_dir_all(&output_path.as_ref().unwrap_or(&path.join("public"))).unwrap_or_else(
-                |e| panic!("Failed to create output directory {:?}: {}", output_path, e),
-            );
-
-            // make it canonical
-            let output_path = output_path
-                .as_ref()
-                .unwrap_or(&path.join("public"))
-                .canonicalize()
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to canonicalize output directory path {:?}: {}",
-                        output_path, e
-                    )
-                });
-
-            // move to where the main.lua file is
-            if !path.is_dir() {
-                panic!("Expected a directory for the path, not a file!");
-            } else {
-                std::env::set_current_dir(path)
-                    .unwrap_or_else(|e| panic!("Failed to change path: {}", e));
-            }
-
-            match generate(false) {
-                Ok(files) => {
-                    for (path, file) in files {
-                        file.to_file(&output_path.join(path)).expect("balls");
-                    }
-                }
-                Err(err) => print_error("Failed to build site", &err),
-            }
-        }
-        Some("new") => {
-            let path = pargs
-                .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-                .expect("Failed to parse arguments")
-                .unwrap_or(PathBuf::from("."));
-
-            // ensure the path does not exist yet
-            if let Ok(mut dir) = path.read_dir() {
-                if dir.next().is_some() {
-                    println!(
-                        "Failed to create new site: target directory {:?} is not empty!",
-                        path
-                    );
-                    return;
-                }
-            }
-
-            // make the directories
-            std::fs::create_dir_all(&path)
-                .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path));
-
-            // example file
-            std::fs::write(path.join("main.lua"), NEW_LUA)
-                .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
-            std::fs::write(path.join("stdlib.meta"), NEW_META).unwrap_or_else(|_| {
-                panic!("Failed to create directory {:?}", path.join("stdlib.meta"))
-            });
-            std::fs::write(path.join(".gitignore"), NEW_GITIGNORE).unwrap_or_else(|_| {
-                panic!("Failed to create directory {:?}", path.join(".gitignore"))
-            });
-
-            println!("Created new site in {:?}", path);
-            println!("Run `slsl dev` in the directory to start making your site!");
-        }
-        Some("api") => {}
+        Some("dev") => dev(&mut pargs),
+        Some("build") => build(&mut pargs),
+        Some("new") => new(pargs),
+        Some("api") => println!("{}", API_DOCS),
         _ => println!("{}", HELP),
     }
+}
+
+/// Create a new site
+fn new(mut pargs: pico_args::Arguments) {
+    let path = pargs
+        .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
+        .expect("Failed to parse arguments")
+        .unwrap_or(PathBuf::from("."));
+
+    // ensure the path does not exist yet
+    if let Ok(mut dir) = path.read_dir() {
+        if dir.next().is_some() {
+            println!(
+                "Failed to create new site: target directory {:?} is not empty!",
+                path
+            );
+            return;
+        }
+    }
+
+    // directory
+    std::fs::create_dir_all(&path)
+        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path));
+
+    // main file
+    std::fs::write(path.join("main.lua"), NEW_LUA)
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
+
+    // meta file for the language server
+    std::fs::write(path.join("stdlib.meta"), NEW_META)
+        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path.join("stdlib.meta")));
+
+    // gitignore
+    std::fs::write(path.join(".gitignore"), NEW_GITIGNORE)
+        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path.join(".gitignore")));
+
+    // report success
+    println!("Created new site in {:?}", path);
+    println!("Run `slsl dev` in the directory to start making your site!");
+}
+
+/// Build an existing site
+fn build(pargs: &mut pico_args::Arguments) {
+    let output_path = pargs
+        .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| Ok(PathBuf::from(x)))
+        .expect("Failed to parse arguments");
+
+    let path = pargs
+        .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
+        .expect("Failed to parse arguments")
+        .unwrap_or(PathBuf::from("."));
+
+    // force clear the directory, only if we are building the current site's ./public folder
+    // or are passed the --force argument
+    let force_clear = pargs.contains(["-f", "--force"]) || output_path.is_some();
+
+    // clear the output
+    if let Some(ref output_path) = output_path {
+        // only clear if it's allowed
+        if force_clear && output_path.is_dir() {
+            remove_dir_all(&output_path).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to remove the content of output directory {:?}: {}",
+                    output_path, e
+                )
+            });
+
+        // else, crash if it's not empty
+        } else if read_dir(&output_path)
+            .map(|mut x| x.next().is_some())
+            .unwrap_or(false)
+        {
+            panic!("Output directory has items in it!");
+        }
+    } else if path.join("public").is_dir() {
+        // remove if it's relative to the input, as we are in our own directory now
+        remove_dir_all(path.join("public")).unwrap_or_else(|e| {
+            panic!(
+                "Failed to remove the content of output directory {:?}: {}",
+                output_path, e
+            )
+        });
+    }
+
+    // make sure the path exists
+    create_dir_all(&output_path.as_ref().unwrap_or(&path.join("public")))
+        .unwrap_or_else(|e| panic!("Failed to create output directory {:?}: {}", output_path, e));
+
+    // make it canonical
+    let output_path = output_path
+        .as_ref()
+        .unwrap_or(&path.join("public"))
+        .canonicalize()
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to canonicalize output directory path {:?}: {}",
+                output_path, e
+            )
+        });
+
+    // move to where the main.lua file is
+    if !path.is_dir() {
+        panic!("Expected a directory for the path, not a file!");
+    } else {
+        std::env::set_current_dir(path).unwrap_or_else(|e| panic!("Failed to change path: {}", e));
+    }
+
+    // generate the site, 
+    match generate(false) {
+        Ok(files) => {
+            // write out all files
+            for (path, file) in files {
+                file.to_file(&output_path.join(path)).expect("balls");
+            }
+        }
+        Err(err) => print_error("Failed to build site", &err),
+    }
+}
+
+/// Serve an existing site with the development server
+fn dev(pargs: &mut pico_args::Arguments) {
+    let addr = pargs
+        .opt_value_from_str(["-a", "--address"])
+        .expect("Failed to parse arguments")
+        .unwrap_or(String::from("127.0.0.1:1111"));
+
+    let path = pargs
+        .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
+        .expect("Failed to parse arguments")
+        .unwrap_or(PathBuf::from("."));
+
+    // move to where the main.lua file is
+    if !path.is_dir() {
+        panic!("Expected a directory for the path, not a file!");
+    } else {
+        std::env::set_current_dir(path).unwrap_or_else(|e| panic!("Failed to change path: {}", e));
+    }
+
+    // run the development server
+    serve(addr);
 }
