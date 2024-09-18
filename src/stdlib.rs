@@ -25,7 +25,7 @@ pub(crate) fn contain_path(path: String) -> Result<PathBuf> {
     let path = path.trim_start_matches('/');
 
     // parts of the path
-    let mut resolved = PathBuf::from("./");
+    let mut resolved = PathBuf::from("");
 
     // go over all parts of the original path
     for component in path.split('/') {

@@ -159,12 +159,12 @@ fn respond(
     // if the site is an error, push the error page
     } else if let Err(ref error) = site {
         let error_page = html_error(error);
-        (Box::new(Cursor::new(error_page)), 200, Some("text/html"))
+        (Box::new(Cursor::new(error_page)), 500, Some("text/html"))
 
     // otherwise, push the 404 page
     } else {
         // TODO: not found page template, have it show all links
-        (Box::new(b"rstoeh".as_slice()), 200, Some("text/html"))
+        (Box::new(b"rstoeh".as_slice()), 404, Some("text/html"))
     };
 
     // update notify script, allows reloading the page when we send a message
