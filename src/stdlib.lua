@@ -37,6 +37,9 @@ end
 -- latex to mathml
 api.latex_to_mathml = internal.latex_to_mathml
 
+-- sass
+api.sass = internal.sass
+
 -- TODO
 -- minification (css)
 -- parser

@@ -7,7 +7,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::stdlib::stdlib;
+use crate::stdlib::{contain_path, stdlib};
 
 /// Output result
 pub(crate) enum Output {
@@ -81,35 +81,6 @@ impl Output {
         }
         Ok(())
     }
-}
-
-fn contain_path(path: String) -> Result<PathBuf> {
-    // backslashes means it's invalid
-    if path.contains('\\') {
-        return Err(Error::external("Path contains a \\, which is not allowed"));
-    }
-
-    // trim any initial /
-    let path = path.trim_start_matches('/');
-
-    // parts of the path
-    let mut resolved = PathBuf::new();
-
-    // go over all parts of the original path
-    for component in path.split('/') {
-        if component == ".." {
-            // break if this path is not valid due to not being able to drop a component
-            if !resolved.pop() {
-                return Err(Error::external("Path tries to escape directory using `..`"));
-            }
-        }
-        // only advance if this is not the current directory
-        else if component != "." {
-            resolved.push(component);
-        }
-    }
-
-    Ok(resolved)
 }
 
 /// Generate the site from the ./main.lua file
