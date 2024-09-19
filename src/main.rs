@@ -11,6 +11,7 @@ mod generate;
 mod message;
 mod serve;
 mod stdlib;
+mod luamark;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\
@@ -29,6 +30,7 @@ Options:
   -o --output   Output directory to use when building the site
 ";
 
+const NEW_STYLE: &str = include_str!("style.scss");
 const NEW_LUA: &str = include_str!("new.lua");
 const NEW_META: &str = include_str!("meta.lua");
 
@@ -87,7 +89,11 @@ fn new(mut pargs: pico_args::Arguments) {
     std::fs::create_dir_all(&path)
         .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path));
 
-    // main file
+    // style
+    std::fs::write(path.join("style.scss"), NEW_STYLE)
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("style.scss")));
+    
+     // main file
     std::fs::write(path.join("main.lua"), NEW_LUA)
         .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
 

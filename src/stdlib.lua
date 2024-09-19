@@ -157,4 +157,10 @@ api.logo = [[
 </g>
 </svg>]]
 
+api.icon = [[
+<svg version="1.1" width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+<circle cx="50" cy="50" r="50" fill="#1D2951" />
+<circle cx="65" cy="35" r="15" fill="white" />
+</svg>]]
+
 return api

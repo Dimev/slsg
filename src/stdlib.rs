@@ -14,6 +14,8 @@ use rsass::{
     output::{Format, Style},
 };
 
+use crate::luamark::Parser;
+
 // TODO: improve?
 pub(crate) fn contain_path(path: String) -> Result<PathBuf> {
     // backslashes means it's invalid
@@ -26,17 +28,21 @@ pub(crate) fn contain_path(path: String) -> Result<PathBuf> {
 
     // parts of the path
     let mut resolved = PathBuf::from("");
-
+    let mut length = 0;
     // go over all parts of the original path
     for component in path.split('/') {
         if component == ".." {
             // break if this path is not valid due to not being able to drop a component
-            if !resolved.pop() {
+            if !resolved.pop() || length <= 0 {
                 return Err(Error::external("Path tries to escape directory using `..`"));
             }
+            length -= 1;
         }
         // only advance if this is not the current directory
         else if component != "." {
+            length += 1;
+            resolved.push(component);
+        } else {
             resolved.push(component);
         }
     }
@@ -223,6 +229,14 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
                 lua.create_string(compiled)
             },
         )?,
+    )?;
+
+    // luamark parser
+    api.set(
+        "luamark",
+        lua.create_function(|lua, (string, commands): (String, Table)| {
+            Parser::parse(lua, commands, &string)
+        })?,
     )?;
 
     Ok(api)
