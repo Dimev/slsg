@@ -7,8 +7,41 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::stdlib::{contain_path, stdlib};
+use crate::{message::notify, stdlib::stdlib};
 
+/// Contain the path to the current directory
+pub fn contain_path(path: String) -> Result<PathBuf> {
+    // backslashes means it's invalid
+    if path.contains('\\') {
+        return Err(Error::external(
+            "Path contains a `\\`, which is not allowed",
+        ));
+    }
+
+    // trim any initial /
+    let path = path.trim_start_matches('/');
+
+    // parts of the path
+    let mut resolved = PathBuf::new();
+
+    // go over all parts of the original path
+    for component in path.split('/') {
+        if component == ".." {
+            // break if this path is not valid due to not being able to drop a component
+            if !resolved.pop() {
+                return Err(Error::external(format!(
+                    "Path {path:?} tried to escape the directory using `..`"
+                )));
+            }
+        }
+        // only advance if this is not the current directory
+        else if component != "." {
+            resolved.push(component);
+        }
+    }
+
+    Ok(resolved)
+}
 /// Output result
 pub(crate) enum Output {
     /// Export the data in a string
@@ -19,7 +52,6 @@ pub(crate) enum Output {
 
     /// Run a command on a file
     Command {
-        original: PathBuf,
         command: String,
         arguments: Vec<String>,
     },
@@ -30,22 +62,22 @@ impl Output {
         Ok(match self {
             Self::Data(vec) => Box::new(vec.as_slice()),
             Self::File(path) => Box::new(File::open(path)?),
-            Self::Command {
-                original,
-                command,
-                arguments,
-            } => {
-                // TODO: make the file optional?
-                let file = File::open(original)?;
+            Self::Command { command, arguments } => {
+                notify(
+                    "Running command",
+                    &format!("{command} {}", arguments.join(" ")),
+                );
                 let stream = Stdio::piped();
                 let mut child = Command::new(command)
                     .args(arguments)
-                    .stdin(file)
                     .stdout(stream)
                     .spawn()?;
 
-                // TODO: proper error handling
-                let stdout = child.stdout.take().unwrap();
+                let stdout = child
+                    .stdout
+                    .take()
+                    .ok_or(std::io::Error::other("Failed to take stdout of command!"))?;
+
                 Box::new(stdout)
             }
         })
@@ -57,26 +89,25 @@ impl Output {
             Self::File(original) => {
                 fs::copy(original, path)?;
             }
-            Self::Command {
-                original,
-                command,
-                arguments,
-            } => {
-                // TODO: make the file optional?
-                let file = File::open(original)?;
+            Self::Command { command, arguments } => {
+                notify(
+                    "Running command",
+                    &format!("{command} {}", arguments.join(" ")),
+                );
                 let stream = Stdio::piped();
                 let mut child = Command::new(command)
                     .args(arguments)
-                    .stdin(file)
                     .stdout(stream)
                     .spawn()?;
 
-                // TODO: proper error handling
-                let mut stdout = child.stdout.take().unwrap();
-                let mut new = File::open(path)?;
-                io::copy(&mut stdout, &mut new)?;
+                let mut stdout = child
+                    .stdout
+                    .take()
+                    .ok_or(std::io::Error::other("Failed to take stdout of command!"))?;
 
-                ()
+                // copy the output over
+                let mut new = File::create_new(path)?;
+                io::copy(&mut stdout, &mut new)?;
             }
         }
         Ok(())
@@ -130,7 +161,7 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
 
     // emit the error,
     // doing this now in order to ensure we reset the directory
-    res?;
+    res.context("Failed to run main.lua")?;
 
     // read the files we emitted
     let mut files = HashMap::with_capacity(output.len()? as usize);
@@ -145,9 +176,8 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
                     .as_bytes()
                     .to_owned(),
             ),
-            "file" => Output::File(contain_path(value.get("original")?)?),
+            "file" => Output::File(PathBuf::from(value.get::<&str, String>("original")?)),
             "command" => Output::Command {
-                original: contain_path(value.get("original")?)?,
                 command: value.get("command")?,
                 arguments: value.get("arguments")?,
             },

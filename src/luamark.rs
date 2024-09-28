@@ -5,6 +5,7 @@ Comment, --
 Commands, start with @, followed by name, optional string argument or function call
 String, same as lua string literal
 Escaping: done with \, not needed in string literal
+Example:
 
 @article(Hello world!, 1-1-1970)
 

@@ -175,8 +175,6 @@ fn respond(
     };
 
     // send the page back
-    //let length = content.len();
-    // TODO: lenght estimates
     let response = format!(
         "HTTP/1.1 {status}\r\nCache-Control: no-cache\r\n{}\r\n",
         if let Some(mime) = mime {

@@ -8,10 +8,10 @@ use message::print_error;
 use serve::serve;
 
 mod generate;
+mod luamark;
 mod message;
 mod serve;
 mod stdlib;
-mod luamark;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\
@@ -92,8 +92,8 @@ fn new(mut pargs: pico_args::Arguments) {
     // style
     std::fs::write(path.join("style.scss"), NEW_STYLE)
         .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("style.scss")));
-    
-     // main file
+
+    // main file
     std::fs::write(path.join("main.lua"), NEW_LUA)
         .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
 

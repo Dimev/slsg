@@ -16,40 +16,6 @@ use rsass::{
 
 use crate::luamark::Parser;
 
-// TODO: improve?
-pub(crate) fn contain_path(path: String) -> Result<PathBuf> {
-    // backslashes means it's invalid
-    if path.contains('\\') {
-        return Err(Error::external("Path contains a \\, which is not allowed"));
-    }
-
-    // trim any initial /
-    let path = path.trim_start_matches('/');
-
-    // parts of the path
-    let mut resolved = PathBuf::from("");
-    let mut length = 0;
-    // go over all parts of the original path
-    for component in path.split('/') {
-        if component == ".." {
-            // break if this path is not valid due to not being able to drop a component
-            if !resolved.pop() || length <= 0 {
-                return Err(Error::external("Path tries to escape directory using `..`"));
-            }
-            length -= 1;
-        }
-        // only advance if this is not the current directory
-        else if component != "." {
-            length += 1;
-            resolved.push(component);
-        } else {
-            resolved.push(component);
-        }
-    }
-
-    Ok(resolved)
-}
-
 #[derive(Debug)]
 struct LuaLoader<'a>(Option<Function<'a>>);
 
@@ -123,7 +89,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     api.set(
         "dir",
         lua.create_function(|_, path: String| {
-            let path = contain_path(path)?;
+            let path = PathBuf::from(path);
 
             // read the entries
             let entries = std::fs::read_dir(&path)
@@ -142,7 +108,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     api.set(
         "read",
         lua.create_function(|lua: &Lua, path: String| {
-            let path = contain_path(path)?;
+            let path = PathBuf::from(path);
             let bytes = std::fs::read(&path)
                 .into_lua_err()
                 .context(format!("Failed to read file {:?}", path))?;
@@ -154,9 +120,9 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
 
     // file name
     api.set(
-        "filename",
+        "file_name",
         lua.create_function(|_, path: String| {
-            Ok(contain_path(path)?
+            Ok(PathBuf::from(path)
                 .file_name()
                 .map(|x| x.to_str().map(String::from)))
         })?,
@@ -164,9 +130,9 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
 
     // file stem
     api.set(
-        "filestem",
+        "file_stem",
         lua.create_function(|_, path: String| {
-            Ok(contain_path(path)?
+            Ok(PathBuf::from(path)
                 .file_stem()
                 .map(|x| x.to_str().map(String::from)))
         })?,
@@ -174,9 +140,9 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
 
     // file extention
     api.set(
-        "fileext",
+        "file_ext",
         lua.create_function(|_, path: String| {
-            Ok(contain_path(path)?
+            Ok(PathBuf::from(path)
                 .extension()
                 .map(|x| x.to_str().map(String::from)))
         })?,
