@@ -26,30 +26,181 @@ print("Hello, world!")
 
 */
 
-use mlua::{Lua, Result, Table};
+use mlua::{Lua, Result, Table, TableExt, Value};
 
 pub(crate) struct Parser<'a> {
     row: usize,
     column: usize,
-    string: &'a str,
+    remaining: &'a str,
     lua: &'a Lua,
     commands: Table<'a>,
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn parse(lua: &Lua, commands: Table, string: &str) -> Result<()> { 
+    pub(crate) fn parse(lua: &Lua, commands: Table, string: &str) -> Result<()> {
         // make the parser
         let parser = Parser {
             row: 1,
             column: 1,
-            string,
+            remaining: string,
             lua,
             commands,
         };
 
         // start parsing
 
-        
         Ok(())
     }
+
+    /// comment -- text \n
+    fn comment(&mut self) {
+        // skip the --
+        self.remaining = self.remaining.trim_start_matches("--");
+
+        // skip the rest that is not a newline
+        let mut chars = self.remaining.chars();
+        while chars.next().unwrap_or('\n') != '\n' {
+            self.remaining = chars.as_str();
+        }
+
+        // we already skipped the newline
+        self.column = 0;
+        self.row += 1;
+    }
+
+    /// Macro @name(arg1, arg2, arg3) or @name [[ string ]]
+    fn macro_call(&mut self) -> Option<Result<Value>> {
+        // skip the @
+        let mut rest = self.remaining.strip_prefix('@')?;
+        let mut row = self.row;
+        let mut column = self.column;
+
+        // read the name
+        let mut name = String::new();
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            rest = chars.as_str();
+            name.push(c);
+            column += 1;
+
+            // stop if the next character is not a name character
+            if !chars
+                .as_str()
+                .starts_with(|c: char| c.is_alphanumeric() || c == '_')
+            {
+                break;
+            }
+        }
+
+        // name needs at least one character
+        if name.len() == 0 {
+            return None;
+        }
+
+        // trim the whitespaces
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            rest = chars.as_str();
+            // stop if the next character is not a whitespace
+            if !chars.as_str().starts_with(char::is_whitespace) {
+                break;
+            }
+            // row
+            else if c == '\n' {
+                column = 0;
+                row += 1;
+            }
+            // column
+            else {
+                column += 1;
+            }
+        }
+
+        // now parse either a single string
+        let result: Result<Value> = if let Some(string) = self.string() {
+            // call the function
+            self.commands.call_method(&name, string)
+        }
+        // or an argument list
+        else if rest.starts_with('(') {
+            // trim starting (
+            rest = rest.trim_start_matches('(');
+            column += 1;
+
+            // read the arguments, seperated by ,
+            todo!();
+        }
+        // or no arguments, which isn't allowed
+        else {
+            return None;
+        };
+
+        // reset state
+        self.remaining = rest;
+        self.row = row;
+        self.column = column;
+
+        todo!()
+    }
+
+    /// String literal [[ ]]
+    fn string(&mut self) -> Option<String> {
+        // skip the opening [
+        let mut rest = self.remaining.strip_prefix('[')?;
+        let mut row = self.row;
+        let mut column = self.column;
+
+        // read the amount of =
+        let mut count = 0usize;
+        while rest.starts_with('[') {
+            rest = &rest[1..];
+            column += 1;
+            count += 1;
+        }
+
+        // read the other [
+        rest = rest.strip_prefix('[')?;
+
+        // what to expect for the closing bracket
+        let closing = format!(
+            "]{}]",
+            std::iter::repeat('=').take(count).collect::<String>()
+        );
+
+        let mut chars = rest.chars();
+        let mut string = String::new();
+        while let Some(c) = chars.next() {
+            // stop if we find the end
+            if chars.as_str().starts_with(&closing) {
+                column += closing.len();
+                break;
+            }
+            // next row if we see a newline
+            else if c == '\n' {
+                row += 1;
+                column = 0;
+            // next column
+            } else {
+                column += 1;
+            }
+
+            // add to the string
+            string.push(c);
+        }
+
+        // reset state
+        self.column = column;
+        self.row = row;
+        self.remaining = &chars.as_str()[closing.len()..];
+
+        // we found a string
+        Some(string)
+    }
+
+    /// Escaped backslash
+    fn escape(&mut self) {
+        todo!()
+    }
 }
+
+// TODO: test
