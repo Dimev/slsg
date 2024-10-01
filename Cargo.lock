@@ -516,6 +516,7 @@ dependencies = [
  "crossterm",
  "latex2mathml",
  "mlua",
+ "nom",
  "notify",
  "pico-args",
  "rsass",

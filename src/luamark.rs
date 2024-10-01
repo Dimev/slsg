@@ -27,6 +27,70 @@ print("Hello, world!")
 */
 
 use mlua::{Lua, Result, Table, TableExt, Value};
+use nom::{
+    branch::alt,
+    bytes::{complete::{tag, take_till, take_until, take_while}, },
+    character::{complete::anychar, streaming::char},
+    combinator::success,
+    multi::{many1, separated_list0, separated_list1},
+    sequence::{delimited, preceded, tuple},
+    IResult,
+};
+
+/// Escaped character
+fn escaped(s: &str) -> IResult<&str, char> {
+    preceded(tag("\\"), anychar)(s)
+}
+
+/// Parse a comment -- any \n
+fn comment(s: &str) -> IResult<&str, &str> {
+    delimited(tag("--"), take_until("\n"), tag("\n"))(s)
+}
+
+/// Parse a string literal
+fn string_literal(s: &str) -> IResult<&str, &str> {
+    // opening [==[
+    let (s, closing) = delimited(tag("["), take_while(|c| c == '='), tag("["))(s)?;
+
+    // what to close with
+    let closing = format!("]{closing}]");
+
+    // read the string literal
+    let (s, literal) = take_until(closing.as_str())(s)?;
+
+    // read the closing part
+    let (s, _) = tag(closing.as_str())(s)?;
+
+    // done
+    success(literal)(s)
+}
+
+/// Parse an argument list
+fn arg_list(s: &str) -> IResult<&str, &str> {
+    let separator = tuple((tag(","), take_while(char::is_whitespace)));
+    let arguments = separated_list1(separator, take_while(|c| c != ','));
+
+    delimited(tag("("), arguments, tag(")"))(s)?;
+
+    todo!()
+}
+
+/// Parse a macro call
+fn macro_call(s: &str) -> IResult<&str, &str> {
+    // @ followed by the name
+    let (s, name) = preceded(
+        tag("@"),
+        take_while(|c: char| c.is_alphanumeric() || c == '_'),
+    )(s)?;
+
+    // skip any whitespace
+    let (s, _) = take_while(char::is_whitespace)(s)?;
+
+    // either parse a string or argument list
+    let (s, argument) = alt((arg_list, string_literal))(s)?;
+
+    todo!()
+}
 
 pub(crate) struct Parser<'a> {
     row: usize,
