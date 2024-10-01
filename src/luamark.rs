@@ -29,10 +29,10 @@ print("Hello, world!")
 use mlua::{Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
-    bytes::{complete::{tag, take_till, take_until, take_while}, },
-    character::{complete::anychar, streaming::char},
-    combinator::success,
-    multi::{many1, separated_list0, separated_list1},
+    bytes::complete::{tag, take_till, take_until, take_while},
+    character::complete::anychar,
+    combinator::{map, peek, success},
+    multi::{count, many0_count, many1, many_till, separated_list0, separated_list1},
     sequence::{delimited, preceded, tuple},
     IResult,
 };
@@ -47,21 +47,31 @@ fn comment(s: &str) -> IResult<&str, &str> {
     delimited(tag("--"), take_until("\n"), tag("\n"))(s)
 }
 
-/// Parse a string literal
+/// Parse a string literal [=[ any ]=]
 fn string_literal(s: &str) -> IResult<&str, &str> {
-    // opening [==[
-    let (s, closing) = delimited(tag("["), take_while(|c| c == '='), tag("["))(s)?;
+    // opening string pattern
+    let (s, closing_count) = peek(delimited(tag("["), many0_count(tag("=")), tag("[")))(s)?;
 
-    // what to close with
-    let closing = format!("]{closing}]");
+    // parse the opening string pattern
+    let (s, _) = delimited(tag("["), count(tag("="), closing_count), tag("["))(s)?;
 
-    // read the string literal
-    let (s, literal) = take_until(closing.as_str())(s)?;
+    // where we started
+    let start = s;
 
-    // read the closing part
-    let (s, _) = tag(closing.as_str())(s)?;
+    // any character until we can get the closing tag
+    let (s, _) = many_till(
+        map(anychar, drop),
+        delimited(tag("]"), count(tag("="), closing_count), tag("]")),
+    )(s)?;
 
-    // done
+    // get the contained string
+    // this is an offset from the start
+    let literal = &start[..start.len() - s.len()];
+
+    // parse the closing tag
+    let (s, _) = delimited(tag("]"), count(tag("="), closing_count), tag("]"))(s)?;
+
+    // success
     success(literal)(s)
 }
 
