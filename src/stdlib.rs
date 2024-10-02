@@ -14,7 +14,6 @@ use rsass::{
     output::{Format, Style},
 };
 
-use crate::luamark::Parser;
 
 #[derive(Debug)]
 struct LuaLoader<'a>(Option<Function<'a>>);
@@ -201,7 +200,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     api.set(
         "luamark",
         lua.create_function(|lua, (string, commands): (String, Table)| {
-            Parser::parse(lua, commands, &string)
+            Ok(todo!()) // Parser::parse(lua, commands, &string)
         })?,
     )?;
 

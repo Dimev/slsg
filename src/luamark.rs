@@ -29,10 +29,13 @@ print("Hello, world!")
 use mlua::{Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till, take_until, take_while},
-    character::complete::anychar,
-    combinator::{map, peek, success},
-    multi::{count, many0_count, many1, many_till, separated_list0, separated_list1},
+    bytes::complete::{is_not, tag, take_till, take_until, take_while},
+    character::complete::{anychar, none_of},
+    combinator::{map, opt, peek, success},
+    multi::{
+        count, fold_many0, fold_many1, many0, many0_count, many1, many_till, separated_list0,
+        separated_list1,
+    },
     sequence::{delimited, preceded, tuple},
     IResult,
 };
@@ -75,14 +78,49 @@ fn string_literal(s: &str) -> IResult<&str, &str> {
     success(literal)(s)
 }
 
+/// Any of the argument characters we can find
+enum ArgChar<'a> {
+    Str(&'a str),
+    String(String),
+    Call(String),
+    Nothing,
+}
+
+/// Single argument for an argument list
+fn argument(s: &str) -> IResult<&str, String> {
+    let arg_char = map(is_not(","), ArgChar::Str);
+    let arg_comment = map(comment, |_| ArgChar::Nothing);
+    let arg_call = map(macro_call, |_| ArgChar::Call(String::new()));
+    let arg_literal = map(string_literal, |_| ArgChar::String(String::new()));
+
+    // collect the string
+    fold_many0(
+        alt((arg_literal, arg_call, arg_comment, arg_char)),
+        || String::new(),
+        |mut acc, item| match item {
+            ArgChar::Str(s) => {
+                acc.push_str(s);
+                acc
+            }
+            ArgChar::String(s) => {
+                acc.push_str(&s);
+                acc
+            }
+            ArgChar::Call(s) => {
+                acc.push_str(&s);
+                acc
+            }
+            ArgChar::Nothing => acc,
+        },
+    )(s)
+}
+
 /// Parse an argument list
-fn arg_list(s: &str) -> IResult<&str, &str> {
+fn arg_list(s: &str) -> IResult<&str, String> {
     let separator = tuple((tag(","), take_while(char::is_whitespace)));
-    let arguments = separated_list1(separator, take_while(|c| c != ','));
+    let arguments = separated_list1(separator, argument);
 
-    delimited(tag("("), arguments, tag(")"))(s)?;
-
-    todo!()
+    map(delimited(tag("("), arguments, tag(")")), |v| v.concat())(s)
 }
 
 /// Parse a macro call
@@ -97,184 +135,121 @@ fn macro_call(s: &str) -> IResult<&str, &str> {
     let (s, _) = take_while(char::is_whitespace)(s)?;
 
     // either parse a string or argument list
-    let (s, argument) = alt((arg_list, string_literal))(s)?;
+    let (s, argument) = alt((arg_list, map(string_literal, String::from)))(s)?;
 
-    todo!()
+    success("sus mogus")(s)
 }
 
-pub(crate) struct Parser<'a> {
-    row: usize,
-    column: usize,
-    remaining: &'a str,
-    lua: &'a Lua,
-    commands: Table<'a>,
+/// Luamark paragraph
+fn paragraph(s: &str) -> IResult<&str, ()> {
+    // line is any character, string literal or call that is not a newline
+    let line_char = map(is_not("\n"), ArgChar::Str);
+    let line_comment = map(tuple((tag("--"), take_until("\n"))), |_| ArgChar::Nothing);
+    let line_call = map(macro_call, |_| ArgChar::Call(String::new()));
+    let line_literal = map(string_literal, |_| ArgChar::String(String::new()));
+
+    let line = fold_many1(
+        alt((line_literal, line_call, line_comment, line_char)),
+        || String::new(),
+        |acc, item| acc,
+    );
+
+    // paragraph is multiple lines OR comments seperated by newlines
+    fold_many1(line, || (), |acc, item| acc)(s)
 }
 
-impl<'a> Parser<'a> {
-    pub(crate) fn parse(lua: &Lua, commands: Table, string: &str) -> Result<()> {
-        // make the parser
-        let parser = Parser {
-            row: 1,
-            column: 1,
-            remaining: string,
-            lua,
-            commands,
-        };
-
-        // start parsing
-
-        Ok(())
-    }
-
-    /// comment -- text \n
-    fn comment(&mut self) {
-        // skip the --
-        self.remaining = self.remaining.trim_start_matches("--");
-
-        // skip the rest that is not a newline
-        let mut chars = self.remaining.chars();
-        while chars.next().unwrap_or('\n') != '\n' {
-            self.remaining = chars.as_str();
-        }
-
-        // we already skipped the newline
-        self.column = 0;
-        self.row += 1;
-    }
-
-    /// Macro @name(arg1, arg2, arg3) or @name [[ string ]]
-    fn macro_call(&mut self) -> Option<Result<Value>> {
-        // skip the @
-        let mut rest = self.remaining.strip_prefix('@')?;
-        let mut row = self.row;
-        let mut column = self.column;
-
-        // read the name
-        let mut name = String::new();
-        let mut chars = rest.chars();
-        while let Some(c) = chars.next() {
-            rest = chars.as_str();
-            name.push(c);
-            column += 1;
-
-            // stop if the next character is not a name character
-            if !chars
-                .as_str()
-                .starts_with(|c: char| c.is_alphanumeric() || c == '_')
-            {
-                break;
-            }
-        }
-
-        // name needs at least one character
-        if name.len() == 0 {
-            return None;
-        }
-
-        // trim the whitespaces
-        let mut chars = rest.chars();
-        while let Some(c) = chars.next() {
-            rest = chars.as_str();
-            // stop if the next character is not a whitespace
-            if !chars.as_str().starts_with(char::is_whitespace) {
-                break;
-            }
-            // row
-            else if c == '\n' {
-                column = 0;
-                row += 1;
-            }
-            // column
-            else {
-                column += 1;
-            }
-        }
-
-        // now parse either a single string
-        let result: Result<Value> = if let Some(string) = self.string() {
-            // call the function
-            self.commands.call_method(&name, string)
-        }
-        // or an argument list
-        else if rest.starts_with('(') {
-            // trim starting (
-            rest = rest.trim_start_matches('(');
-            column += 1;
-
-            // read the arguments, seperated by ,
-            todo!();
-        }
-        // or no arguments, which isn't allowed
-        else {
-            return None;
-        };
-
-        // reset state
-        self.remaining = rest;
-        self.row = row;
-        self.column = column;
-
-        todo!()
-    }
-
-    /// String literal [[ ]]
-    fn string(&mut self) -> Option<String> {
-        // skip the opening [
-        let mut rest = self.remaining.strip_prefix('[')?;
-        let mut row = self.row;
-        let mut column = self.column;
-
-        // read the amount of =
-        let mut count = 0usize;
-        while rest.starts_with('[') {
-            rest = &rest[1..];
-            column += 1;
-            count += 1;
-        }
-
-        // read the other [
-        rest = rest.strip_prefix('[')?;
-
-        // what to expect for the closing bracket
-        let closing = format!(
-            "]{}]",
-            std::iter::repeat('=').take(count).collect::<String>()
-        );
-
-        let mut chars = rest.chars();
-        let mut string = String::new();
-        while let Some(c) = chars.next() {
-            // stop if we find the end
-            if chars.as_str().starts_with(&closing) {
-                column += closing.len();
-                break;
-            }
-            // next row if we see a newline
-            else if c == '\n' {
-                row += 1;
-                column = 0;
-            // next column
-            } else {
-                column += 1;
-            }
-
-            // add to the string
-            string.push(c);
-        }
-
-        // reset state
-        self.column = column;
-        self.row = row;
-        self.remaining = &chars.as_str()[closing.len()..];
-
-        // we found a string
-        Some(string)
-    }
-
-    /// Escaped backslash
-    fn escape(&mut self) {
-        todo!()
-    }
+/// Entire luamark file
+fn luamark(s: &str) -> IResult<&str, ()> {
+    // an entire luamark file is a number of paragraphs seperated by whitespace
+    map(
+        tuple((
+            separated_list0(
+                tuple((tag("\n"), take_while(|c: char| c.is_whitespace()))),
+                paragraph,
+            ),
+            opt(take_while(|c: char| c.is_whitespace())),
+        )),
+        |_| (),
+    )(s)
 }
 
-// TODO: test
+#[cfg(test)]
+mod tests {
+    use nom::Parser;
+
+    use super::*;
+    #[test]
+    fn comments() {
+        let s = "
+            -- first paragraph
+            Paragraph 1
+            test test test -- end of line comment
+            another line
+            before
+            -- comment
+            and after!
+        ";
+
+        assert_eq!(luamark.parse(s), Ok(("", ())));
+    }
+
+    #[test]
+    fn paragraphs() {
+        let s = "
+        -- first paragraph
+        Paragraph 1
+        test test test
+        another line
+
+        paragraph 2
+        more lines
+        before
+        -- comment inbetween
+        after
+
+        and another paragraph
+        line line line
+
+        -- start with another comment
+        more more more 
+        paragraph!
+        ";
+
+        assert_eq!(luamark.parse(s), Ok(("", ())));
+    }
+
+    #[test]
+    fn literals() {
+        let s = r#"
+            paragraph 1
+            line
+            \[ escape! \\
+
+            paragraph 2
+            [[ has a literal in it! ]]
+            [==[ and a literal with a [[ literal ]] in it! ]==]
+            [[ inside literals, we skip -- comments and escapes \\ \[ ]]
+        "#;
+
+        assert_eq!(luamark.parse(s), Ok(("", ())));
+    }
+
+    #[test]
+    fn macro_calls() {
+        let s = "
+            @title(This is a test)
+            @description [[ This is a short test for macros ]]
+            -- we can nest them too
+            @table(
+                line 1,
+                line 2,
+                -- comment!
+                line 3,
+                [[ line 4 ]],
+                @line(5, 6, 7)
+            )
+        ";
+
+        assert_eq!(luamark.parse(s), Ok(("", ())));
+    }
+}
