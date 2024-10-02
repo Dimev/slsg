@@ -68,17 +68,15 @@ fn string_literal(s: &str) -> IResult<&str, &str> {
     )(s)?;
 
     // get the contained string
-    // this is an offset from the start
-    let literal = &start[..start.len() - s.len()];
-
-    // parse the closing tag
-    let (s, _) = delimited(tag("]"), count(tag("="), closing_count), tag("]"))(s)?;
+    // this is an offset from the start + the closing ]==]
+    let literal = &start[..start.len() - s.len() - closing_count - 2];
 
     // success
     success(literal)(s)
 }
 
 /// Any of the argument characters we can find
+#[derive(Debug)]
 enum ArgChar<'a> {
     Str(&'a str),
     String(String),
@@ -88,7 +86,7 @@ enum ArgChar<'a> {
 
 /// Single argument for an argument list
 fn argument(s: &str) -> IResult<&str, String> {
-    let arg_char = map(is_not(","), ArgChar::Str);
+    let arg_char = map(is_not(",)"), ArgChar::Str);
     let arg_comment = map(comment, |_| ArgChar::Nothing);
     let arg_call = map(macro_call, |_| ArgChar::Call(String::new()));
     let arg_literal = map(string_literal, |_| ArgChar::String(String::new()));
@@ -118,9 +116,9 @@ fn argument(s: &str) -> IResult<&str, String> {
 /// Parse an argument list
 fn arg_list(s: &str) -> IResult<&str, String> {
     let separator = tuple((tag(","), take_while(char::is_whitespace)));
-    let arguments = separated_list1(separator, argument);
+    let arguments = separated_list0(separator, argument);
 
-    map(delimited(tag("("), arguments, tag(")")), |v| v.concat())(s)
+    map(delimited(tag("("), arguments, tag(")")), |v| v.join(", "))(s)
 }
 
 /// Parse a macro call
@@ -137,7 +135,7 @@ fn macro_call(s: &str) -> IResult<&str, &str> {
     // either parse a string or argument list
     let (s, argument) = alt((arg_list, map(string_literal, String::from)))(s)?;
 
-    success("sus mogus")(s)
+    success("")(s)
 }
 
 /// Luamark paragraph
@@ -151,7 +149,10 @@ fn paragraph(s: &str) -> IResult<&str, ()> {
     let line = fold_many1(
         alt((line_literal, line_call, line_comment, line_char)),
         || String::new(),
-        |acc, item| acc,
+        |acc, item| {
+            item;
+            acc
+        },
     );
 
     // paragraph is multiple lines OR comments seperated by newlines
@@ -161,15 +162,19 @@ fn paragraph(s: &str) -> IResult<&str, ()> {
 /// Entire luamark file
 fn luamark(s: &str) -> IResult<&str, ()> {
     // an entire luamark file is a number of paragraphs seperated by whitespace
-    map(
-        tuple((
-            separated_list0(
-                tuple((tag("\n"), take_while(|c: char| c.is_whitespace()))),
-                paragraph,
-            ),
-            opt(take_while(|c: char| c.is_whitespace())),
-        )),
+    let file = map(
+        separated_list0(
+            tuple((tag("\n"), take_while(|c: char| c.is_whitespace()))),
+            paragraph,
+        ),
         |_| (),
+    );
+
+    // remove any leading or trailing whitespace
+    delimited(
+        take_while(|c: char| c.is_whitespace()),
+        file,
+        take_while(|c: char| c.is_whitespace()),
     )(s)
 }
 
@@ -178,6 +183,68 @@ mod tests {
     use nom::Parser;
 
     use super::*;
+
+    #[test]
+    fn prim_comment() {
+        assert_eq!(
+            comment.parse("-- a comment\nrest"),
+            Ok(("rest", " a comment"))
+        );
+    }
+
+    #[test]
+    fn prim_string_literal() {
+        assert_eq!(
+            string_literal.parse("[[ string! ]] rest"),
+            Ok((" rest", " string! "))
+        );
+
+        assert_eq!(
+            string_literal.parse("[=[ [[string!]] ]=] rest"),
+            Ok((" rest", " [[string!]] "))
+        );
+    }
+
+    #[test]
+    fn prim_argument() {
+        assert_eq!(argument.parse("arg1"), Ok(("", String::from("arg1"))));
+    }
+
+    #[test]
+    fn prim_arg_list() {
+        assert_eq!(
+            arg_list.parse("(arg1) rest"),
+            Ok((" rest", String::from("arg1")))
+        );
+        assert_eq!(
+            arg_list.parse("(arg1, arg2) rest"),
+            Ok((" rest", String::from("arg1, arg2")))
+        );
+    }
+
+    #[test]
+    fn prim_macro_call() {
+        assert_eq!(macro_call.parse("@name [[ arg ]] rest"), Ok((" rest", "")));
+
+        assert_eq!(
+            macro_call.parse("@name(arg1, arg2) rest"),
+            Ok((" rest", ""))
+        );
+    }
+
+    #[test]
+    fn prim_macro_call_recursive() {
+        assert_eq!(
+            macro_call.parse("@name(arg1, @name2 [[ arg2 ]], @name(arg3, arg4) -- comment\n) rest"),
+            Ok((" rest", ""))
+        );
+    }
+
+    #[test]
+    fn prim_paragraph() {
+        todo!()
+    }
+
     #[test]
     fn comments() {
         let s = "
