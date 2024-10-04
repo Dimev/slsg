@@ -29,16 +29,93 @@ print("Hello, world!")
 use mlua::{Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_till, take_until, take_while},
+    bytes::complete::{is_a, is_not, tag, take_till, take_till1, take_until, take_while},
     character::complete::{anychar, none_of},
-    combinator::{map, opt, peek, success},
+    combinator::{map, not, opt, peek, success},
     multi::{
         count, fold_many0, fold_many1, many0, many0_count, many1, many_till, separated_list0,
         separated_list1,
     },
-    sequence::{delimited, preceded, tuple},
+    sequence::{delimited, pair, preceded, tuple},
     IResult,
 };
+
+/// AST for luamark
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Ast<'a> {
+    /// Entire document, consists of multiple paragraphs
+    Document(Vec<Ast<'a>>),
+
+    /// Paragraph
+    Paragraph(Vec<Ast<'a>>),
+
+    /// Normal text
+    Text(String),
+
+    /// Normal text, but as a reference
+    TextRef(&'a str),
+
+    /// Single character
+    Char(char),
+
+    /// A number of items
+    Many(Vec<Ast<'a>>),
+
+    /// Macro call, string argument
+    CallString(&'a str, &'a str),
+
+    /// Macro call, normal arguments
+    CallMany(&'a str, Vec<Ast<'a>>),
+}
+
+/// Any of the argument characters we can find
+#[derive(Debug)]
+enum TextElem<'a> {
+    Str(&'a str),
+    String(String),
+    Char(char),
+    Value(Ast<'a>),
+    Nothing,
+}
+
+impl<'a> TextElem<'a> {
+    /// Create a new item stack
+    fn new() -> (String, Vec<Ast<'a>>) {
+        (String::new(), Vec::new())
+    }
+
+    /// Combine the item stack
+    fn combine(acc: (String, Vec<Ast<'a>>), item: TextElem<'a>) -> (String, Vec<Ast<'a>>) {
+        let (mut text, mut stack) = acc;
+        match item {
+            TextElem::Str(s) => {
+                text.push_str(s);
+                (text, stack)
+            }
+            TextElem::String(s) => {
+                text.push_str(&s);
+                (text, stack)
+            }
+            TextElem::Char(c) => {
+                text.push(c);
+                (text, stack)
+            }
+            TextElem::Value(v) => {
+                stack.push(v);
+                (String::new(), stack)
+            }
+            TextElem::Nothing => (text, stack),
+        }
+    }
+
+    fn finish(mut acc: (String, Vec<Ast<'a>>)) -> Ast<'a> {
+        if acc.0.len() > 0 {
+            acc.1.push(Ast::Text(acc.0));
+        }
+
+        Ast::Many(acc.1)
+    }
+}
 
 /// Escaped character
 fn escaped(s: &str) -> IResult<&str, char> {
@@ -47,7 +124,7 @@ fn escaped(s: &str) -> IResult<&str, char> {
 
 /// Parse a comment -- any \n
 fn comment(s: &str) -> IResult<&str, &str> {
-    delimited(tag("--"), take_until("\n"), tag("\n"))(s)
+    delimited(tag("--"), take_until("\n"), peek(tag("\n")))(s)
 }
 
 /// Parse a string literal [=[ any ]=]
@@ -75,54 +152,34 @@ fn string_literal(s: &str) -> IResult<&str, &str> {
     success(literal)(s)
 }
 
-/// Any of the argument characters we can find
-#[derive(Debug)]
-enum ArgChar<'a> {
-    Str(&'a str),
-    String(String),
-    Call(String),
-    Nothing,
-}
-
 /// Single argument for an argument list
-fn argument(s: &str) -> IResult<&str, String> {
-    let arg_char = map(is_not(",)"), ArgChar::Str);
-    let arg_comment = map(comment, |_| ArgChar::Nothing);
-    let arg_call = map(macro_call, |_| ArgChar::Call(String::new()));
-    let arg_literal = map(string_literal, |_| ArgChar::String(String::new()));
+fn argument(s: &str) -> IResult<&str, Ast> {
+    let arg_string = map(is_not(",)\\@"), TextElem::Str);
+    let arg_escaped = map(escaped, TextElem::Char);
+    let arg_comment = map(comment, |_| TextElem::Nothing);
+    let arg_call = map(macro_call, TextElem::Value);
+    let arg_literal = map(string_literal, |s| TextElem::Value(Ast::TextRef(s)));
 
     // collect the string
-    fold_many0(
-        alt((arg_literal, arg_call, arg_comment, arg_char)),
-        || String::new(),
-        |mut acc, item| match item {
-            ArgChar::Str(s) => {
-                acc.push_str(s);
-                acc
-            }
-            ArgChar::String(s) => {
-                acc.push_str(&s);
-                acc
-            }
-            ArgChar::Call(s) => {
-                acc.push_str(&s);
-                acc
-            }
-            ArgChar::Nothing => acc,
-        },
-    )(s)
+    let arg = fold_many1(
+        alt((arg_literal, arg_call, arg_comment, arg_escaped, arg_string)),
+        TextElem::new,
+        TextElem::combine,
+    );
+
+    map(arg, TextElem::finish)(s)
 }
 
 /// Parse an argument list
-fn arg_list(s: &str) -> IResult<&str, String> {
+fn arg_list(s: &str) -> IResult<&str, Vec<Ast>> {
     let separator = tuple((tag(","), take_while(char::is_whitespace)));
     let arguments = separated_list0(separator, argument);
 
-    map(delimited(tag("("), arguments, tag(")")), |v| v.join(", "))(s)
+    delimited(tag("("), arguments, tag(")"))(s)
 }
 
 /// Parse a macro call
-fn macro_call(s: &str) -> IResult<&str, &str> {
+fn macro_call(s: &str) -> IResult<&str, Ast> {
     // @ followed by the name
     let (s, name) = preceded(
         tag("@"),
@@ -133,30 +190,44 @@ fn macro_call(s: &str) -> IResult<&str, &str> {
     let (s, _) = take_while(char::is_whitespace)(s)?;
 
     // either parse a string or argument list
-    let (s, argument) = alt((arg_list, map(string_literal, String::from)))(s)?;
-
-    success("")(s)
+    alt((
+        map(arg_list, |l| Ast::CallMany(name, l)),
+        map(string_literal, |s| Ast::CallString(name, s)),
+    ))(s)
 }
 
 /// Luamark paragraph
-fn paragraph(s: &str) -> IResult<&str, ()> {
+fn paragraph(s: &str) -> IResult<&str, Ast> {
     // line is any character, string literal or call that is not a newline
-    let line_char = map(is_not("\n"), ArgChar::Str);
-    let line_comment = map(tuple((tag("--"), take_until("\n"))), |_| ArgChar::Nothing);
-    let line_call = map(macro_call, |_| ArgChar::Call(String::new()));
-    let line_literal = map(string_literal, |_| ArgChar::String(String::new()));
-
-    let line = fold_many1(
-        alt((line_literal, line_call, line_comment, line_char)),
-        || String::new(),
-        |acc, item| {
-            item;
-            acc
-        },
+    let line_string = map(is_not("\n\\@-["), TextElem::Str);
+    let line_escaped = map(escaped, TextElem::Char);
+    let line_comment = map(tuple((tag("--"), take_until("\n"))), |_| TextElem::Nothing);
+    let line_call = map(macro_call, TextElem::Value);
+    let line_literal = map(string_literal, |s| TextElem::Value(Ast::TextRef(s)));
+    let line_progress = map(
+        tuple((
+            tag("\n"),
+            take_while(|c: char| c.is_whitespace() && c != '\n'),
+            peek(is_not("\n"))
+        )),
+        |_| TextElem::Str("\n"),
     );
 
-    // paragraph is multiple lines OR comments seperated by newlines
-    fold_many1(line, || (), |acc, item| acc)(s)
+    map(
+        fold_many1(
+            alt((
+                line_literal,
+                line_call,
+                line_comment,
+                line_escaped,
+                line_string,
+                line_progress,
+            )),
+            TextElem::new,
+            TextElem::combine,
+        ),
+        TextElem::finish,
+    )(s)
 }
 
 /// Entire luamark file
@@ -188,7 +259,7 @@ mod tests {
     fn prim_comment() {
         assert_eq!(
             comment.parse("-- a comment\nrest"),
-            Ok(("rest", " a comment"))
+            Ok(("\nrest", " a comment"))
         );
     }
 
@@ -207,42 +278,83 @@ mod tests {
 
     #[test]
     fn prim_argument() {
-        assert_eq!(argument.parse("arg1"), Ok(("", String::from("arg1"))));
+        assert_eq!(
+            argument.parse("arg1"),
+            Ok(("", Ast::Many(vec![Ast::Text(String::from("arg1"))])))
+        );
     }
 
     #[test]
     fn prim_arg_list() {
         assert_eq!(
             arg_list.parse("(arg1) rest"),
-            Ok((" rest", String::from("arg1")))
+            Ok((
+                " rest",
+                vec![Ast::Many(vec![Ast::Text(String::from("arg1"))])]
+            ))
         );
         assert_eq!(
             arg_list.parse("(arg1, arg2) rest"),
-            Ok((" rest", String::from("arg1, arg2")))
+            Ok((
+                " rest",
+                vec![
+                    Ast::Many(vec![Ast::Text(String::from("arg1"))]),
+                    Ast::Many(vec![Ast::Text(String::from("arg2"))])
+                ]
+            ))
         );
     }
 
     #[test]
     fn prim_macro_call() {
-        assert_eq!(macro_call.parse("@name [[ arg ]] rest"), Ok((" rest", "")));
+        assert_eq!(
+            macro_call.parse("@name1234_() rest"),
+            Ok((" rest", Ast::CallMany("name1234_", Vec::new())))
+        );
+
+        assert_eq!(
+            macro_call.parse("@name [[ arg ]] rest"),
+            Ok((" rest", Ast::CallString("name", " arg ")))
+        );
 
         assert_eq!(
             macro_call.parse("@name(arg1, arg2) rest"),
-            Ok((" rest", ""))
+            Ok((
+                " rest",
+                Ast::CallMany(
+                    "name",
+                    vec![
+                        Ast::Many(vec![Ast::Text(String::from("arg1"))]),
+                        Ast::Many(vec![Ast::Text(String::from("arg2"))])
+                    ]
+                )
+            ))
         );
     }
 
     #[test]
     fn prim_macro_call_recursive() {
         assert_eq!(
-            macro_call.parse("@name(arg1, @name2 [[ arg2 ]], @name(arg3, arg4) -- comment\n) rest"),
-            Ok((" rest", ""))
+            macro_call.parse("@name(arg1, --comment\n @name2 [[ arg2 ]]) rest"),
+            Ok((
+                " rest",
+                Ast::CallMany(
+                    "name",
+                    vec![
+                        Ast::Many(vec![Ast::Text(String::from("arg1"))]),
+                        Ast::Many(vec![Ast::CallString("name2", " arg2 ")])
+                    ]
+                )
+            ))
         );
     }
 
     #[test]
-    fn prim_paragraph() {
-        todo!()
+    fn prim_paragraph_text() {
+        assert_eq!(
+            paragraph.parse("line 1\nline 2\n-- comment\nline 3\n\nrest"),
+            Ok(("\nrest", Ast::TextRef("")))
+        );
     }
 
     #[test]
