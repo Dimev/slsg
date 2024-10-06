@@ -1,18 +1,19 @@
-@article(Hello world!, 1-1-1970)
+@title Hello world!
+@date 1-1-1970
 
--- Comment
+% we have a comment!
 This is a paragraph.
-It consists of multiple lines
+It consists of multiple lines.
 
 This is a second paragraph
-Again, multiple lines
+again, multiple lines
 
-@section(And a third paragraph)
-Now with a header if it's set up that way
+@section And the third paragraph
+Now with a header!
+We can even have some sample code, see below!
 
-@code(lua, [[
--- and some lua sample code!
-print("Hello, world!")
-]])
-
+@begin@code lua
+-- Say hello again!
+print "Hello, world!"
+@end@code
 
