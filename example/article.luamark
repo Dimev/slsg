@@ -4,6 +4,8 @@
 % we have a comment!
 This is a paragraph.
 It consists of multiple lines.
+And an \% escaped character!
+\% is normally reserved for comments
 
 This is a second paragraph
 again, multiple lines
@@ -15,5 +17,5 @@ We can even have some sample code, see below!
 @begin@code lua
 -- Say hello again!
 print "Hello, world!"
+print "In here, everything is verbatim, so we can print characters like % just fine!"
 @end@code
-

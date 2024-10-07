@@ -20,7 +20,7 @@ print 'Hello world!'
 @end@code
 */
 
-use mlua::{Lua, Table, TableExt, Value};
+use mlua::{Error, Lua, Table, TableExt, Value};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
@@ -56,8 +56,12 @@ pub enum Node {
 
 impl Node {
     /// Makes a node from a string
-    pub fn from_str(s: &str) -> Result<Node, ()> {
-        todo!()
+    pub fn from_str(s: &str) -> Result<Self, Error> {
+        match document(s).finish() {
+            // TODO: does not fail if the input is not entirely consumed
+            Ok((_, node)) => Ok(dbg!(node)),
+            Err(e) => Err(mlua::Error::external(e.to_string())),
+        }
     }
 }
 
@@ -104,8 +108,6 @@ fn inline_command(s: &str) -> IResult<&str, Node> {
         take_till(|c: char| c.is_whitespace() || "([{<".contains(c)),
     )(s)?;
 
-    // TODO: better escaping? [==[ ]==] style?
-
     // get the inner arguments
     let (s, arguments) = alt((
         inline_argument('(', ')'),
@@ -127,9 +129,9 @@ fn line_command(s: &str) -> IResult<&str, Node> {
         terminated(
             pair(
                 // parse the name
-                preceded(tag("@"), take_till(char::is_whitespace)),
+                preceded(tag("@"), take_till1(char::is_whitespace)),
                 // parse the rest of the argument
-                many0(alt((is_not("\n%"), escaped))),
+                preceded(space0, many0(alt((is_not("\n%"), escaped)))),
             ),
             opt(comment),
         ),
@@ -154,7 +156,7 @@ fn block_command(s: &str) -> IResult<&str, Node> {
 
     // arguments
     let (s, arguments) = terminated(
-        many0(alt((is_not("\n%"), escaped))),
+        preceded(space0, many0(alt((is_not("\n%"), escaped)))),
         pair(opt(comment), tag("\n")),
     )(s)?;
 
@@ -181,13 +183,27 @@ fn block_command(s: &str) -> IResult<&str, Node> {
 
 /// Parse a single line
 fn line(s: &str) -> IResult<&str, Vec<Node>> {
-    let line_content = many0(alt((
-        inline_command,
-        block_command,
-        map(alt((escaped, is_not("\n\\@%"))), |s| {
-            Node::Text(s.to_string())
-        }),
-    )));
+    let line_content = fold_many0(
+        alt((
+            block_command,
+            inline_command,
+            map(alt((escaped, is_not("\n\\@%"))), |s| {
+                Node::Text(s.to_string())
+            }),
+        )),
+        || Vec::new(),
+        |mut acc, item| {
+            // if the last item on the accumulator is text, append it directly
+            match (acc.last_mut(), item) {
+                (Some(Node::Text(t1)), Node::Text(t2)) => {
+                    t1.push_str(&t2);
+                }
+                (_, i) => acc.push(i),
+            };
+
+            acc
+        },
+    );
     delimited(
         // make sure we have content on this line
         pair(space0, peek(not(newline))),
@@ -211,17 +227,24 @@ enum OneMore {
 fn paragraph(s: &str) -> IResult<&str, Node> {
     // paragraph consists of many lines
     let (s, items) = fold_many1(
-        alt((map(line_command, OneMore::One), map(line, OneMore::More))),
+        alt((map(line, OneMore::More), map(line_command, OneMore::One))),
         || Vec::new(),
         |mut acc, item| match item {
             OneMore::One(x) => {
                 acc.push(x);
                 acc
             }
-            OneMore::More(mut x) => {
-                acc.append(&mut x);
-                acc
-            }
+            OneMore::More(x) => match (acc.last_mut(), &x.as_slice()) {
+                (Some(Node::Text(t1)), &[Node::Text(t2)]) => {
+                    t1.push('\n');
+                    t1.push_str(&t2);
+                    acc
+                }
+                (_, x) => {
+                    acc.extend_from_slice(&x);
+                    acc
+                }
+            },
         },
     )(s)?;
 
@@ -312,7 +335,7 @@ mod tests {
                 "rest",
                 Node::Command {
                     name: "command".to_string(),
-                    arguments: " a b c".to_string(),
+                    arguments: "a b c".to_string(),
                 }
             ))
         );
@@ -323,7 +346,7 @@ mod tests {
                 "rest",
                 Node::Command {
                     name: "command".to_string(),
-                    arguments: " a b \\) \\\\ c".to_string(),
+                    arguments: "a b \\) \\\\ c".to_string(),
                 }
             ))
         );
@@ -334,7 +357,7 @@ mod tests {
                 "rest",
                 Node::Command {
                     name: "command".to_string(),
-                    arguments: " a b ".to_string(),
+                    arguments: "a b ".to_string(),
                 }
             ))
         );
@@ -349,6 +372,13 @@ mod tests {
         assert_eq!(
             line.parse("Hello world!\nrest"),
             Ok(("rest", vec![Node::Text("Hello world!".to_string())]))
+        );
+        assert_eq!(
+            line.parse("Hello world!\\% not a comment!\nrest"),
+            Ok((
+                "rest",
+                vec![Node::Text("Hello world!% not a comment!".to_string())]
+            ))
         );
         assert_eq!(
             line.parse("  Hello world!\nrest"),
@@ -393,11 +423,22 @@ mod tests {
                     Node::Text("Hello ".to_string()),
                     Node::Block {
                         name: "command".to_string(),
-                        arguments: " a b c".to_string(),
+                        arguments: "a b c".to_string(),
                         content: "verbatim ".to_string()
                     },
                     Node::Text(" after ".to_string())
                 ]
+            ))
+        );
+        assert_eq!(
+            line.parse("@begin@command a b c\nverbatim\n@end@command\nrest"),
+            Ok((
+                "rest",
+                vec![Node::Block {
+                    name: "command".to_string(),
+                    arguments: "a b c".to_string(),
+                    content: "verbatim\n".to_string()
+                },]
             ))
         );
         assert!(line.parse("  \t  \n").is_err());
@@ -420,7 +461,7 @@ mod tests {
                 " rest",
                 Node::Block {
                     name: "command".to_string(),
-                    arguments: " a b c".to_string(),
+                    arguments: "a b c".to_string(),
                     content: "verbatim \\ @h % hi\n".to_string()
                 }
             ))
@@ -431,7 +472,7 @@ mod tests {
                 " rest",
                 Node::Block {
                     name: "command".to_string(),
-                    arguments: " a b c".to_string(),
+                    arguments: "a b c".to_string(),
                     content: "verbatim \\ @end@command @h % hi\n".to_string()
                 }
             ))
@@ -440,6 +481,7 @@ mod tests {
 
     #[test]
     fn parse_paragraph() {
+        // TODO; check for right output!
         let par = r#"Open!
             This is a single paragraph
             We have: %comments
@@ -461,6 +503,8 @@ mod tests {
 
     #[test]
     fn parse_document() {
+        // TODO: test to see if all items occur here
+        // Also tes
         let doc = r#"
 
             % we start with a comment

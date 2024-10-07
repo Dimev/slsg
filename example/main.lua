@@ -12,6 +12,9 @@ html {
 }
 ]]
 
+local article = site.read 'article.luamark'
+site.luamark_ast(article)
+
 -- Make the html page
 -- building it like this minifies the html,
 -- and h automatically adds the DOCTYPE

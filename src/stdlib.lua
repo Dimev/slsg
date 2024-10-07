@@ -39,6 +39,9 @@ api.latex_to_mathml = internal.latex_to_mathml
 -- sass
 api.sass = internal.sass
 
+-- luamark
+api.luamark_ast = internal.luamark_ast
+
 -- TODO
 -- parser
 -- highlighting
