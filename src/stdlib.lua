@@ -41,6 +41,7 @@ api.sass = internal.sass
 
 -- luamark
 api.luamark_ast = internal.luamark_ast
+api.luamark_run = internal.luamark_run
 
 -- TODO
 -- parser

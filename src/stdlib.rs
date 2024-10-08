@@ -200,11 +200,20 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     // luamark parser
     api.set(
         "luamark_ast",
-        lua.create_function(|lua, string: String| {
-            Node::from_str(&string)?;
-            Ok(()) // Parser::parse(lua, commands, &string)
+        lua.create_function(|lua, string: String| Node::from_str(&string)?.to_lua(lua))?,
+    )?;
+
+    // luamark parser, run the code
+    api.set(
+        "luamark_run",
+        lua.create_function(|lua, (string, commands): (String, Table)| {
+            Node::from_str(&string)?.run_lua(lua, &commands)
         })?,
     )?;
+
+    // TODO: slugify
+    // TODO: clean up naming
+    // TODO: syntax highlighting
 
     Ok(api)
 }

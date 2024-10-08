@@ -1,26 +1,4 @@
-/*
-
-Features:
-Comments: started with %
-Commands: started with @name, begin of the line means it's parsed on all lines,
-    mid of the line means it needs to be parsed between opening and closing brackets
-Blocks: started with @begin@name, closed with @end@name, gives the entire content back verbatim
-    Can have optional third @ that is ignored in case there needs to be an extra tag
-
-Example:
-% this is a comment!
-@article Hello world!
-@section Paragraph start!
-This is a paragraph
-and here is code with @bold(Bold text!)
-
-@begin@code lua
--- some lua sample code!
-print 'Hello world!'
-@end@code
-*/
-
-use mlua::{Error, Lua, Table, TableExt, Value};
+use mlua::{Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
@@ -28,7 +6,7 @@ use nom::{
     combinator::{map, not, opt, peek, success},
     multi::{fold_many0, fold_many1, many0, separated_list0},
     sequence::{delimited, pair, preceded, terminated},
-    Err, Finish, IResult, Parser,
+    Finish, IResult,
 };
 
 /// AST node for luamark
@@ -56,11 +34,81 @@ pub enum Node {
 
 impl Node {
     /// Makes a node from a string
-    pub fn from_str(s: &str) -> Result<Self, Error> {
+    pub fn from_str(s: &str) -> Result<Self> {
         match document(s).finish() {
-            // TODO: does not fail if the input is not entirely consumed
-            Ok((_, node)) => Ok(dbg!(node)),
+            Ok(("", node)) => Ok(node),
+            Ok((rest, _)) => Err(mlua::Error::external(format!(
+                "Parser did not complete: {rest}"
+            ))),
             Err(e) => Err(mlua::Error::external(e.to_string())),
+        }
+    }
+
+    /// Convert a node to lua values
+    pub fn to_lua(self, lua: &Lua) -> Result<Value> {
+        match self {
+            Self::Document(nodes) => {
+                let table = lua.create_table()?;
+                for node in nodes {
+                    table.push(node.to_lua(lua)?)?;
+                }
+                Ok(Value::Table(table))
+            }
+            Self::Paragraph(nodes) => {
+                let table = lua.create_table()?;
+                table.set("type", "paragraph")?;
+                for node in nodes {
+                    table.push(node.to_lua(lua)?)?;
+                }
+                Ok(Value::Table(table))
+            }
+            Self::Block {
+                name,
+                arguments,
+                content,
+            } => {
+                let table = lua.create_table()?;
+                table.set("type", "block")?;
+                table.set("name", name)?;
+                table.set("arguments", arguments)?;
+                table.set("content", content)?;
+                Ok(Value::Table(table))
+            }
+            Self::Command { name, arguments } => {
+                let table = lua.create_table()?;
+                table.set("type", "command")?;
+                table.set("name", name)?;
+                table.set("arguments", arguments)?;
+                Ok(Value::Table(table))
+            }
+            Self::Text(t) => Ok(Value::String(lua.create_string(t)?)),
+        }
+    }
+
+    /// Run the commands in the parser
+    pub fn run_lua<'a>(self, lua: &'a Lua, commands: &Table<'a>) -> Result<Value<'a>> {
+        match self {
+            Self::Document(nodes) => {
+                let arguments = lua.create_table()?;
+                for node in nodes {
+                    arguments.push(node.run_lua(lua, commands)?)?;
+                }
+                commands.call_method("document", arguments)
+            }
+            Self::Paragraph(nodes) => {
+                let arguments = lua.create_table()?;
+                for node in nodes {
+                    arguments.push(node.run_lua(lua, commands)?)?;
+                }
+                commands.call_method("paragraph", arguments)
+            }
+            Self::Block {
+                name,
+                arguments,
+                content,
+            } => commands.call_method(&name, (arguments, content)),
+            Self::Command { name, arguments } => commands.call_method(&name, arguments),
+            Self::Text(t) => commands.call_method("text", t),
         }
     }
 }
