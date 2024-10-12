@@ -1,4 +1,4 @@
-use mlua::{Lua, Result, Table, TableExt, Value};
+use mlua::{ErrorContext, Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
@@ -8,6 +8,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
     Finish, IResult,
 };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// AST node for luamark
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -111,6 +112,240 @@ impl Node {
             Self::Text(t) => commands.call_method("text", t),
         }
     }
+}
+
+#[derive(Copy, Clone)]
+struct Span<'a> {
+    string: &'a str,
+    row: usize,
+    col: usize,
+}
+
+impl<'a> Span<'a> {
+    fn new(s: &'a str) -> Self {
+        Self {
+            string: s,
+            row: 1,
+            col: 1,
+        }
+    }
+
+    /// Take a pattern
+    fn take_one(self, pattern: &str) -> Option<(Self, &str)> {
+        if self.string.starts_with(pattern) {
+            Some((
+                Self {
+                    string: &self.string[pattern.len()..],
+                    row: self.row,
+                    col: pattern.width_cjk(),
+                },
+                pattern,
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Take any of the next characters
+    fn take_any_one(self, any: &[char]) -> Option<(Self, char)> {
+        for c in any.into_iter() {
+            if self.string.starts_with(*c) {
+                return Some((
+                    Self {
+                        string: &self.string[c.len_utf8()..],
+                        row: self.row,
+                        col: self.col + c.width_cjk().unwrap_or(0),
+                    },
+                    *c,
+                ));
+            }
+        }
+
+        None
+    }
+
+    /// Take until the predicate is true
+    fn take_until<F: FnMut(char) -> bool>(self, predicate: F) -> Option<(Self, &'a str)> {
+        let mid = self.string.find(predicate).filter(|mid| mid > &0)?;
+        let (left, right) = self.string.split_at(mid);
+        let (row, col) = left
+            .chars()
+            .fold((self.row, self.col), |(row, col), c| match c {
+                '\t' => (row, col + 4),
+                '\n' => (row, 1),
+                _ => (row, col + c.width_cjk().unwrap_or(0)),
+            });
+
+        Some((
+            Self {
+                string: right,
+                row,
+                col,
+            },
+            left,
+        ))
+    }
+
+    /// Take untill we find the pattern
+    fn take_till_pattern(self, pattern: &str) -> Option<(Self, &'a str)> {
+        let mid = self.string.find(pattern).filter(|mid| mid > &0)?;
+        let (left, right) = self.string.split_at(mid);
+        let (row, col) = left
+            .chars()
+            .fold((self.row, self.col), |(row, col), c| match c {
+                '\t' => (row, col + 4),
+                '\n' => (row, 1),
+                _ => (row, col + c.width_cjk().unwrap_or(0)),
+            });
+
+        Some((
+            Self {
+                string: right,
+                row,
+                col,
+            },
+            left,
+        ))
+    }
+
+    /// Take untill we find any of the characters
+    fn take_till_any(self, pattern: &[char]) -> Option<(Self, &'a str)> {
+        let mid = self.string.find(pattern).filter(|mid| mid > &0)?;
+        let (left, right) = self.string.split_at(mid);
+        let (row, col) = left
+            .chars()
+            .fold((self.row, self.col), |(row, col), c| match c {
+                '\t' => (row, col + 4),
+                '\n' => (row, 1),
+                _ => (row, col + c.width_cjk().unwrap_or(0)),
+            });
+
+        Some((
+            Self {
+                string: right,
+                row,
+                col,
+            },
+            left,
+        ))
+    }
+}
+
+fn before<
+    'a,
+    T1,
+    T2,
+    F1: FnMut(Span<'a>) -> Option<(Span<'a>, T1)>,
+    F2: FnMut(Span<'a>) -> Option<(Span<'a>, T2)>,
+>(
+    mut f1: F1,
+    mut f2: F2,
+) -> impl FnMut(Span<'a>) -> Option<(Span<'a>, T2)> {
+    move |s| {
+        let (s, _) = f1(s)?;
+        f2(s)
+    }
+}
+
+fn parse_document<'a>(lua: &'a Lua, string: &str, macros: Table<'a>) -> Result<Value<'a>> {
+    let span = Span::new(string);
+
+    // skip opening whitespace
+    let mut span = span
+        .take_until(|c| !c.is_whitespace())
+        .map(|x| x.0)
+        .unwrap_or(span);
+
+    // document so far
+    let mut document = lua.create_table()?;
+
+    // string so far
+    let mut accumulator = String::new();
+
+    // all values in this paragraph
+    let mut values = lua.create_table()?;
+
+    // parse paragraph
+    while let Some((s, _)) = span.take_until(|c| !c.is_whitespace()) {
+        // TODO
+        // read text
+        if let Some((s, t)) = s.take_till_any(&['\n', '\\', '%', '@']) {
+            accumulator.push_str(t);
+            span = s;
+        }
+        // read escaped
+        else if let Some((s, t)) =
+            before(|s| s.take_one("\\"), |s| s.take_until(char::is_whitespace))(s)
+        {
+            accumulator.push_str(t);
+            span = s;
+        }
+        // read inline macro
+        else if let Some((s, name)) = before(
+            |s| s.take_one("@"),
+            |s| s.take_until(|c| "<{([|$".contains(c) || c.is_whitespace()),
+        )(s)
+        {
+            // what the opening is
+            let (s, closing) = s
+                .take_any_one(&['<', '{', '(', '[', '|', '$'])
+                .ok_or_else(|| mlua::Error::external("sus mogus"))?;
+            span = s;
+
+            // find the closing character
+            let closing = match closing {
+                '<' => '>',
+                '{' => '}',
+                ')' => ')',
+                '[' => ']',
+                x => x,
+            };
+
+            // content of the macro
+            let mut argument = String::new();
+
+            // take until we get the closing one
+            while let Some((s, t)) = span.take_till_any(&['\\', closing]) {
+                // parse the escaped character if any
+                let (s, t) = before(|s| s.take_one("\\"), |s| s.take_until(char::is_whitespace))(s)
+                    .unwrap_or((s, t));
+                argument.push_str(t);
+                span = s;
+            }
+
+            // get the closing character
+            let (s, _) = span
+                .take_any_one(&[closing])
+                .ok_or_else(|| mlua::Error::external("sus mogus"))?;
+
+            // push the current string
+            if !accumulator.is_empty() {
+                values.push(accumulator.as_str())?;
+                accumulator.clear();
+            }
+
+            // push the call the macro
+            values.push(
+                macros
+                    .call_method::<String, Value>(name, argument)
+                    .context(&format!("Failed to call macro `{name}` on the macro table"))?,
+            )?;
+
+            span = s;
+        }
+
+        // read block macro
+
+        // read comment
+
+        // if we find an empty line or end of file, push the accumulator and values
+        // TODO
+    }
+
+    // call the document function
+    macros
+        .call_method("document", document)
+        .context("Failed to call macro `document` on the macro table")
 }
 
 /// Parse a comment

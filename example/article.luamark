@@ -2,7 +2,7 @@
 @date 1-1-1970
 
 % we have a comment!
-This is a paragraph.
+This @sus is a paragraph.
 It consists of multiple lines.
 And an \% escaped character!
 \% is normally reserved for comments

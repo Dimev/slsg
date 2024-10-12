@@ -19,7 +19,7 @@ function x:document(x)
 end
 
 function x:paragraph(x)
-  return h.section(x)
+  return table.concat(x)
 end
 
 function x:code(args, code)
@@ -28,7 +28,7 @@ end
 
 function x:title(args) return h.h1(args) end
 
-function x:date(args) return args end
+function x:date(args) return h.pre(args) end
 
 function x:section(args) return h.h2(args) end
 
