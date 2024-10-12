@@ -3,12 +3,12 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
     character::complete::{newline, space0},
-    combinator::{map, not, opt, peek, success},
+    combinator::{all_consuming, map, not, opt, peek, success},
+    error::{context, ContextError, ParseError, VerboseError},
     multi::{fold_many0, fold_many1, many0, separated_list0},
     sequence::{delimited, pair, preceded, terminated},
     Finish, IResult,
 };
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// AST node for luamark
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub enum Node {
 impl Node {
     /// Makes a node from a string
     pub fn from_str(s: &str) -> Result<Self> {
-        match document(s).finish() {
+        match all_consuming(document::<VerboseError<&str>>)(s).finish() {
             Ok(("", node)) => Ok(node),
             Ok((rest, _)) => Err(mlua::Error::external(format!(
                 "Parser did not complete: {rest}"
@@ -87,296 +87,81 @@ impl Node {
     }
 
     /// Run the commands in the parser
-    pub fn run_lua<'a>(self, lua: &'a Lua, commands: &Table<'a>) -> Result<Value<'a>> {
+    pub fn run_lua<'a>(self, lua: &'a Lua, macros: &Table<'a>) -> Result<Value<'a>> {
         match self {
             Self::Document(nodes) => {
                 let arguments = lua.create_table()?;
                 for node in nodes {
-                    arguments.push(node.run_lua(lua, commands)?)?;
+                    arguments.push(node.run_lua(lua, macros)?)?;
                 }
-                commands.call_method("document", arguments)
+                macros
+                    .call_method("document", arguments)
+                    .context("Failed to call function `document` on the macros table")
             }
             Self::Paragraph(nodes) => {
                 let arguments = lua.create_table()?;
                 for node in nodes {
-                    arguments.push(node.run_lua(lua, commands)?)?;
+                    arguments.push(node.run_lua(lua, macros)?)?;
                 }
-                commands.call_method("paragraph", arguments)
+                macros
+                    .call_method("paragraph", arguments)
+                    .context("Failed to call function `document` on the macros table")
             }
             Self::Block {
                 name,
                 arguments,
                 content,
-            } => commands.call_method(&name, (arguments, content)),
-            Self::Command { name, arguments } => commands.call_method(&name, arguments),
-            Self::Text(t) => commands.call_method("text", t),
+            } => macros.call_method(&name, (arguments, content)),
+            Self::Command { name, arguments } => macros.call_method(&name, arguments).context(
+                format!("Failed to call function `{name}` on the macros table"),
+            ),
+            Self::Text(t) => macros.call_method("text", t),
         }
     }
-}
-
-#[derive(Copy, Clone)]
-struct Span<'a> {
-    string: &'a str,
-    row: usize,
-    col: usize,
-}
-
-impl<'a> Span<'a> {
-    fn new(s: &'a str) -> Self {
-        Self {
-            string: s,
-            row: 1,
-            col: 1,
-        }
-    }
-
-    /// Take a pattern
-    fn take_one(self, pattern: &str) -> Option<(Self, &str)> {
-        if self.string.starts_with(pattern) {
-            Some((
-                Self {
-                    string: &self.string[pattern.len()..],
-                    row: self.row,
-                    col: pattern.width_cjk(),
-                },
-                pattern,
-            ))
-        } else {
-            None
-        }
-    }
-
-    /// Take any of the next characters
-    fn take_any_one(self, any: &[char]) -> Option<(Self, char)> {
-        for c in any.into_iter() {
-            if self.string.starts_with(*c) {
-                return Some((
-                    Self {
-                        string: &self.string[c.len_utf8()..],
-                        row: self.row,
-                        col: self.col + c.width_cjk().unwrap_or(0),
-                    },
-                    *c,
-                ));
-            }
-        }
-
-        None
-    }
-
-    /// Take until the predicate is true
-    fn take_until<F: FnMut(char) -> bool>(self, predicate: F) -> Option<(Self, &'a str)> {
-        let mid = self.string.find(predicate).filter(|mid| mid > &0)?;
-        let (left, right) = self.string.split_at(mid);
-        let (row, col) = left
-            .chars()
-            .fold((self.row, self.col), |(row, col), c| match c {
-                '\t' => (row, col + 4),
-                '\n' => (row, 1),
-                _ => (row, col + c.width_cjk().unwrap_or(0)),
-            });
-
-        Some((
-            Self {
-                string: right,
-                row,
-                col,
-            },
-            left,
-        ))
-    }
-
-    /// Take untill we find the pattern
-    fn take_till_pattern(self, pattern: &str) -> Option<(Self, &'a str)> {
-        let mid = self.string.find(pattern).filter(|mid| mid > &0)?;
-        let (left, right) = self.string.split_at(mid);
-        let (row, col) = left
-            .chars()
-            .fold((self.row, self.col), |(row, col), c| match c {
-                '\t' => (row, col + 4),
-                '\n' => (row, 1),
-                _ => (row, col + c.width_cjk().unwrap_or(0)),
-            });
-
-        Some((
-            Self {
-                string: right,
-                row,
-                col,
-            },
-            left,
-        ))
-    }
-
-    /// Take untill we find any of the characters
-    fn take_till_any(self, pattern: &[char]) -> Option<(Self, &'a str)> {
-        let mid = self.string.find(pattern).filter(|mid| mid > &0)?;
-        let (left, right) = self.string.split_at(mid);
-        let (row, col) = left
-            .chars()
-            .fold((self.row, self.col), |(row, col), c| match c {
-                '\t' => (row, col + 4),
-                '\n' => (row, 1),
-                _ => (row, col + c.width_cjk().unwrap_or(0)),
-            });
-
-        Some((
-            Self {
-                string: right,
-                row,
-                col,
-            },
-            left,
-        ))
-    }
-}
-
-fn before<
-    'a,
-    T1,
-    T2,
-    F1: FnMut(Span<'a>) -> Option<(Span<'a>, T1)>,
-    F2: FnMut(Span<'a>) -> Option<(Span<'a>, T2)>,
->(
-    mut f1: F1,
-    mut f2: F2,
-) -> impl FnMut(Span<'a>) -> Option<(Span<'a>, T2)> {
-    move |s| {
-        let (s, _) = f1(s)?;
-        f2(s)
-    }
-}
-
-fn parse_document<'a>(lua: &'a Lua, string: &str, macros: Table<'a>) -> Result<Value<'a>> {
-    let span = Span::new(string);
-
-    // skip opening whitespace
-    let mut span = span
-        .take_until(|c| !c.is_whitespace())
-        .map(|x| x.0)
-        .unwrap_or(span);
-
-    // document so far
-    let mut document = lua.create_table()?;
-
-    // string so far
-    let mut accumulator = String::new();
-
-    // all values in this paragraph
-    let mut values = lua.create_table()?;
-
-    // parse paragraph
-    while let Some((s, _)) = span.take_until(|c| !c.is_whitespace()) {
-        // TODO
-        // read text
-        if let Some((s, t)) = s.take_till_any(&['\n', '\\', '%', '@']) {
-            accumulator.push_str(t);
-            span = s;
-        }
-        // read escaped
-        else if let Some((s, t)) =
-            before(|s| s.take_one("\\"), |s| s.take_until(char::is_whitespace))(s)
-        {
-            accumulator.push_str(t);
-            span = s;
-        }
-        // read inline macro
-        else if let Some((s, name)) = before(
-            |s| s.take_one("@"),
-            |s| s.take_until(|c| "<{([|$".contains(c) || c.is_whitespace()),
-        )(s)
-        {
-            // what the opening is
-            let (s, closing) = s
-                .take_any_one(&['<', '{', '(', '[', '|', '$'])
-                .ok_or_else(|| mlua::Error::external("sus mogus"))?;
-            span = s;
-
-            // find the closing character
-            let closing = match closing {
-                '<' => '>',
-                '{' => '}',
-                ')' => ')',
-                '[' => ']',
-                x => x,
-            };
-
-            // content of the macro
-            let mut argument = String::new();
-
-            // take until we get the closing one
-            while let Some((s, t)) = span.take_till_any(&['\\', closing]) {
-                // parse the escaped character if any
-                let (s, t) = before(|s| s.take_one("\\"), |s| s.take_until(char::is_whitespace))(s)
-                    .unwrap_or((s, t));
-                argument.push_str(t);
-                span = s;
-            }
-
-            // get the closing character
-            let (s, _) = span
-                .take_any_one(&[closing])
-                .ok_or_else(|| mlua::Error::external("sus mogus"))?;
-
-            // push the current string
-            if !accumulator.is_empty() {
-                values.push(accumulator.as_str())?;
-                accumulator.clear();
-            }
-
-            // push the call the macro
-            values.push(
-                macros
-                    .call_method::<String, Value>(name, argument)
-                    .context(&format!("Failed to call macro `{name}` on the macro table"))?,
-            )?;
-
-            span = s;
-        }
-
-        // read block macro
-
-        // read comment
-
-        // if we find an empty line or end of file, push the accumulator and values
-        // TODO
-    }
-
-    // call the document function
-    macros
-        .call_method("document", document)
-        .context("Failed to call macro `document` on the macro table")
 }
 
 /// Parse a comment
-fn comment(s: &str) -> IResult<&str, &str> {
-    delimited(tag("%"), is_not("\n"), peek(newline))(s)
+fn comment<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, &'a str, E> {
+    context("comment", delimited(tag("%"), is_not("\n"), peek(newline)))(s)
 }
 
 /// Parse an escaped sequence
 /// these start with \, and will return the sequence of non-whitespace character followed by this \
-fn escaped(s: &str) -> IResult<&str, &str> {
-    preceded(tag("\\"), take_till1(char::is_whitespace))(s)
+fn escaped<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, &'a str, E> {
+    context(
+        "escaped",
+        preceded(tag("\\"), take_till1(char::is_whitespace)),
+    )(s)
 }
 
 /// Delimited argument, for an inline command
-fn inline_argument(open: char, close: char) -> impl FnMut(&str) -> IResult<&str, String> {
+fn inline_argument<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    open: char,
+    close: char,
+) -> impl FnMut(&'a str) -> IResult<&'a str, String, E> {
     move |s| {
-        delimited(
-            nom::character::complete::char(open),
-            fold_many0(
-                alt((
-                    preceded(comment, tag("\n")),
-                    escaped,
-                    is_not(['\\', '%', close].as_slice()),
-                )),
-                || String::new(),
-                |mut acc, item| {
-                    acc.push_str(item);
-                    acc
-                },
+        context(
+            "inline argument",
+            delimited(
+                nom::character::complete::char(open),
+                fold_many0(
+                    alt((
+                        preceded(comment, tag("\n")),
+                        escaped,
+                        is_not(['\\', '%', close].as_slice()),
+                    )),
+                    || String::new(),
+                    |mut acc, item| {
+                        acc.push_str(item);
+                        acc
+                    },
+                ),
+                nom::character::complete::char(close),
             ),
-            nom::character::complete::char(close),
         )(s)
     }
 }
@@ -384,7 +169,9 @@ fn inline_argument(open: char, close: char) -> impl FnMut(&str) -> IResult<&str,
 /// Inline command
 /// Can be found in the middle of a line, and contains it's argument
 /// Is allowed to flow across lines
-fn inline_command(s: &str) -> IResult<&str, Node> {
+fn inline_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Node, E> {
     // get the name of the command
     let (s, name) = preceded(
         tag("@"),
@@ -407,7 +194,9 @@ fn inline_command(s: &str) -> IResult<&str, Node> {
 }
 
 /// Parse a command, on a line
-fn line_command(s: &str) -> IResult<&str, Node> {
+fn line_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Node, E> {
     let command = map(
         terminated(
             pair(
@@ -427,7 +216,9 @@ fn line_command(s: &str) -> IResult<&str, Node> {
 }
 
 /// Parse a block command
-fn block_command(s: &str) -> IResult<&str, Node> {
+fn block_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Node, E> {
     // opening @begin@name
     let (s, (name, tagname)) = preceded(
         tag("@begin@"),
@@ -465,14 +256,19 @@ fn block_command(s: &str) -> IResult<&str, Node> {
 }
 
 /// Parse a single line
-fn line(s: &str) -> IResult<&str, Vec<Node>> {
+fn line<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Vec<Node>, E> {
     let line_content = fold_many0(
         alt((
-            block_command,
-            inline_command,
-            map(alt((escaped, is_not("\n\\@%"))), |s| {
-                Node::Text(s.to_string())
-            }),
+            context("block command", block_command),
+            context("inline command", inline_command),
+            context(
+                "text",
+                map(alt((escaped, is_not("\n\\@%"))), |s| {
+                    Node::Text(s.to_string())
+                }),
+            ),
         )),
         || Vec::new(),
         |mut acc, item| {
@@ -496,8 +292,13 @@ fn line(s: &str) -> IResult<&str, Vec<Node>> {
 }
 
 /// Parse an empty line
-fn empty_line(s: &str) -> IResult<&str, ()> {
-    map(delimited(space0, opt(comment), newline), |_| ())(s)
+fn empty_line<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, (), E> {
+    context(
+        "empty line",
+        map(delimited(space0, opt(comment), newline), |_| ()),
+    )(s)
 }
 
 /// Either 0, 1 or more nodes
@@ -507,10 +308,15 @@ enum OneMore {
 }
 
 /// Parse a single paragraph
-fn paragraph(s: &str) -> IResult<&str, Node> {
+fn paragraph<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Node, E> {
     // paragraph consists of many lines
     let (s, items) = fold_many1(
-        alt((map(line, OneMore::More), map(line_command, OneMore::One))),
+        context(
+            "line",
+            alt((map(line, OneMore::More), map(line_command, OneMore::One))),
+        ),
         || Vec::new(),
         |mut acc, item| match item {
             OneMore::One(x) => {
@@ -536,7 +342,9 @@ fn paragraph(s: &str) -> IResult<&str, Node> {
 }
 
 /// Parse an entire document
-fn document(s: &str) -> IResult<&str, Node> {
+fn document<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    s: &'a str,
+) -> IResult<&'a str, Node, E> {
     // skip the initial emptiness
     let (s, _) = take_while(char::is_whitespace)(s)?;
 
@@ -558,37 +366,44 @@ mod tests {
 
     #[test]
     fn parse_comment() {
-        assert_eq!(comment.parse("% hello\nrest"), Ok(("\nrest", " hello")));
-        assert!(comment.parse("line % hello\nrest").is_err());
+        assert_eq!(
+            comment::<VerboseError<&str>>.parse("% hello\nrest"),
+            Ok(("\nrest", " hello"))
+        );
+        assert!(comment::<VerboseError<&str>>
+            .parse("line % hello\nrest")
+            .is_err());
     }
 
     #[test]
     fn parse_escaped() {
         assert_eq!(
-            escaped.parse(r#"\\\@#^%() rest"#),
+            escaped::<VerboseError<&str>>.parse(r#"\\\@#^%() rest"#),
             Ok((" rest", r#"\\@#^%()"#))
         );
-        assert!(escaped.parse(r#"hello \@ rest"#).is_err());
+        assert!(escaped::<VerboseError<&str>>
+            .parse(r#"hello \@ rest"#)
+            .is_err());
     }
 
     #[test]
     fn parse_inline_argument() {
         assert_eq!(
-            inline_argument('(', ')').parse("(Hello there!)rest"),
+            inline_argument::<VerboseError<&str>>('(', ')').parse("(Hello there!)rest"),
             Ok(("rest", "Hello there!".to_string()))
         );
         assert_eq!(
-            inline_argument('(', ')').parse(r#"(We allow \) in here)rest"#),
+            inline_argument::<VerboseError<&str>>('(', ')').parse(r#"(We allow \) in here)rest"#),
             Ok(("rest", r#"We allow ) in here"#.to_string()))
         );
-        assert!(inline_argument('(', ')')
+        assert!(inline_argument::<VerboseError<&str>>('(', ')')
             .parse(r#" (We allow \) in here)rest"#)
             .is_err());
     }
     #[test]
     fn parse_inline_command() {
         assert_eq!(
-            inline_command.parse("@command(Hello there!)rest"),
+            inline_command::<VerboseError<&str>>.parse("@command(Hello there!)rest"),
             Ok((
                 "rest",
                 Node::Command {
@@ -598,7 +413,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            inline_command.parse("@command[Hello there!]rest"),
+            inline_command::<VerboseError<&str>>.parse("@command[Hello there!]rest"),
             Ok((
                 "rest",
                 Node::Command {
@@ -607,13 +422,15 @@ mod tests {
                 }
             ))
         );
-        assert!(inline_command.parse("@commmand rest").is_err());
+        assert!(inline_command::<VerboseError<&str>>
+            .parse("@commmand rest")
+            .is_err());
     }
 
     #[test]
     fn parse_line_command() {
         assert_eq!(
-            line_command.parse("@command a b c\nrest"),
+            line_command::<VerboseError<&str>>.parse("@command a b c\nrest"),
             Ok((
                 "rest",
                 Node::Command {
@@ -624,7 +441,7 @@ mod tests {
         );
 
         assert_eq!(
-            line_command.parse("  @command a b \\) \\\\ c\nrest"),
+            line_command::<VerboseError<&str>>.parse("  @command a b \\) \\\\ c\nrest"),
             Ok((
                 "rest",
                 Node::Command {
@@ -635,7 +452,7 @@ mod tests {
         );
 
         assert_eq!(
-            line_command.parse("  @command a b % c \nrest"),
+            line_command::<VerboseError<&str>>.parse("  @command a b % c \nrest"),
             Ok((
                 "rest",
                 Node::Command {
@@ -645,7 +462,7 @@ mod tests {
             ))
         );
 
-        assert!(line_command
+        assert!(line_command::<VerboseError<&str>>
             .parse("before @command a b % c \nrest")
             .is_err());
     }
@@ -653,26 +470,26 @@ mod tests {
     #[test]
     fn parse_line() {
         assert_eq!(
-            line.parse("Hello world!\nrest"),
+            line::<VerboseError<&str>>.parse("Hello world!\nrest"),
             Ok(("rest", vec![Node::Text("Hello world!".to_string())]))
         );
         assert_eq!(
-            line.parse("Hello world!\\% not a comment!\nrest"),
+            line::<VerboseError<&str>>.parse("Hello world!\\% not a comment!\nrest"),
             Ok((
                 "rest",
                 vec![Node::Text("Hello world!% not a comment!".to_string())]
             ))
         );
         assert_eq!(
-            line.parse("  Hello world!\nrest"),
+            line::<VerboseError<&str>>.parse("  Hello world!\nrest"),
             Ok(("rest", vec![Node::Text("Hello world!".to_string())]))
         );
         assert_eq!(
-            line.parse("Hello world! % ignore\nrest"),
+            line::<VerboseError<&str>>.parse("Hello world! % ignore\nrest"),
             Ok(("rest", vec![Node::Text("Hello world! ".to_string())]))
         );
         assert_eq!(
-            line.parse("Hello world! @command(hello)\nrest"),
+            line::<VerboseError<&str>>.parse("Hello world! @command(hello)\nrest"),
             Ok((
                 "rest",
                 vec![
@@ -685,7 +502,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            line.parse("Hello world! @command(hello\nworld% ignore\n)\nrest"),
+            line::<VerboseError<&str>>.parse("Hello world! @command(hello\nworld% ignore\n)\nrest"),
             Ok((
                 "rest",
                 vec![
@@ -697,9 +514,13 @@ mod tests {
                 ]
             ))
         );
-        assert_eq!(line.parse("   % hello\nrest"), Ok(("rest", vec![])));
         assert_eq!(
-            line.parse("Hello @begin@command a b c\nverbatim @end@command after % comment\nrest"),
+            line::<VerboseError<&str>>.parse("   % hello\nrest"),
+            Ok(("rest", vec![]))
+        );
+        assert_eq!(
+            line::<VerboseError<&str>>
+                .parse("Hello @begin@command a b c\nverbatim @end@command after % comment\nrest"),
             Ok((
                 "rest",
                 vec![
@@ -714,7 +535,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            line.parse("@begin@command a b c\nverbatim\n@end@command\nrest"),
+            line::<VerboseError<&str>>.parse("@begin@command a b c\nverbatim\n@end@command\nrest"),
             Ok((
                 "rest",
                 vec![Node::Block {
@@ -724,22 +545,32 @@ mod tests {
                 },]
             ))
         );
-        assert!(line.parse("  \t  \n").is_err());
-        assert!(line.parse("      \n").is_err());
+        assert!(line::<VerboseError<&str>>.parse("  \t  \n").is_err());
+        assert!(line::<VerboseError<&str>>.parse("      \n").is_err());
     }
 
     #[test]
     fn parse_empty_line() {
-        assert_eq!(empty_line.parse("  \t  \nrest"), Ok(("rest", ())));
-        assert_eq!(empty_line.parse("      \nrest"), Ok(("rest", ())));
-        assert_eq!(empty_line.parse(" % ho \nrest"), Ok(("rest", ())));
-        assert!(empty_line.parse("  hi \n").is_err());
+        assert_eq!(
+            empty_line::<VerboseError<&str>>.parse("  \t  \nrest"),
+            Ok(("rest", ()))
+        );
+        assert_eq!(
+            empty_line::<VerboseError<&str>>.parse("      \nrest"),
+            Ok(("rest", ()))
+        );
+        assert_eq!(
+            empty_line::<VerboseError<&str>>.parse(" % ho \nrest"),
+            Ok(("rest", ()))
+        );
+        assert!(empty_line::<VerboseError<&str>>.parse("  hi \n").is_err());
     }
 
     #[test]
     fn parse_block_command() {
         assert_eq!(
-            block_command.parse("@begin@command a b c\nverbatim \\ @h % hi\n@end@command rest"),
+            block_command::<VerboseError<&str>>
+                .parse("@begin@command a b c\nverbatim \\ @h % hi\n@end@command rest"),
             Ok((
                 " rest",
                 Node::Block {
@@ -750,7 +581,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            block_command.parse("@begin@command@stop a b c\nverbatim \\ @end@command @h % hi\n@end@command@stop rest"),
+            block_command::<VerboseError<&str>>.parse("@begin@command@stop a b c\nverbatim \\ @end@command @h % hi\n@end@command@stop rest"),
             Ok((
                 " rest",
                 Node::Block {
@@ -778,7 +609,7 @@ mod tests {
 
             Rest goes here!"#;
 
-        assert!(paragraph
+        assert!(paragraph::<VerboseError<&str>>
             .parse(par)
             .map(|(rest, _)| rest.trim().starts_with("Rest goes here!"))
             .unwrap_or(false));
@@ -807,10 +638,12 @@ mod tests {
         "#;
 
         assert_eq!(
-            document.parse(doc).map(|(rest, res)| match res {
-                Node::Document(v) => (v.len(), rest),
-                _ => (0, ""),
-            }),
+            document::<VerboseError<&str>>
+                .parse(doc)
+                .map(|(rest, res)| match res {
+                    Node::Document(v) => (v.len(), rest),
+                    _ => (0, ""),
+                }),
             Ok((3, ""))
         );
     }

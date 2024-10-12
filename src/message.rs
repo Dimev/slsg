@@ -7,8 +7,6 @@ use crossterm::{
     style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
 };
 
-// TODO: macros for these
-
 /// Print an error to the terminal
 pub(crate) fn print_error<E: Display>(context: &str, error: &E) {
     let text = error.to_string();

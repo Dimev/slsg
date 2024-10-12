@@ -3,11 +3,33 @@
 
 <head>
   <title>Error!</title>
+  <style>
+    .center {{
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+
+      width: 100vw;
+      height: 100vh;
+    }}
+  
+    .err-title {{
+      color: red;
+      font-family: sans-serif;
+      font-size: 120%;
+    }}
+
+    .err-msg {{
+      font-family: monospace;
+      font-size: 120%;
+    }}
+  </style>
 </head>
 
-<body>
-  You made an oopsie:
-  <pre>{}</pre>
+<body class="center">
+  <h1 class="err-title">Error while building the site:</h1>
+  <pre class="err-msg">{}</pre>
 </body>
 
 </html>
