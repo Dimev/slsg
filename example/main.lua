@@ -19,7 +19,7 @@ function x:document(x)
 end
 
 function x:paragraph(x)
-  return table.concat(x)
+  return x -- table.concat(x)
 end
 
 function x:code(args, code)

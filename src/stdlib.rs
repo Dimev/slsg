@@ -83,7 +83,7 @@ impl UserData for DirIter {
     }
 }
 
-pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
+pub(crate) fn stdlib<'a>(lua: &'a Lua) -> Result<Table<'a>> {
     let api = lua.create_table()?;
     // list files
     api.set(
@@ -201,7 +201,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
     api.set(
         "luamark_run",
         lua.create_function(|lua, (string, macros): (String, Table)| {
-            Parser::parse(lua, &string, macros, 1, 1) //Node::from_str(&string)?.run_lua(lua, &macros)
+            Parser::parse(lua, &string, macros, 1, 1)
         })?,
     )?;
 

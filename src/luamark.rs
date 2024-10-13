@@ -11,7 +11,7 @@ use nom::{
 };
 
 /// Parser for luamark
-pub(crate) struct Parser<'a> {
+pub(crate) struct Parser<'a, 'b> {
     /// current input
     input: &'a str,
 
@@ -22,21 +22,24 @@ pub(crate) struct Parser<'a> {
     col: usize,
 
     /// Lua context
-    lua: &'a Lua,
+    lua: &'b Lua,
 
     /// Macro table
-    macros: Table<'a>,
+    macros: Table<'b>,
 }
 
-impl<'a> Parser<'a> {
+
+// TODO: fix functions failing also causing parsing to fail
+
+impl<'a, 'lua: 'a> Parser<'a, 'lua> {
     /// Parse a luamark string
     pub(crate) fn parse(
-        lua: &'a Lua,
+        lua: &'lua Lua,
         input: &'a str,
-        macros: Table<'a>,
+        macros: Table<'lua>,
         row: usize,
         col: usize,
-    ) -> Result<Value<'static>> {
+    ) -> Result<Value<'lua>> {
         let mut parser = Self {
             lua,
             input,
@@ -52,8 +55,17 @@ impl<'a> Parser<'a> {
 
         // take paragraphs
         while let Ok(x) = parser.paragraph() {
-            // stop if nothing remains
-            if parser.empty_line().is_err() {
+            // add to the paragraph
+            paragraphs.push(x)?;
+
+            // take all empty lines
+            let mut counter = 0;
+            while parser.empty_line().is_ok() {
+                counter += 1;
+            }
+
+            // stop if no progress
+            if counter == 0 {
                 break;
             }
         }
@@ -62,7 +74,11 @@ impl<'a> Parser<'a> {
         if !parser.input.trim().is_empty() {
             Err(parser.fail(&format!("Unexpected end of input: {}", parser.input)))
         } else {
-            Ok(Value::Nil)
+            parser
+                .macros
+                .clone()
+                .call_method("document", (paragraphs, Value::Nil, row, col))
+                .context(format!("Failed to call macro `paragraph`"))
         }
     }
 
@@ -366,18 +382,24 @@ impl<'a> Parser<'a> {
         // optional comment
         let _ = self.comment();
 
+        // ending whitespace
         self.tag("\n")?;
         Ok(())
     }
 
     /// Parse a paragraph
-    fn paragraph(&mut self) -> Result<Table<'a>> {
+    fn paragraph(&mut self) -> Result<Value<'a>> {
         let paragraph_content = self.lua.create_table()?;
+        let (row, col) = (self.row, self.col);
         while let Ok(content) = self.line().or_else(|_| self.line_macro()) {
             // push content
             paragraph_content.push(content)?;
         }
-        Ok(paragraph_content)
+
+        // call the macro
+        self.macros
+            .call_method("paragraph", (paragraph_content, Value::Nil, row, col))
+            .context(format!("Failed to call macro `document`"))
     }
 }
 
@@ -735,8 +757,8 @@ mod tests {
 
     use super::*;
 
-    impl<'a> Parser<'a> {
-        fn new(lua: &'a Lua, input: &'a str, macros: Table<'a>) -> Self {
+    impl<'a, 'b> Parser<'a, 'b> {
+        fn new(lua: &'b Lua, input: &'a str, macros: Table<'b>) -> Self {
             Self {
                 input,
                 lua,
