@@ -40,8 +40,42 @@ api.latex_to_mathml = internal.latex_to_mathml
 api.sass = internal.sass
 
 -- luamark
-api.luamark_ast = internal.luamark_ast
 api.luamark_run = internal.luamark_run
+
+-- ast for luamark
+local luamark_ast = {}
+
+function luamark_ast:document(items)
+  items.type = 'document'
+  return items
+end
+
+function luamark_ast:paragraph(items)
+  items.type = 'paragraph'
+  return items
+end
+
+local luamark_meta = {}
+
+function luamark_meta:__index(name)
+  return function(argument, content, row, col)
+    return {
+      type = 'macro',
+      name = name,
+      argument = argument,
+      content = content,
+      row = row,
+      col = col,
+    }
+  end
+end
+
+setmetatable(luamark_ast, luamark_meta)
+
+-- create an ast instead, from the lua side
+api.luamark_ast = function(text)
+  return internal.luamark_run(text, luamark_ast)
+end
 
 -- TODO
 -- parser

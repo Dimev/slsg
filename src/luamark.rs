@@ -1,4 +1,4 @@
-use mlua::{ErrorContext, Lua, Result, Table, TableExt, Value};
+use mlua::{Error, ErrorContext, Lua, Result, Table, TableExt, Value};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
@@ -9,6 +9,331 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
     Finish, IResult,
 };
+
+/// Parser for luamark
+pub(crate) struct Parser<'a> {
+    /// current input
+    input: &'a str,
+
+    /// Current row
+    row: usize,
+
+    /// Current column
+    col: usize,
+
+    /// Lua context
+    lua: &'a Lua,
+
+    /// Macro table
+    macros: Table<'a>,
+}
+
+impl<'a> Parser<'a> {
+    /// Parse a luamark string
+    pub(crate) fn parse(
+        lua: &'a Lua,
+        input: &'a str,
+        macros: Table<'a>,
+        row: usize,
+        col: usize,
+    ) -> Result<Value<'static>> {
+        let mut parser = Self {
+            lua,
+            input,
+            macros,
+            row,
+            col,
+        };
+
+        // skip initial whitespace
+        parser.untill_pred(|c| !c.is_whitespace())?;
+
+        let paragraphs = lua.create_table()?;
+
+        // take paragraphs
+        while let Ok(x) = parser.paragraph() {
+            parser.empty_line()?;
+        }
+
+
+        // remaining whitespace
+        if !parser.input.trim().is_empty() {
+            Err(parser.fail(&format!("Unexpected end of input: {}", parser.input)))
+        } else {
+            Ok(Value::Nil)
+        }
+    }
+
+    /// Fail the parse
+    fn fail(&mut self, reason: &str) -> Error {
+        mlua::Error::external(format!("Failed to parse: {reason}"))
+    }
+
+    /// Take a tag
+    fn tag(&mut self, tag: &str) -> Result<()> {
+        self.input
+            .strip_prefix(tag)
+            .ok_or_else(|| self.fail("Could not find tag"))?;
+        Ok(())
+    }
+
+    /// Ensure none of the following characters are present
+    fn none(&mut self, list: &str) -> Result<()> {
+        if self.input.starts_with(|c| list.contains(c)) {
+            Err(self.fail(&format!("Did not expect any of {list}")))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Take any of the characters
+    fn any(&mut self, list: &'a str) -> Result<char> {
+        for c in list.chars() {
+            if let Some(rest) = self.input.strip_prefix(c) {
+                // advance cursor
+                self.input = rest;
+                self.col += 1;
+
+                // return the character we got
+                return Ok(c);
+            }
+        }
+
+        // fail otherwise
+        Err(self.fail(&format!("Expected any of `{list}`")))
+    }
+
+    /// Take until we find a specific string
+    fn untill_tag(&mut self, tag: &str) -> Result<&'a str> {
+        // find where it is
+        let mid = self
+            .input
+            .find(tag)
+            .ok_or_else(|| self.fail("could not find tag"))?;
+
+        // split
+        let (content, rest) = self.input.split_at(mid);
+
+        // advance the cursor
+        self.input = rest;
+        self.col += content.len();
+
+        Ok(content)
+    }
+
+    /// Take until we the predicate is true
+    fn untill_pred<P: FnMut(char) -> bool>(&mut self, pred: P) -> Result<&'a str> {
+        // find where it is
+        let mid = self
+            .input
+            .find(pred)
+            .ok_or_else(|| self.fail("could not find tag"))?;
+
+        // split
+        let (content, rest) = self.input.split_at(mid);
+
+        // advance the cursor
+        self.input = rest;
+        self.col += content.len();
+
+        Ok(content)
+    }
+
+    /// Take until any of the characters are found
+    fn untill_any(&mut self, list: &str) -> Result<&'a str> {
+        // find where it is
+        let mid = self
+            .input
+            .find(|c| list.contains(c))
+            .ok_or_else(|| self.fail("could not find tag"))?;
+
+        // split
+        let (content, rest) = self.input.split_at(mid);
+
+        // advance the cursor
+        self.input = rest;
+        self.col += content.len();
+
+        Ok(content)
+    }
+
+    /// Parse a comment
+    fn comment(&mut self) -> Result<()> {
+        self.tag("%")?;
+        self.untill_tag("\n")?;
+        Ok(())
+    }
+
+    /// Parse an escaped sequence
+    fn escaped(&mut self) -> Result<&'a str> {
+        self.tag("\\")?;
+        self.untill_pred(char::is_whitespace)
+    }
+
+    /// Parse a delimited inline argument
+    fn inline_argument(&mut self, open: char, close: char) -> Result<String> {
+        let mut buf_a = [0; 4];
+        let mut buf_b = [0; 4];
+        let open_str = open.encode_utf8(&mut buf_a);
+        let close_str = close.encode_utf8(&mut buf_b);
+
+        self.tag(open_str)?;
+
+        let mut result = String::new();
+
+        // parse the argument, until it reaches a closing tag
+        while let Ok(content) = self
+            .escaped()
+            .or_else(|_| self.comment().and_then(|_| self.tag("\n")).map(|_| "\n"))
+            .or_else(|_| self.untill_pred(|c| "%\\".contains(c) || c == close))
+        {
+            result.push_str(content);
+        }
+
+        // closing tag
+        self.tag(&close_str)?;
+        Ok(result)
+    }
+
+    /// Parse an inline macro
+    fn inline_macro(&mut self) -> Result<Value<'a>> {
+        self.tag("@")?;
+
+        // name of the macro
+        let name = self.untill_pred(|c| c.is_whitespace() || "[({<|$".contains(c))?;
+
+        // position
+        let (row, col) = (self.row, self.col + 1);
+
+        // get the delimited argument
+        let argument = self
+            .inline_argument('[', ']')
+            .or_else(|_| self.inline_argument('(', ')'))
+            .or_else(|_| self.inline_argument('{', '}'))
+            .or_else(|_| self.inline_argument('<', '>'))
+            .or_else(|_| self.inline_argument('|', '|'))
+            .or_else(|_| self.inline_argument('$', '$'))
+            .map_err(|_| self.fail("Expected any of `], ), }, >, |, $`"))?;
+
+        // call the command
+        self.macros
+            .call_method(name, (argument, Value::Nil, row, col))
+            .context(format!("Failed to call macro `{name}'"))
+    }
+
+    /// parse a macro on a line
+    fn line_macro(&mut self) -> Result<Value<'a>> {
+        self.tag("@")?;
+
+        // name of the macro
+        let name = self.untill_pred(char::is_whitespace)?;
+
+        // argument to the macro
+        let mut argument = String::new();
+
+        // position
+        let (row, col) = (self.row, self.col);
+
+        // parse the argument, until it reaches a comment or newline
+        while let Ok(content) = self.escaped().or_else(|_| self.untill_any("%\\\n")) {
+            argument.push_str(content);
+        }
+
+        // optional comment
+        let _ = self.comment();
+
+        // newline
+        self.tag("\n")?;
+
+        // call the macro
+        self.macros
+            .call_method(name, (argument, Value::Nil, row, col))
+            .context(format!("Failed to call macro `{name}'"))
+    }
+
+    /// Parse a block macro
+    fn block_macro(&mut self) -> Result<Value<'a>> {
+        // @begin@name
+        self.tag("@begin")?;
+        self.tag("@")?;
+
+        // name and any closing tag
+        let name_and_close = self.untill_pred(char::is_whitespace)?;
+
+        // name
+        let name = name_and_close
+            .split_once('@')
+            .map(|x| x.0)
+            .unwrap_or(name_and_close);
+
+        // argument to the macro
+        let mut argument = String::new();
+
+        // parse the argument, until it reaches a comment or newline
+        while let Ok(content) = self.escaped().or_else(|_| self.untill_any("%\\\n")) {
+            argument.push_str(content);
+        }
+
+        // optional comment
+        let _ = self.comment();
+
+        // read the newline
+        self.tag("\n")?;
+
+        // position
+        let (row, col) = (self.row, self.col);
+
+        // read everything until the end tag
+        let content = self.untill_tag(name_and_close)?;
+
+        // call the macro
+        self.macros
+            .call_method(name, (argument, content, row, col))
+            .context(format!("Failed to call macro `{name}`"))
+    }
+
+    /// Parse a single line
+    fn line(&mut self) -> Result<Value<'a>> {
+        let line_content = self.lua.create_table()?;
+        while let Ok(content) = self
+            .block_macro()
+            .or_else(|_| self.inline_macro())
+            .or_else(|_| {
+                self.escaped()
+                    .and_then(|x| self.lua.create_string(x))
+                    .map(Value::String)
+            })
+            .or_else(|_| {
+                self.untill_any("\n\\@%")
+                    .and_then(|x| self.lua.create_string(x).map(Value::String))
+            })
+        {
+            self.tag("\n")?;
+            line_content.push(content)?;
+        }
+
+        // TODO: proper string concat
+        Ok(Value::Table(line_content))
+    }
+
+    /// Parse an empty line
+    fn empty_line(&mut self) -> Result<()> {
+        // any series of whitespace with an optional comment
+        self.untill_pred(|c| !c.is_whitespace() && c != '\n')?;
+        self.comment()?;
+        self.tag("\n")?;
+        Ok(())
+    }
+
+    /// Parse a paragraph
+    fn paragraph(&mut self) -> Result<Table<'a>> {
+        let paragraph_content = self.lua.create_table()?;
+        while let Ok(content) = self.line().or_else(|_| self.line_macro()) {
+            paragraph_content.push(content)?;
+        }
+        Ok(paragraph_content)
+    }
+}
 
 /// AST node for luamark
 #[derive(Clone, Debug, PartialEq, Eq)]

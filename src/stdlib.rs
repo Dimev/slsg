@@ -14,7 +14,7 @@ use rsass::{
     output::{Format, Style},
 };
 
-use crate::luamark::Node;
+use crate::luamark::{Node, Parser};
 
 #[derive(Debug)]
 struct LuaLoader<'a>(Option<Function<'a>>);
@@ -197,17 +197,11 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table<'_>> {
         )?,
     )?;
 
-    // luamark parser
-    api.set(
-        "luamark_ast",
-        lua.create_function(|lua, string: String| Node::from_str(&string)?.to_lua(lua))?,
-    )?;
-
     // luamark parser, run the code
     api.set(
         "luamark_run",
         lua.create_function(|lua, (string, macros): (String, Table)| {
-            Node::from_str(&string)?.run_lua(lua, &macros)
+            Parser::parse(lua, &string, macros, 1, 1) //Node::from_str(&string)?.run_lua(lua, &macros)
         })?,
     )?;
 
