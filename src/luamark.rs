@@ -52,7 +52,10 @@ impl<'a> Parser<'a> {
 
         // take paragraphs
         while let Ok(x) = parser.paragraph() {
-            parser.empty_line()?;
+            // stop if nothing remains
+            if parser.empty_line().is_err() {
+                break;
+            }
         }
 
         // remaining whitespace
@@ -226,12 +229,16 @@ impl<'a> Parser<'a> {
 
         // call the command
         self.macros
-            .call_method(name, (argument, Value::Nil, row, col))
+            .call_method(name, (argument.trim(), Value::Nil, row, col))
             .context(format!("Failed to call macro `{name}'"))
     }
 
     /// parse a macro on a line
     fn line_macro(&mut self) -> Result<Value<'a>> {
+        // skip empty space
+        self.untill_pred(|c| !c.is_whitespace())?;
+
+        // first at
         self.tag("@")?;
 
         // name of the macro
@@ -262,7 +269,7 @@ impl<'a> Parser<'a> {
 
         // call the macro
         self.macros
-            .call_method(name, (argument, Value::Nil, row, col))
+            .call_method(name, (argument.trim(), Value::Nil, row, col))
             .context(format!("Failed to call macro `{name}'"))
     }
 
@@ -305,11 +312,11 @@ impl<'a> Parser<'a> {
         let (row, col) = (self.row, self.col);
 
         // read everything until the end tag
-        let content = self.untill_tag(name_and_close)?;
+        let content = self.untill_tag(&format!("@end@{name_and_close}"))?;
 
         // call the macro
         self.macros
-            .call_method(name, (argument, content, row, col))
+            .call_method(name, (argument.trim(), content, row, col))
             .context(format!("Failed to call macro `{name}`"))
     }
 
@@ -326,12 +333,25 @@ impl<'a> Parser<'a> {
             })
             .or_else(|_| {
                 self.untill_any("\n\\@%")
+                    .and_then(|x| {
+                        if x.len() > 0 {
+                            Ok(x)
+                        } else {
+                            Err(self.fail("No progress"))
+                        }
+                    })
                     .and_then(|x| self.lua.create_string(x).map(Value::String))
             })
         {
-            self.tag("\n")?;
-            line_content.push(content)?;
+            // optional comment
+            let _ = self.comment();
+
+            // TODO: proper string
+            line_content.push(dbg!(content))?;
         }
+
+        // newline
+        self.tag("\n")?;
 
         // TODO: proper string concat
         Ok(Value::Table(line_content))
@@ -340,8 +360,12 @@ impl<'a> Parser<'a> {
     /// Parse an empty line
     fn empty_line(&mut self) -> Result<()> {
         // any series of whitespace with an optional comment
-        self.untill_pred(|c| !c.is_whitespace() && c != '\n')?;
-        self.comment()?;
+        self.untill_pred(|c| !c.is_whitespace() || c == '\n')
+            .context("no whitespace!")?;
+
+        // optional comment
+        let _ = self.comment();
+
         self.tag("\n")?;
         Ok(())
     }
@@ -773,73 +797,98 @@ mod tests {
             .unwrap_err();
     }
 
-    /*
     #[test]
     fn parse_inline_command() {
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
+        macros
+            .set(
+                "command",
+                lua.create_function(|_, (_, arg): (Table, String)| Ok(arg))
+                    .unwrap(),
+            )
+            .unwrap();
+
         assert_eq!(
-            inline_command::<VerboseError<&str>>.parse("@command(Hello there!)rest"),
-            Ok((
-                "rest",
-                Node::Command {
-                    name: "command".to_string(),
-                    arguments: "Hello there!".to_string()
-                }
-            ))
+            Parser::new(&lua, "@command(Hello there!)rest", macros.clone())
+                .inline_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Hello there!"
         );
+
         assert_eq!(
-            inline_command::<VerboseError<&str>>.parse("@command[Hello there!]rest"),
-            Ok((
-                "rest",
-                Node::Command {
-                    name: "command".to_string(),
-                    arguments: "Hello there!".to_string()
-                }
-            ))
+            Parser::new(&lua, "@command$Hello there!$rest", macros.clone())
+                .inline_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Hello there!"
         );
-        assert!(inline_command::<VerboseError<&str>>
-            .parse("@commmand rest")
-            .is_err());
+
+        Parser::new(&lua, "@command rest", macros.clone())
+            .inline_macro()
+            .unwrap_err();
     }
 
     #[test]
     fn parse_line_command() {
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
+        macros
+            .set(
+                "command",
+                lua.create_function(|_, (_, arg): (Table, String)| Ok(arg))
+                    .unwrap(),
+            )
+            .unwrap();
+
         assert_eq!(
-            line_command::<VerboseError<&str>>.parse("@command a b c\nrest"),
-            Ok((
-                "rest",
-                Node::Command {
-                    name: "command".to_string(),
-                    arguments: "a b c".to_string(),
-                }
-            ))
+            Parser::new(&lua, "@command a b c\nrest", macros.clone())
+                .line_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a b c"
         );
 
         assert_eq!(
-            line_command::<VerboseError<&str>>.parse("  @command a b \\) \\\\ c\nrest"),
-            Ok((
-                "rest",
-                Node::Command {
-                    name: "command".to_string(),
-                    arguments: "a b \\) \\\\ c".to_string(),
-                }
-            ))
+            Parser::new(&lua, "@command a b \\( \\\\ c\nrest", macros.clone())
+                .line_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a b ( \\ c"
         );
 
         assert_eq!(
-            line_command::<VerboseError<&str>>.parse("  @command a b % c \nrest"),
-            Ok((
-                "rest",
-                Node::Command {
-                    name: "command".to_string(),
-                    arguments: "a b ".to_string(),
-                }
-            ))
+            Parser::new(&lua, "    @command a b c\nrest", macros.clone())
+                .line_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a b c"
         );
 
-        assert!(line_command::<VerboseError<&str>>
-            .parse("before @command a b % c \nrest")
-            .is_err());
+        assert_eq!(
+            Parser::new(&lua, "@command a b % c\nrest", macros.clone())
+                .line_macro()
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a b"
+        );
+
+        Parser::new(&lua, "before @command\nrest", macros.clone())
+            .line_macro()
+            .unwrap_err();
+
+        Parser::new(&lua, "before @command arg\nrest", macros.clone())
+            .line_macro()
+            .unwrap_err();
     }
+    /*
 
     #[test]
     fn parse_line() {
