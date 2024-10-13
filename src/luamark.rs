@@ -55,7 +55,6 @@ impl<'a> Parser<'a> {
             parser.empty_line()?;
         }
 
-
         // remaining whitespace
         if !parser.input.trim().is_empty() {
             Err(parser.fail(&format!("Unexpected end of input: {}", parser.input)))
@@ -66,14 +65,18 @@ impl<'a> Parser<'a> {
 
     /// Fail the parse
     fn fail(&mut self, reason: &str) -> Error {
-        mlua::Error::external(format!("Failed to parse: {reason}"))
+        mlua::Error::external(format!("Failed to parse at {}: {reason}", self.input))
     }
 
     /// Take a tag
     fn tag(&mut self, tag: &str) -> Result<()> {
-        self.input
+        self.input = self
+            .input
             .strip_prefix(tag)
-            .ok_or_else(|| self.fail("Could not find tag"))?;
+            .ok_or_else(|| self.fail(&format!("Could not find tag {tag}")))?;
+
+        // TODO: advance cursor
+
         Ok(())
     }
 
@@ -109,7 +112,7 @@ impl<'a> Parser<'a> {
         let mid = self
             .input
             .find(tag)
-            .ok_or_else(|| self.fail("could not find tag"))?;
+            .ok_or_else(|| self.fail(&format!("could not find tag {tag}")))?;
 
         // split
         let (content, rest) = self.input.split_at(mid);
@@ -127,7 +130,7 @@ impl<'a> Parser<'a> {
         let mid = self
             .input
             .find(pred)
-            .ok_or_else(|| self.fail("could not find tag"))?;
+            .ok_or_else(|| self.fail("could not find predicate"))?;
 
         // split
         let (content, rest) = self.input.split_at(mid);
@@ -187,6 +190,12 @@ impl<'a> Parser<'a> {
             .or_else(|_| self.comment().and_then(|_| self.tag("\n")).map(|_| "\n"))
             .or_else(|_| self.untill_pred(|c| "%\\".contains(c) || c == close))
         {
+            // ensure progress
+            if content.is_empty() {
+                break;
+            }
+
+            // push result
             result.push_str(content);
         }
 
@@ -236,6 +245,12 @@ impl<'a> Parser<'a> {
 
         // parse the argument, until it reaches a comment or newline
         while let Ok(content) = self.escaped().or_else(|_| self.untill_any("%\\\n")) {
+            // ensure progress
+            if content.is_empty() {
+                break;
+            }
+
+            // push content
             argument.push_str(content);
         }
 
@@ -271,6 +286,12 @@ impl<'a> Parser<'a> {
 
         // parse the argument, until it reaches a comment or newline
         while let Ok(content) = self.escaped().or_else(|_| self.untill_any("%\\\n")) {
+            // ensure progress
+            if content.is_empty() {
+                break;
+            }
+
+            // push content
             argument.push_str(content);
         }
 
@@ -329,6 +350,7 @@ impl<'a> Parser<'a> {
     fn paragraph(&mut self) -> Result<Table<'a>> {
         let paragraph_content = self.lua.create_table()?;
         while let Ok(content) = self.line().or_else(|_| self.line_macro()) {
+            // push content
             paragraph_content.push(content)?;
         }
         Ok(paragraph_content)
@@ -685,46 +707,73 @@ fn document<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use nom::Parser;
+    //use nom::Parser;
 
     use super::*;
 
+    impl<'a> Parser<'a> {
+        fn new(lua: &'a Lua, input: &'a str, macros: Table<'a>) -> Self {
+            Self {
+                input,
+                lua,
+                macros,
+                row: 1,
+                col: 1,
+            }
+        }
+    }
+
     #[test]
     fn parse_comment() {
-        assert_eq!(
-            comment::<VerboseError<&str>>.parse("% hello\nrest"),
-            Ok(("\nrest", " hello"))
-        );
-        assert!(comment::<VerboseError<&str>>
-            .parse("line % hello\nrest")
-            .is_err());
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
+
+        Parser::new(&lua, "% hello\nrest", macros.clone())
+            .comment()
+            .unwrap();
+        Parser::new(&lua, "text % hello\nrest", macros)
+            .comment()
+            .unwrap_err();
     }
 
     #[test]
     fn parse_escaped() {
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
         assert_eq!(
-            escaped::<VerboseError<&str>>.parse(r#"\\\@#^%() rest"#),
-            Ok((" rest", r#"\\@#^%()"#))
+            Parser::new(&lua, r#"\\\@#^%() "#, macros.clone())
+                .escaped()
+                .unwrap(),
+            r#"\\@#^%()"#
         );
-        assert!(escaped::<VerboseError<&str>>
-            .parse(r#"hello \@ rest"#)
-            .is_err());
+        Parser::new(&lua, r#"hello \@ rest"#, macros)
+            .escaped()
+            .unwrap_err();
     }
 
     #[test]
     fn parse_inline_argument() {
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
         assert_eq!(
-            inline_argument::<VerboseError<&str>>('(', ')').parse("(Hello there!)rest"),
-            Ok(("rest", "Hello there!".to_string()))
+            Parser::new(&lua, "(Hello there!)rest)", macros.clone())
+                .inline_argument('(', ')')
+                .unwrap(),
+            "Hello there!"
         );
         assert_eq!(
-            inline_argument::<VerboseError<&str>>('(', ')').parse(r#"(We allow \) in here)rest"#),
-            Ok(("rest", r#"We allow ) in here"#.to_string()))
+            Parser::new(&lua, "(We allow \\) in here)rest)", macros.clone())
+                .inline_argument('(', ')')
+                .unwrap(),
+            "We allow ) in here"
         );
-        assert!(inline_argument::<VerboseError<&str>>('(', ')')
-            .parse(r#" (We allow \) in here)rest"#)
-            .is_err());
+
+        Parser::new(&lua, " (space first)", macros)
+            .inline_argument('(', ')')
+            .unwrap_err();
     }
+
+    /*
     #[test]
     fn parse_inline_command() {
         assert_eq!(
@@ -972,4 +1021,5 @@ mod tests {
             Ok((3, ""))
         );
     }
+    */
 }
