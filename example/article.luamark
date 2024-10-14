@@ -14,7 +14,7 @@ again, multiple lines
 Now with a header!
 We can even have some sample code, see below!
 
-@begin@code lua
+mogus @begin@code lua
 -- Say hello again!
 print "Hello, world!"
 print "In here, everything is verbatim, so we can print characters like % just fine!"

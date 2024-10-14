@@ -12,7 +12,6 @@ edition = "2021"
 crossterm = "0.28.1"
 latex2mathml = "0.2.3"
 mlua = { version = "0.9.9", features = ["lua54"] }
-nom = "7.1.3"
 notify = { version = "6.1.1", default-features = false, features = ["macos_kqueue"] }
 pico-args = "0.5.0"
 rsass = "0.28.10"

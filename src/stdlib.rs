@@ -14,7 +14,7 @@ use rsass::{
     output::{Format, Style},
 };
 
-use crate::luamark::{Node, Parser};
+use crate::luamark::Parser;
 
 #[derive(Debug)]
 struct LuaLoader<'a>(Option<Function<'a>>);

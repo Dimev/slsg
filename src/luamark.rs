@@ -1,14 +1,4 @@
 use mlua::{Error, ErrorContext, Lua, Result, Table, TableExt, Value};
-use nom::{
-    branch::alt,
-    bytes::complete::{is_not, tag, take_till, take_till1, take_until, take_while},
-    character::complete::{newline, space0},
-    combinator::{all_consuming, map, not, opt, peek, success},
-    error::{context, ContextError, ParseError, VerboseError},
-    multi::{fold_many0, fold_many1, many0, separated_list0},
-    sequence::{delimited, pair, preceded, terminated},
-    Finish, IResult,
-};
 
 /// Parser for luamark
 pub(crate) struct Parser<'a, 'b> {
@@ -27,7 +17,6 @@ pub(crate) struct Parser<'a, 'b> {
     /// Macro table
     macros: Table<'b>,
 }
-
 
 // TODO: fix functions failing also causing parsing to fail
 
@@ -56,7 +45,7 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         // take paragraphs
         while let Ok(x) = parser.paragraph() {
             // add to the paragraph
-            paragraphs.push(x)?;
+            paragraphs.push(x?)?;
 
             // take all empty lines
             let mut counter = 0;
@@ -78,7 +67,7 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
                 .macros
                 .clone()
                 .call_method("document", (paragraphs, Value::Nil, row, col))
-                .context(format!("Failed to call macro `paragraph`"))
+                .context(format!("Failed to call macro `document`"))
         }
     }
 
@@ -97,32 +86,6 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         // TODO: advance cursor
 
         Ok(())
-    }
-
-    /// Ensure none of the following characters are present
-    fn none(&mut self, list: &str) -> Result<()> {
-        if self.input.starts_with(|c| list.contains(c)) {
-            Err(self.fail(&format!("Did not expect any of {list}")))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Take any of the characters
-    fn any(&mut self, list: &'a str) -> Result<char> {
-        for c in list.chars() {
-            if let Some(rest) = self.input.strip_prefix(c) {
-                // advance cursor
-                self.input = rest;
-                self.col += 1;
-
-                // return the character we got
-                return Ok(c);
-            }
-        }
-
-        // fail otherwise
-        Err(self.fail(&format!("Expected any of `{list}`")))
     }
 
     /// Take until we find a specific string
@@ -179,6 +142,14 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         Ok(content)
     }
 
+    /// Ensure none of the following characters are present
+    fn none(&mut self, list: &str) -> Result<()> {
+        if self.input.starts_with(|c| list.contains(c)) {
+            Err(self.fail(&format!("Did not expect any of {list}")))
+        } else {
+            Ok(())
+        }
+    }
     /// Parse a comment
     fn comment(&mut self) -> Result<()> {
         self.tag("%")?;
@@ -224,7 +195,7 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
     }
 
     /// Parse an inline macro
-    fn inline_macro(&mut self) -> Result<Value<'a>> {
+    fn inline_macro(&mut self) -> Result<Result<Value<'a>>> {
         self.tag("@")?;
 
         // name of the macro
@@ -244,13 +215,14 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
             .map_err(|_| self.fail("Expected any of `], ), }, >, |, $`"))?;
 
         // call the command
-        self.macros
+        Ok(self
+            .macros
             .call_method(name, (argument.trim(), Value::Nil, row, col))
-            .context(format!("Failed to call macro `{name}'"))
+            .context(format!("Failed to call macro `{name}'")))
     }
 
     /// parse a macro on a line
-    fn line_macro(&mut self) -> Result<Value<'a>> {
+    fn line_macro(&mut self) -> Result<Result<Value<'a>>> {
         // skip empty space
         self.untill_pred(|c| !c.is_whitespace())?;
 
@@ -284,16 +256,16 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         self.tag("\n")?;
 
         // call the macro
-        self.macros
+        Ok(self
+            .macros
             .call_method(name, (argument.trim(), Value::Nil, row, col))
-            .context(format!("Failed to call macro `{name}'"))
+            .context(format!("Failed to call macro `{name}'")))
     }
 
     /// Parse a block macro
-    fn block_macro(&mut self) -> Result<Value<'a>> {
+    fn block_macro(&mut self) -> Result<Result<Value<'a>>> {
         // @begin@name
-        self.tag("@begin")?;
-        self.tag("@")?;
+        self.tag("@begin@")?;
 
         // name and any closing tag
         let name_and_close = self.untill_pred(char::is_whitespace)?;
@@ -322,22 +294,36 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         let _ = self.comment();
 
         // read the newline
-        self.tag("\n")?;
+        self.tag("\n").context("failure")?;
 
         // position
         let (row, col) = (self.row, self.col);
 
+        // tag to end with
+        let end_tag = format!("@end@{name_and_close}");
+
         // read everything until the end tag
-        let content = self.untill_tag(&format!("@end@{name_and_close}"))?;
+        let content = self.untill_tag(&end_tag)?;
+
+        // read the end tag
+        self.tag(&end_tag)?;
 
         // call the macro
-        self.macros
+        Ok(self
+            .macros
             .call_method(name, (argument.trim(), content, row, col))
-            .context(format!("Failed to call macro `{name}`"))
+            .context(format!("Failed to call macro `{name}`")))
     }
 
     /// Parse a single line
     fn line(&mut self) -> Result<Value<'a>> {
+        // read the empty line first
+        self.untill_pred(|c| !c.is_whitespace() || c == '\n')?;
+
+        // ensure that the next character in line is not a newline or comment
+        self.none("%\n")?;
+
+        // parse the content
         let line_content = self.lua.create_table()?;
         while let Ok(content) = self
             .block_macro()
@@ -345,7 +331,7 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
             .or_else(|_| {
                 self.escaped()
                     .and_then(|x| self.lua.create_string(x))
-                    .map(Value::String)
+                    .map(|x| Ok(Value::String(x)))
             })
             .or_else(|_| {
                 self.untill_any("\n\\@%")
@@ -356,14 +342,14 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
                             Err(self.fail("No progress"))
                         }
                     })
-                    .and_then(|x| self.lua.create_string(x).map(Value::String))
+                    .and_then(|x| self.lua.create_string(x).map(|x| Ok(Value::String(x))))
             })
         {
             // optional comment
             let _ = self.comment();
 
             // TODO: proper string
-            line_content.push(dbg!(content))?;
+            line_content.push(content?)?;
         }
 
         // newline
@@ -388,367 +374,20 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
     }
 
     /// Parse a paragraph
-    fn paragraph(&mut self) -> Result<Value<'a>> {
+    fn paragraph(&mut self) -> Result<Result<Value<'a>>> {
         let paragraph_content = self.lua.create_table()?;
         let (row, col) = (self.row, self.col);
-        while let Ok(content) = self.line().or_else(|_| self.line_macro()) {
+        while let Ok(content) = self.line().map(|x| Ok(x)).or_else(|_| self.line_macro()) {
             // push content
-            paragraph_content.push(content)?;
+            paragraph_content.push(content?)?;
         }
 
         // call the macro
-        self.macros
+        Ok(self
+            .macros
             .call_method("paragraph", (paragraph_content, Value::Nil, row, col))
-            .context(format!("Failed to call macro `document`"))
+            .context(format!("Failed to call macro `document`")))
     }
-}
-
-/// AST node for luamark
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Node {
-    /// Entire document
-    Document(Vec<Node>),
-
-    /// Paragraph, contains multiple nodes
-    Paragraph(Vec<Node>),
-
-    /// Block, contains the string verbatim
-    Block {
-        name: String,
-        arguments: String,
-        content: String,
-    },
-
-    /// Command, contains only the name and the arguments
-    Command { name: String, arguments: String },
-
-    /// Text, regular text
-    Text(String),
-}
-
-impl Node {
-    /// Makes a node from a string
-    pub fn from_str(s: &str) -> Result<Self> {
-        match all_consuming(document::<VerboseError<&str>>)(s).finish() {
-            Ok(("", node)) => Ok(node),
-            Ok((rest, _)) => Err(mlua::Error::external(format!(
-                "Parser did not complete: {rest}"
-            ))),
-            Err(e) => Err(mlua::Error::external(e.to_string())),
-        }
-    }
-
-    /// Convert a node to lua values
-    pub fn to_lua(self, lua: &Lua) -> Result<Value> {
-        match self {
-            Self::Document(nodes) => {
-                let table = lua.create_table()?;
-                for node in nodes {
-                    table.push(node.to_lua(lua)?)?;
-                }
-                Ok(Value::Table(table))
-            }
-            Self::Paragraph(nodes) => {
-                let table = lua.create_table()?;
-                table.set("type", "paragraph")?;
-                for node in nodes {
-                    table.push(node.to_lua(lua)?)?;
-                }
-                Ok(Value::Table(table))
-            }
-            Self::Block {
-                name,
-                arguments,
-                content,
-            } => {
-                let table = lua.create_table()?;
-                table.set("type", "block")?;
-                table.set("name", name)?;
-                table.set("arguments", arguments)?;
-                table.set("content", content)?;
-                Ok(Value::Table(table))
-            }
-            Self::Command { name, arguments } => {
-                let table = lua.create_table()?;
-                table.set("type", "command")?;
-                table.set("name", name)?;
-                table.set("arguments", arguments)?;
-                Ok(Value::Table(table))
-            }
-            Self::Text(t) => Ok(Value::String(lua.create_string(t)?)),
-        }
-    }
-
-    /// Run the commands in the parser
-    pub fn run_lua<'a>(self, lua: &'a Lua, macros: &Table<'a>) -> Result<Value<'a>> {
-        match self {
-            Self::Document(nodes) => {
-                let arguments = lua.create_table()?;
-                for node in nodes {
-                    arguments.push(node.run_lua(lua, macros)?)?;
-                }
-                macros
-                    .call_method("document", arguments)
-                    .context("Failed to call function `document` on the macros table")
-            }
-            Self::Paragraph(nodes) => {
-                let arguments = lua.create_table()?;
-                for node in nodes {
-                    arguments.push(node.run_lua(lua, macros)?)?;
-                }
-                macros
-                    .call_method("paragraph", arguments)
-                    .context("Failed to call function `document` on the macros table")
-            }
-            Self::Block {
-                name,
-                arguments,
-                content,
-            } => macros.call_method(&name, (arguments, content)),
-            Self::Command { name, arguments } => macros.call_method(&name, arguments).context(
-                format!("Failed to call function `{name}` on the macros table"),
-            ),
-            Self::Text(t) => macros.call_method("text", t),
-        }
-    }
-}
-
-/// Parse a comment
-fn comment<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    context("comment", delimited(tag("%"), is_not("\n"), peek(newline)))(s)
-}
-
-/// Parse an escaped sequence
-/// these start with \, and will return the sequence of non-whitespace character followed by this \
-fn escaped<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    context(
-        "escaped",
-        preceded(tag("\\"), take_till1(char::is_whitespace)),
-    )(s)
-}
-
-/// Delimited argument, for an inline command
-fn inline_argument<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    open: char,
-    close: char,
-) -> impl FnMut(&'a str) -> IResult<&'a str, String, E> {
-    move |s| {
-        context(
-            "inline argument",
-            delimited(
-                nom::character::complete::char(open),
-                fold_many0(
-                    alt((
-                        preceded(comment, tag("\n")),
-                        escaped,
-                        is_not(['\\', '%', close].as_slice()),
-                    )),
-                    || String::new(),
-                    |mut acc, item| {
-                        acc.push_str(item);
-                        acc
-                    },
-                ),
-                nom::character::complete::char(close),
-            ),
-        )(s)
-    }
-}
-
-/// Inline command
-/// Can be found in the middle of a line, and contains it's argument
-/// Is allowed to flow across lines
-fn inline_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Node, E> {
-    // get the name of the command
-    let (s, name) = preceded(
-        tag("@"),
-        take_till(|c: char| c.is_whitespace() || "([{<".contains(c)),
-    )(s)?;
-
-    // get the inner arguments
-    let (s, arguments) = alt((
-        inline_argument('(', ')'),
-        inline_argument('[', ']'),
-        inline_argument('{', '}'),
-        inline_argument('<', '>'),
-    ))(s)?;
-
-    // succeed at parsing
-    success(Node::Command {
-        name: name.to_string(),
-        arguments: arguments.to_string(),
-    })(s)
-}
-
-/// Parse a command, on a line
-fn line_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Node, E> {
-    let command = map(
-        terminated(
-            pair(
-                // parse the name
-                preceded(tag("@"), take_till1(char::is_whitespace)),
-                // parse the rest of the argument
-                preceded(space0, many0(alt((is_not("\n%"), escaped)))),
-            ),
-            opt(comment),
-        ),
-        |(name, arguments)| Node::Command {
-            name: name.to_string(),
-            arguments: arguments.concat(),
-        },
-    );
-    delimited(space0, command, newline)(s)
-}
-
-/// Parse a block command
-fn block_command<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Node, E> {
-    // opening @begin@name
-    let (s, (name, tagname)) = preceded(
-        tag("@begin@"),
-        pair(
-            take_till1(|c: char| c.is_whitespace() || c == '@'),
-            opt(preceded(tag("@"), take_till1(char::is_whitespace))),
-        ),
-    )(s)?;
-
-    // arguments
-    let (s, arguments) = terminated(
-        preceded(space0, many0(alt((is_not("\n%"), escaped)))),
-        pair(opt(comment), tag("\n")),
-    )(s)?;
-
-    // what to end on
-    let end = format!(
-        "@end@{name}{}{}",
-        if tagname.is_some() { "@" } else { "" },
-        tagname.unwrap_or("")
-    );
-
-    // parse the entire block
-    let (s, content) = take_until(end.as_str())(s)?;
-
-    // parse the end block
-    let (s, _) = tag(end.as_str())(s)?;
-
-    // succeed with the contents
-    success(Node::Block {
-        name: name.to_string(),
-        arguments: arguments.concat(),
-        content: content.to_string(),
-    })(s)
-}
-
-/// Parse a single line
-fn line<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Vec<Node>, E> {
-    let line_content = fold_many0(
-        alt((
-            context("block command", block_command),
-            context("inline command", inline_command),
-            context(
-                "text",
-                map(alt((escaped, is_not("\n\\@%"))), |s| {
-                    Node::Text(s.to_string())
-                }),
-            ),
-        )),
-        || Vec::new(),
-        |mut acc, item| {
-            // if the last item on the accumulator is text, append it directly
-            match (acc.last_mut(), item) {
-                (Some(Node::Text(t1)), Node::Text(t2)) => {
-                    t1.push_str(&t2);
-                }
-                (_, i) => acc.push(i),
-            };
-
-            acc
-        },
-    );
-    delimited(
-        // make sure we have content on this line
-        pair(space0, peek(not(newline))),
-        line_content,
-        pair(opt(comment), newline),
-    )(s)
-}
-
-/// Parse an empty line
-fn empty_line<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, (), E> {
-    context(
-        "empty line",
-        map(delimited(space0, opt(comment), newline), |_| ()),
-    )(s)
-}
-
-/// Either 0, 1 or more nodes
-enum OneMore {
-    One(Node),
-    More(Vec<Node>),
-}
-
-/// Parse a single paragraph
-fn paragraph<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Node, E> {
-    // paragraph consists of many lines
-    let (s, items) = fold_many1(
-        context(
-            "line",
-            alt((map(line, OneMore::More), map(line_command, OneMore::One))),
-        ),
-        || Vec::new(),
-        |mut acc, item| match item {
-            OneMore::One(x) => {
-                acc.push(x);
-                acc
-            }
-            OneMore::More(x) => match (acc.last_mut(), &x.as_slice()) {
-                (Some(Node::Text(t1)), &[Node::Text(t2)]) => {
-                    t1.push('\n');
-                    t1.push_str(&t2);
-                    acc
-                }
-                (_, x) => {
-                    acc.extend_from_slice(&x);
-                    acc
-                }
-            },
-        },
-    )(s)?;
-
-    // we parsed the paragraph
-    success(Node::Paragraph(items))(s)
-}
-
-/// Parse an entire document
-fn document<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    s: &'a str,
-) -> IResult<&'a str, Node, E> {
-    // skip the initial emptiness
-    let (s, _) = take_while(char::is_whitespace)(s)?;
-
-    // get the paragraph
-    let (s, paragraphs) = separated_list0(fold_many1(empty_line, || (), |_, _| ()), paragraph)(s)?;
-
-    // get the optional empty line termination
-    let (s, _) = take_while(char::is_whitespace)(s)?;
-
-    // succeed
-    success(Node::Document(paragraphs))(s)
 }
 
 #[cfg(test)]
@@ -835,6 +474,7 @@ mod tests {
             Parser::new(&lua, "@command(Hello there!)rest", macros.clone())
                 .inline_macro()
                 .unwrap()
+                .unwrap()
                 .as_str()
                 .unwrap(),
             "Hello there!"
@@ -843,6 +483,7 @@ mod tests {
         assert_eq!(
             Parser::new(&lua, "@command$Hello there!$rest", macros.clone())
                 .inline_macro()
+                .unwrap()
                 .unwrap()
                 .as_str()
                 .unwrap(),
@@ -870,6 +511,7 @@ mod tests {
             Parser::new(&lua, "@command a b c\nrest", macros.clone())
                 .line_macro()
                 .unwrap()
+                .unwrap()
                 .as_str()
                 .unwrap(),
             "a b c"
@@ -878,6 +520,7 @@ mod tests {
         assert_eq!(
             Parser::new(&lua, "@command a b \\( \\\\ c\nrest", macros.clone())
                 .line_macro()
+                .unwrap()
                 .unwrap()
                 .as_str()
                 .unwrap(),
@@ -888,6 +531,7 @@ mod tests {
             Parser::new(&lua, "    @command a b c\nrest", macros.clone())
                 .line_macro()
                 .unwrap()
+                .unwrap()
                 .as_str()
                 .unwrap(),
             "a b c"
@@ -896,6 +540,7 @@ mod tests {
         assert_eq!(
             Parser::new(&lua, "@command a b % c\nrest", macros.clone())
                 .line_macro()
+                .unwrap()
                 .unwrap()
                 .as_str()
                 .unwrap(),
