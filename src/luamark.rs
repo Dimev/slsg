@@ -321,7 +321,7 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
         self.untill_pred(|c| !c.is_whitespace() || c == '\n')?;
 
         // ensure that the next character in line is not a newline or comment
-        self.none("%\n")?;
+        //self.none("%\n")?;
 
         // parse the content
         let line_content = self.lua.create_table()?;
@@ -393,6 +393,8 @@ impl<'a, 'lua: 'a> Parser<'a, 'lua> {
 #[cfg(test)]
 mod tests {
     //use nom::Parser;
+
+    use mlua::FromLua;
 
     use super::*;
 
@@ -555,56 +557,104 @@ mod tests {
             .line_macro()
             .unwrap_err();
     }
-    /*
 
     #[test]
     fn parse_line() {
+        let lua = Lua::new();
+        let macros = lua.create_table().unwrap();
+        macros
+            .set(
+                "command",
+                lua.create_function(|_, (_, arg): (Table, String)| Ok(arg))
+                    .unwrap(),
+            )
+            .unwrap();
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("Hello world!\nrest"),
-            Ok(("rest", vec![Node::Text("Hello world!".to_string())]))
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "Hello world!\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec!["Hello world!".to_string()]
         );
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("Hello world!\\% not a comment!\nrest"),
-            Ok((
-                "rest",
-                vec![Node::Text("Hello world!% not a comment!".to_string())]
-            ))
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "Hello world!\\% Not a comment!\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec![
+                "Hello world!".to_string(),
+                "%".to_string(),
+                " Not a comment!".to_string()
+            ]
         );
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("  Hello world!\nrest"),
-            Ok(("rest", vec![Node::Text("Hello world!".to_string())]))
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "   Hello world!\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec!["Hello world!".to_string()]
         );
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("Hello world! % ignore\nrest"),
-            Ok(("rest", vec![Node::Text("Hello world! ".to_string())]))
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "Hello world! % comment\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec!["Hello world! ".to_string()]
         );
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("Hello world! @command(hello)\nrest"),
-            Ok((
-                "rest",
-                vec![
-                    Node::Text("Hello world! ".to_string()),
-                    Node::Command {
-                        name: "command".to_string(),
-                        arguments: "hello".to_string()
-                    }
-                ]
-            ))
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "Hello world! @command(hello)\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec!["Hello world! ".to_string(), "hello".to_string()]
         );
+
         assert_eq!(
-            line::<VerboseError<&str>>.parse("Hello world! @command(hello\nworld% ignore\n)\nrest"),
-            Ok((
-                "rest",
-                vec![
-                    Node::Text("Hello world! ".to_string()),
-                    Node::Command {
-                        name: "command".to_string(),
-                        arguments: "hello\nworld\n".to_string()
-                    }
-                ]
-            ))
+            Vec::<String>::from_lua(
+                Parser::new(
+                    &lua,
+                    "Hello world! @command(hello\nworld% ignore\n)\nrest",
+                    macros.clone()
+                )
+                .line()
+                .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            vec!["Hello world! ".to_string(), "hello\nworld".to_string()]
         );
+
         assert_eq!(
+            Vec::<String>::from_lua(
+                Parser::new(&lua, "% hello\nrest", macros.clone())
+                    .line()
+                    .unwrap(),
+                &lua
+            )
+            .unwrap(),
+            Vec::<String>::new()
+        );
+        /*        assert_eq!(
             line::<VerboseError<&str>>.parse("   % hello\nrest"),
             Ok(("rest", vec![]))
         );
@@ -637,7 +687,9 @@ mod tests {
         );
         assert!(line::<VerboseError<&str>>.parse("  \t  \n").is_err());
         assert!(line::<VerboseError<&str>>.parse("      \n").is_err());
+        */
     }
+    /*
 
     #[test]
     fn parse_empty_line() {
