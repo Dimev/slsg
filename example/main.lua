@@ -19,23 +19,31 @@ function x:document(x)
 end
 
 function x:paragraph(x)
-  return h.p(x)
+  local entries = {}
+  for i, v in pairs(x) do
+    if type(v) == 'table' then
+      entries[i] = table.concat(v)
+    else
+      entries[i] = h.p(v)
+    end
+  end
+  return table.concat(entries)
 end
 
 function x:code(args, code)
-  return h.code { args, h.pre(code) }
+  return { h.code { args, h.pre(code) } }
 end
 
-function x:title(args) return h.h1(args) end
+function x:title(args) return { h.h1(args) } end
 
-function x:date(args) return h.pre(args) end
+function x:date(args) return { h.pre(args) } end
 
-function x:section(args) return h.h2(args) end
+function x:section(args) return { h.h2(args) } end
 
-function x:text(args) return h.p(args) end
+function x:math(args) return { site.latex_to_mathml(args) } end
 
 local content = site.luamark_run(article, x)
-
+print(content)
 -- Make the html page
 -- building it like this minifies the html,
 -- and h automatically adds the DOCTYPE

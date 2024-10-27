@@ -12,6 +12,8 @@ When outputting to a build directory however, it does try and prevent writing to
 ## Current TODO:
 - [ ] have example site also serve as short intro to slsg (show some features)
 - [ ] API docs
-- [ ] Luamark parser
-- [ ] Functioning commands
+- [X] Luamark parser
+- [ ] Luamark parser tests
+- [ ] Syntax highlighting
+- [X] Functioning macros
 

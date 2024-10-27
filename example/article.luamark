@@ -14,8 +14,13 @@ again, multiple lines
 Now with a header!
 We can even have some sample code, see below!
 
-mogus @begin@code lua
+The code @begin@code lua
 -- Say hello again!
 print "Hello, world!"
 print "In here, everything is verbatim, so we can print characters like % just fine!"
 @end@code
+
+We can also do inline macros, to convert mathml to latex for example
+@math$\sqrt{x^2 + 1}$
+The math environment for macros, delimited with $, ignores all \\ escape sequences except for \\$
+This makes it easier to write latex
