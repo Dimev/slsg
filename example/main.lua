@@ -15,16 +15,15 @@ html {
 local article = site.read 'article.luamark'
 local x = {}
 function x:document(x)
-  print(x)
   return h.main(x)
 end
 
 function x:paragraph(x)
-  return 'mogu' -- table.concat(x)
+  return h.p(x)
 end
 
 function x:code(args, code)
-  return args .. '\n' .. h.pre(code)
+  return h.code { args, h.pre(code) }
 end
 
 function x:title(args) return h.h1(args) end

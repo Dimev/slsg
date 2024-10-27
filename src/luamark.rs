@@ -23,16 +23,10 @@ impl<'a> Parser<'a> {
         row: usize,
         col: usize,
     ) -> Result<Value<'lua>> {
-        let mut parser = Self {
-
-            input,
-
-            row,
-            col,
-        };
+        let mut parser = Self { input, row, col };
 
         // Current document
-        let mut document = lua.create_table()?;
+        let document = lua.create_table()?;
 
         // current paragraph
         let mut paragraph = lua.create_table()?;
@@ -44,10 +38,38 @@ impl<'a> Parser<'a> {
         while !parser.input.is_empty() {
             // if we start with whitespace, take that
             if parser.input.starts_with(char::is_whitespace) {
-                // TODO: more than 2 whitespaces?
                 // push the paragraph
-                if parser.until_pred(|c| !c.is_whitespace()).is_none() {
-                    parser.input = "";
+                if let Some(content) = parser.until_pred(|c| !c.is_whitespace()) {
+                    // more than 2 whitespaces, aka an empty line? round off the paragraph
+                    // if it's not empty at least
+                    if content.chars().filter(|c| *c == '\n').count() >= 2
+                        && (!text.is_empty() || !paragraph.is_empty())
+                    {
+                        if !text.is_empty() {
+                            paragraph.push(text)?;
+                            text = String::new();
+                        }
+
+                        // call the paragraph macro
+                        let res: Value = macros
+                            .call_method(
+                                "paragraph",
+                                (paragraph, Value::Nil, parser.row, parser.col),
+                            )
+                            .context(format!(
+                                "[string]:{}:{}: Failed to call macro `paragraph`",
+                                parser.row, parser.col
+                            ))?;
+
+                        // push the paragraph to the document
+                        document.push(res)?;
+
+                        // new paragraph
+                        paragraph = lua.create_table()?;
+                    }
+                } else {
+                    // no match means end of input, so stop
+                    break;
                 }
 
                 // string is not empty or does not end in a whitespace? add a whitespace
@@ -59,7 +81,7 @@ impl<'a> Parser<'a> {
             else if parser.input.starts_with('%') {
                 // take until the newline
                 if parser.until_pat("\n").is_none() {
-                    parser.input = "";
+                    break;
                 }
 
                 // string is not empty or does not end in a whitespace? add a whitespace
@@ -73,13 +95,13 @@ impl<'a> Parser<'a> {
                 parser.pat("\\");
 
                 // take until the whitespace
-                if let Some(content) = parser.until_pred(|c| !c.is_whitespace()) {
+                if let Some(content) = parser.until_pred(char::is_whitespace) {
                     // add it to the string
                     text.push_str(content);
                 } else {
                     // else, end of file, push the rest
                     text.push_str(parser.input);
-                    parser.input = "";
+                    break;
                 }
             }
             // if we start with a @begin, parse a block macro
@@ -88,17 +110,20 @@ impl<'a> Parser<'a> {
                 parser.pat("@begin");
 
                 // take the @
-                // TODO: parse position
-                parser.pat("@").ok_or(mlua::Error::external(
-                    "Expected a @name after the @begin of a block macro",
-                ))?;
+                parser.pat("@").ok_or(mlua::Error::external(format!(
+                    "[string]:{}:{}: Expected a @name after the @begin of a block macro",
+                    parser.row, parser.col
+                )))?;
 
                 // take the tag name
                 let tag = parser
                     .until_pred(char::is_whitespace)
                     .filter(|x| x.len() > 0)
                     .ok_or_else(|| {
-                        mlua::Error::external("Expected a macro name, but got nothing")
+                        mlua::Error::external(format!(
+                            "[string]:{}:{}: Expected a macro name",
+                            parser.row, parser.col
+                        ))
                     })?;
 
                 // name of the macro
@@ -106,39 +131,100 @@ impl<'a> Parser<'a> {
 
                 // read until the newline
                 // TODO: proper escape and comment handling
-                let arguments = parser.until_pat("\n").ok_or(mlua::Error::external(
-                    "Expected a newline, but did not get it",
-                ))?;
+                let argument = parser.until_pat("\n").ok_or(mlua::Error::external(format!(
+                    "[string]:{}:{}: Expected a newline after the argument",
+                    parser.row, parser.col
+                )))?;
 
                 // read the newline
                 parser.pat("\n");
+
+                // content starts here
+                let (row, col) = (parser.row, parser.col);
 
                 // closing tag
                 let closing = format!("@end@{tag}");
 
                 // read until the closing tag
-                let content = parser.until_pat(&closing).ok_or(mlua::Error::external(format!(
-                    "Expected a closing {closing}, but did not get it",
-                )))?;
+                let content = parser
+                    .until_pat(&closing)
+                    .ok_or(mlua::Error::external(format!(
+                        "[string]:{}:{}: Expected a closing {closing}, but did not get it",
+                        parser.row, parser.col
+                    )))?;
 
                 // read the closing tag
                 parser.pat(&closing);
 
                 // run the macro
-                let result: Value = macros.call_method(name, ())?;
+                let result: Value = macros
+                    .call_method(name, (argument.trim(), content, row, col))
+                    .context(format!(
+                        "[string]:{}:{}: Failed to call method `{name}`",
+                        parser.row, parser.col
+                    ))?;
+
+                // push the current string, as that's valid content
+                paragraph.push(text)?;
+                text = String::new();
 
                 // push the macro to the paragrah
                 paragraph.push(result)?;
             }
             // if we start with a @, parse a normal macro
             else if parser.input.starts_with('@') {
+                // take the @
+                parser.pat("@");
+
+                // characters to open/close the argument with
+                let opening = "<{([|$";
+                let closing = ">})]|$";
+
+                // take the name
+                let name = parser
+                    .until_pred(|c| c.is_whitespace() || opening.contains(c))
+                    .filter(|x| x.len() > 0);
+
+                // take the delimiter
+                // TODO
             }
             // we now have normal text, eat up until the next special character
             else {
+                if let Some(content) =
+                    parser.until_pred(|c| c.is_whitespace() || "\\@%".contains(c))
+                {
+                    // add content
+                    text.push_str(content);
+                } else {
+                    // content was the rest of the input
+                    text.push_str(parser.input);
+                    parser.input = "";
+                }
             }
         }
 
-        todo!()
+        // close the paragraph
+        if !text.is_empty() {
+            paragraph.push(text)?
+        }
+
+        if !paragraph.is_empty() {
+            let res: Value = macros
+                .call_method("paragraph", (paragraph, Value::Nil, parser.row, parser.col))
+                .context(format!(
+                    "[string]:{}:{}: Failed to call macro `paragraph`",
+                    parser.row, parser.col
+                ))?;
+
+            // push the paragraph to the document
+            document.push(res).context(format!(
+                "[string]:{}:{}: Failed to call macro `document`",
+                parser.row, parser.col
+            ))?;
+        }
+
+        // close the document
+        macros.call_method("document", (document, Value::Nil, row, col))
     }
 
     /// take until we match a predicate
