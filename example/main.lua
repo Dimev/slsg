@@ -2,7 +2,7 @@ local h = site.html
 
 -- CSS for our site
 -- site.css automatically minifies it
-local style = [[
+local style = site.sass [[
 html {
   display: flex;
   justify-content: center;

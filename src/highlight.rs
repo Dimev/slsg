@@ -128,25 +128,64 @@ impl Highlighter {
 
 impl UserData for Highlighter {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method("highlight_html", |_, this, text: String| {
-            Ok(this
-                .highlight(&text)
-                .into_iter()
-                .map(|x| {
-                    // escape the html
-                    let escaped = x
-                        .text
-                        .replace("&", "&amp;")
-                        .replace("\"", "&quot;")
-                        .replace("'", "&apos;")
-                        .replace("<", "&lt;")
-                        .replace(">", "&gt;");
+        methods.add_method(
+            "highlight_html",
+            |_, this, (text, class): (String, Option<String>)| {
+                Ok(this
+                    .highlight(&text)
+                    .into_iter()
+                    .map(|x| {
+                        // escape the html
+                        let escaped = x
+                            .text
+                            .replace("&", "&amp;")
+                            .replace("\"", "&quot;")
+                            .replace("'", "&apos;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;");
 
-                    // add the span html node
-                    format!("<span class=\"{}\">{escaped}</span>", x.token)
-                })
-                .collect::<String>())
-        });
+                        // add the span html node
+                        format!(
+                            "<span class=\"{}{}\">{escaped}</span>",
+                            class.as_ref().unwrap_or(&String::new()),
+                            x.token
+                        )
+                    })
+                    .collect::<String>())
+            },
+        );
+        methods.add_method(
+            "highlight_html_lines",
+            |_, this, (text, start, class): (String, Option<isize>, Option<String>)| {
+                let mut start = start.unwrap_or(1);
+                Ok(this
+                    .highlight(&text)
+                    .into_iter()
+                    .flat_map(|x| {
+                        // escape the html
+                        let escaped = x
+                            .text
+                            .replace("&", "&amp;")
+                            .replace("\"", "&quot;")
+                            .replace("'", "&apos;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;");
+
+                        // split on newlines
+                        // when encountering one, end the span and table row
+                        // TODO
+
+                        // add the span html node
+                        vec![format!(
+                            "<span class=\"{}{}\">{escaped}</span>",
+                            class.as_ref().unwrap_or(&String::new()),
+                            x.token
+                        )]
+                        .into_iter()
+                    })
+                    .collect::<String>())
+            },
+        );
         methods.add_method("highlight_ast", |lua, this, text: String| {
             let out = lua.create_table()?;
             for span in this.highlight(&text).into_iter() {
