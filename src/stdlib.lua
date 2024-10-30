@@ -77,9 +77,9 @@ api.luamark_ast = function(text)
   return internal.luamark_run(text, luamark_ast)
 end
 
--- TODO
--- parser
--- highlighting
+-- syntax highlighting
+api.highlighter = internal.highlighter
+
 
 -- escape html
 function api.escape_html(html)

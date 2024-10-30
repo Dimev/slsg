@@ -12,6 +12,7 @@ mod luamark;
 mod message;
 mod serve;
 mod stdlib;
+mod highlight;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\

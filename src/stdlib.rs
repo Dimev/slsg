@@ -14,7 +14,7 @@ use rsass::{
     output::{Format, Style},
 };
 
-use crate::luamark::Parser;
+use crate::{highlight::Highlighter, luamark::Parser};
 
 #[derive(Debug)]
 struct LuaLoader<'a>(Option<Function<'a>>);
@@ -205,9 +205,14 @@ pub(crate) fn stdlib<'a>(lua: &'a Lua) -> Result<Table<'a>> {
         })?,
     )?;
 
+    // syntax highlighting, create highlighter
+    api.set(
+        "highlighter",
+        lua.create_function(|_, text| Highlighter::from_rules(text))?,
+    )?;
+
     // TODO: slugify
     // TODO: clean up naming
-    // TODO: syntax highlighting
 
     Ok(api)
 }

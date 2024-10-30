@@ -10,7 +10,27 @@ html {
   height: 100vh;
   font-family: sans-serif;
 }
+
+.comment {
+  color: gray;
+}
+
+.keyword {
+  color: red;
+}
+
+.string {
+  color: darkgreen;
+}
 ]]
+
+local highlighter = site.highlighter({
+  start = {
+    { token = 'comment', regex = [[--.*]] },
+    { token = 'keyword', regex = [[print]] },
+    { token = 'string', regex = [[".*"]]}
+  }
+})
 
 local article = site.read 'article.luamark'
 local x = {}
@@ -31,7 +51,7 @@ function x:paragraph(x)
 end
 
 function x:code(args, code)
-  return { h.code { args, h.pre(code) } }
+  return { h.code { h.pre { highlighter:highlight_html(code) } } }
 end
 
 function x:title(args) return { h.h1(args) } end
@@ -43,7 +63,7 @@ function x:section(args) return { h.h2(args) } end
 function x:math(args) return { site.latex_to_mathml(args) } end
 
 local content = site.luamark_run(article, x)
-print(content)
+
 -- Make the html page
 -- building it like this minifies the html,
 -- and h automatically adds the DOCTYPE
