@@ -14,6 +14,6 @@ When outputting to a build directory however, it does try and prevent writing to
 - [ ] API docs
 - [X] Luamark parser
 - [ ] Luamark parser tests
-- [X] Syntax highlighting
+- [ ] Syntax highlighting + html generation
 - [X] Functioning macros
 

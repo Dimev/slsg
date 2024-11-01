@@ -1,8 +1,37 @@
 -- parse our sass
-local css = site.sass(site.read './style.scss' )
+local css = site.sass(site.read './style.scss')
 
 -- shortcut
 local h = site.html
+
+-- make an example luamark parser
+function parse(article)
+  -- table with all values
+  local macros = {
+    title = '',
+    text = h.p,
+    paragraph = table.concat,
+    document = table.concat,
+  }
+
+  -- add a title
+  function macros:title(args)
+    self.title = args
+  end
+
+  -- add an image
+  function macros:img(args)
+    return {
+
+    }
+  end
+
+  -- parse a luamark article
+  local res = site.luamark_run(article)
+  return res
+end
+
+-- load the example article
 
 -- make an example page
 local html = h {

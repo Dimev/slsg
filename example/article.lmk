@@ -22,5 +22,6 @@ print "In here, everything is verbatim, so we can print characters like % just f
 
 We can also do inline macros, to convert mathml to latex for example
 @math$\sqrt{x^2 + 1}$
-The math environment for macros, delimited with $, ignores all \\ escape sequences except for \\$
+The math environment for macros, delimited with $, ignores all \\ escape sequences,
+except for \\$ and \\%.
 This makes it easier to write latex

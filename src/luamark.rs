@@ -45,7 +45,14 @@ impl<'a> Parser<'a> {
                         && (!text.is_empty() || !paragraph.is_empty())
                     {
                         if !text.is_empty() {
-                            paragraph.push(text)?;
+                            let res: Value = macros
+                                .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                                .context(format!(
+                                    "[string]:{}:{}: Failed to call macro `text`",
+                                    parser.row, parser.col
+                                ))?;
+
+                            paragraph.push(res)?;
                             text = String::new();
                         }
 
@@ -210,7 +217,14 @@ impl<'a> Parser<'a> {
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
-                    paragraph.push(text)?;
+                    let res: Value = macros
+                        .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                        .context(format!(
+                            "[string]:{}:{}: Failed to call macro `text`",
+                            parser.row, parser.col
+                        ))?;
+
+                    paragraph.push(res)?;
                     text = String::new();
                 }
 
@@ -289,10 +303,15 @@ impl<'a> Parser<'a> {
                     else if parser.input.starts_with('%') {
                         parser.until_pat("\n");
                     }
-                    // math environment escape, only parse \$ as a $, ignore the others
+                    // math environment escape, parse \$ as a $
                     else if parser.input.starts_with("\\$") && closing == '$' {
                         parser.pat("\\$");
                         argument.push('$');
+                    }
+                    // math environment escape, parse \% as a %
+                    else if parser.input.starts_with("\\%") && closing == '$' {
+                        parser.pat("\\%");
+                        argument.push('%');
                     }
                     // other escape for the math environment does nothing
                     else if parser.input.starts_with('\\') && closing == '$' {
@@ -341,7 +360,14 @@ impl<'a> Parser<'a> {
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
-                    paragraph.push(text)?;
+                    let res: Value = macros
+                        .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                        .context(format!(
+                            "[string]:{}:{}: Failed to call macro `text`",
+                            parser.row, parser.col
+                        ))?;
+
+                    paragraph.push(res)?;
                     text = String::new();
                 }
 
@@ -369,7 +395,14 @@ impl<'a> Parser<'a> {
 
         // close the paragraph
         if !text.is_empty() {
-            paragraph.push(text)?
+            let res: Value = macros
+                .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                .context(format!(
+                    "[string]:{}:{}: Failed to call macro `text`",
+                    parser.row, parser.col
+                ))?;
+
+            paragraph.push(res)?;
         }
 
         if !paragraph.is_empty() {
