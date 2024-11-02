@@ -1,4 +1,4 @@
-use mlua::{ErrorContext, Lua, ObjectLike, Result, Table, Value};
+use mlua::{ErrorContext, IntoLua, Lua, MultiValue, ObjectLike, Result, Table, Value};
 use unicode_width::UnicodeWidthStr;
 
 /// Parser for luamark
@@ -135,61 +135,8 @@ impl<'a> Parser<'a> {
                 // name of the macro
                 let name = tag.split_once('@').map(|x| x.0).unwrap_or(tag);
 
-                // parse the argument
-                // TODO: also allow opening/closing tags here like the other macro type
-                let mut argument = String::new();
-                while !parser.input.starts_with('\n') {
-                    // end of input, fail
-                    if parser.input.is_empty() {
-                        Err(mlua::Error::external(format!(
-                            "[string]:{}:{}: Expected a newline and rest of block macro, got end of input",
-                            parser.row, parser.col
-                        )))?
-                    }
-                    // whitespace
-                    else if parser
-                        .input
-                        .starts_with(|c: char| c.is_whitespace() && c != '\n')
-                    {
-                        // consume the whitespace
-                        parser.until_pred(|c| !c.is_whitespace() || c == '\n');
-
-                        // push a space if the string is not empty or does not have a whitespace already
-                        if !argument.is_empty() && !argument.ends_with(char::is_whitespace) {
-                            argument.push(' ');
-                        }
-                    }
-                    // comment
-                    else if parser.input.starts_with('%') {
-                        parser.until_pat("\n");
-                    }
-                    // escaped
-                    else if parser.input.starts_with('\\') {
-                        // take \
-                        parser.pat("\\");
-
-                        // take until a whitespace
-                        let content = parser.until_pred(char::is_whitespace)
-                            .ok_or(mlua::Error::external(format!(
-                                "[string]:{}:{}: Expected a newline and rest of block macro, got end of input",
-                                parser.row, parser.col
-                            )))?;
-
-                        // push the escaped value
-                        argument.push_str(content);
-                    }
-                    // rest, read until the next special character
-                    else {
-                        if let Some(content) =
-                            parser.until_pred(|c| c.is_whitespace() || "\n\\%".contains(c))
-                        {
-                            argument.push_str(content);
-                        }
-                    }
-                }
-
-                // read the newline
-                parser.pat("\n");
+                // parse the argument list
+                let mut arguments = parser.arg_list(lua)?;
 
                 // content starts here
                 let (row, col) = (parser.row, parser.col);
@@ -208,13 +155,16 @@ impl<'a> Parser<'a> {
                 // read the closing tag
                 parser.pat(&closing);
 
+                // other arguments
+                arguments.push_back(content.into_lua(lua)?);
+                arguments.push_back(Value::Integer(row as i64));
+                arguments.push_back(Value::Integer(col as i64));
+
                 // run the macro
-                let result: Value = macros
-                    .call_method(name, (argument.trim(), content, row, col))
-                    .context(format!(
-                        "[string]:{}:{}: Failed to call method `{name}`",
-                        parser.row, parser.col
-                    ))?;
+                let result: Value = macros.call_method(name, arguments).context(format!(
+                    "[string]:{}:{}: Failed to call method `{name}`",
+                    parser.row, parser.col
+                ))?;
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
@@ -237,13 +187,9 @@ impl<'a> Parser<'a> {
                 // take the @
                 parser.pat("@");
 
-                // characters to open/close the argument with
-                let opening = "<{([|$";
-                let closing = ">})]|$";
-
                 // take the name
                 let name = parser
-                    .until_pred(|c| c.is_whitespace() || opening.contains(c))
+                    .until_pred(|c| c.is_whitespace() || "<{([|$".contains(c))
                     .filter(|x| x.len() > 0)
                     .ok_or_else(|| {
                         mlua::Error::external(format!(
@@ -252,113 +198,17 @@ impl<'a> Parser<'a> {
                         ))
                     })?;
 
-                // take the delimiter
-                let delimiter = parser
-                    .pat("<")
-                    .or_else(|| parser.pat("{"))
-                    .or_else(|| parser.pat("("))
-                    .or_else(|| parser.pat("["))
-                    .or_else(|| parser.pat("|"))
-                    .or_else(|| parser.pat("$"))
-                    .or_else(|| parser.until_pred(|c| !c.is_whitespace()))
-                    .ok_or(mlua::Error::external(format!(
-                        "[string]:{}:{}: Expected any of `<`, `{{`, `(`, `[`, `|`, `$` or a whitespace",
-                        parser.row,
-                        parser.col
-                    )))?;
-
-                // get the closing delimiter
-                let closing = if delimiter.starts_with(char::is_whitespace) {
-                    '\n'
-                } else {
-                    closing
-                        .chars()
-                        .nth(opening.find(delimiter).unwrap())
-                        .unwrap()
-                };
-
-                // parse the argument
-                let mut argument = String::new();
-                while !parser.input.starts_with(closing) {
-                    // end of input, fail
-                    if parser.input.is_empty() {
-                        Err(mlua::Error::external(format!(
-                            "[string]:{}:{}: Expected a newline and rest of block macro, got end of input",
-                            parser.row, parser.col
-                        )))?
-                    }
-                    // whitespace
-                    else if parser
-                        .input
-                        .starts_with(|c: char| c.is_whitespace() && c != closing)
-                    {
-                        // consume the whitespace
-                        parser.until_pred(|c| !c.is_whitespace() || c == closing);
-
-                        // push a space if the string is not empty or does not have a whitespace already
-                        if !argument.is_empty() && !argument.ends_with(char::is_whitespace) {
-                            argument.push(' ');
-                        }
-                    }
-                    // comment
-                    // TODO: consider seperating with ,?
-                    else if parser.input.starts_with('%') {
-                        parser.until_pat("\n");
-                    }
-                    // math environment escape, parse \$ as a $
-                    else if parser.input.starts_with("\\$") && closing == '$' {
-                        parser.pat("\\$");
-                        argument.push('$');
-                    }
-                    // math environment escape, parse \% as a %
-                    else if parser.input.starts_with("\\%") && closing == '$' {
-                        parser.pat("\\%");
-                        argument.push('%');
-                    }
-                    // other escape for the math environment does nothing
-                    else if parser.input.starts_with('\\') && closing == '$' {
-                        parser.pat("\\");
-                        argument.push('\\');
-                    }
-                    // escaped, only count if it's not enclosed in a math environment (aka $)
-                    else if parser.input.starts_with('\\') && closing != '$' {
-                        // take \
-                        parser.pat("\\");
-
-                        // take until a whitespace
-                        let content = parser.until_pred(char::is_whitespace)
-                            .ok_or(mlua::Error::external(format!(
-                                "[string]:{}:{}: Expected a closing delimiter to the inline macro, got end of input",
-                                parser.row, parser.col
-                            )))?;
-
-                        // push the escaped value
-                        argument.push_str(content);
-                    }
-                    // rest, read until the next special character
-                    else {
-                        if let Some(content) = parser
-                            .until_pred(|c| c.is_whitespace() || "\\%".contains(c) || c == closing)
-                        {
-                            argument.push_str(content);
-                        }
-                    }
-                }
-
-                // closing tag as a string
-                let mut buf = [0 as u8; 4];
-                let closing = closing.encode_utf8(&mut buf);
-
-                // read the closing tag
-                parser.pat(closing);
+                // parse the argument list
+                let mut arguments = parser.arg_list(lua)?;
+                arguments.push_back(Value::Nil);
+                arguments.push_back(Value::Integer(parser.row as i64));
+                arguments.push_back(Value::Integer(parser.col as i64));
 
                 // run the macro
-                let result: Value = macros
-                    .call_method(name, (argument.trim(), Value::Nil, row, col))
-                    .context(format!(
-                        "[string]:{}:{}: Failed to call method `{name}`",
-                        parser.row, parser.col
-                    ))?;
+                let result: Value = macros.call_method(name, arguments).context(format!(
+                    "[string]:{}:{}: Failed to call method `{name}`",
+                    parser.row, parser.col
+                ))?;
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
@@ -426,6 +276,133 @@ impl<'a> Parser<'a> {
                 "[string]:{}:{}: Failed to call macro `document`",
                 parser.row, parser.col
             ))
+    }
+
+    /// Parse an argument list, for macros
+    fn arg_list(&mut self, lua: &Lua) -> Result<MultiValue> {
+        // characters to open/close the argument with
+        let opening = "<{([|$";
+        let closing = ">})]|$";
+
+        // take the delimiter
+        let delimiter = self
+            .pat("<")
+            .or_else(|| self.pat("{"))
+            .or_else(|| self.pat("("))
+            .or_else(|| self.pat("["))
+            .or_else(|| self.pat("|"))
+            .or_else(|| self.pat("$"))
+            .or_else(|| self.until_pred(|c| !c.is_whitespace()))
+            .ok_or(mlua::Error::external(format!(
+                "[string]:{}:{}: Expected any of `<`, `{{`, `(`, `[`, `|`, `$` or a whitespace",
+                self.row, self.col
+            )))?;
+
+        // get the closing delimiter
+        let closing = if delimiter.starts_with(char::is_whitespace) {
+            '\n'
+        } else {
+            closing
+                .chars()
+                .nth(opening.find(delimiter).unwrap())
+                .unwrap()
+        };
+
+        // parse the argument
+        let mut argument = String::new();
+        let mut arguments = MultiValue::new();
+        while !self.input.starts_with(closing) {
+            // end of input, fail
+            if self.input.is_empty() {
+                Err(mlua::Error::external(format!(
+                    "[string]:{}:{}: Expected a newline and rest of block macro, got end of input",
+                    self.row, self.col
+                )))?
+            }
+            // whitespace
+            else if self
+                .input
+                .starts_with(|c: char| c.is_whitespace() && c != closing)
+            {
+                // consume the whitespace
+                self.until_pred(|c| !c.is_whitespace() || c == closing);
+
+                // push a space if the string is not empty or does not have a whitespace already
+                if !argument.is_empty() && !argument.ends_with(char::is_whitespace) {
+                    argument.push(' ');
+                }
+            }
+            // comment
+            else if self.input.starts_with('%') {
+                self.until_pat("\n");
+            }
+            // argument delimiter
+            else if self.input.starts_with(",") {
+                self.pat(",");
+                // in () and [], acts as an actual delimiter
+                if "])".contains(closing) {
+                    // push to the argument list
+                    if !argument.trim().is_empty() {
+                        arguments.push_back(argument.trim().into_lua(lua)?);
+                    }
+                } else {
+                    // just push it
+                    argument.push(',');
+                }
+            }
+            // math environment escape, parse \$ as a $
+            else if self.input.starts_with("\\$") && closing == '$' {
+                self.pat("\\$");
+                argument.push('$');
+            }
+            // math environment escape, parse \% as a %
+            else if self.input.starts_with("\\%") && closing == '$' {
+                self.pat("\\%");
+                argument.push('%');
+            }
+            // other escape for the math environment does nothing
+            else if self.input.starts_with('\\') && closing == '$' {
+                self.pat("\\");
+                argument.push('\\');
+            }
+            // escaped, only count if it's not enclosed in a math environment (aka $)
+            else if self.input.starts_with('\\') && closing != '$' {
+                // take \
+                self.pat("\\");
+
+                // take until a whitespace
+                let content = self.until_pred(char::is_whitespace)
+                            .ok_or(mlua::Error::external(format!(
+                                "[string]:{}:{}: Expected a closing delimiter to the inline macro, got end of input",
+                                self.row, self.col
+                            )))?;
+
+                // push the escaped value
+                argument.push_str(content);
+            }
+            // rest, read until the next special character
+            else {
+                if let Some(content) =
+                    self.until_pred(|c| c.is_whitespace() || "\\%,".contains(c) || c == closing)
+                {
+                    argument.push_str(content);
+                }
+            }
+        }
+
+        // closing tag as a string
+        let mut buf = [0 as u8; 4];
+        let closing = closing.encode_utf8(&mut buf);
+
+        // read the closing tag
+        self.pat(closing);
+
+        // push the last string
+        if !argument.trim().is_empty() {
+            arguments.push_back(argument.trim().into_lua(lua)?);
+        }
+
+        Ok(arguments)
     }
 
     /// take until we match a predicate

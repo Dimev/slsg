@@ -32,7 +32,7 @@ function parse(article)
   end
 
   -- add an image
-  function macros:img(args)
+  function macros:img(path, alt)
     return h.img { src = path, alt = alt }
   end
 
