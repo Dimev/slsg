@@ -9,10 +9,22 @@ function parse(article)
   -- table with all values
   local macros = {
     title = '',
-    text = h.p,
-    paragraph = table.concat,
-    document = table.concat,
   }
+
+  -- text is wrapped in <p>
+  function macros:text(args)
+    return h.p(args)
+  end
+
+  -- paragraphs are concatenated from the results
+  function macros:paragraph(args)
+    return table.concat(args)
+  end
+
+  -- same with the resulting document
+  function macros:document(args)
+    return table.concat(args)
+  end
 
   -- add a title
   function macros:title(args)
@@ -21,34 +33,36 @@ function parse(article)
 
   -- add an image
   function macros:img(args)
-    return {
-
-    }
+    return h.img { src = path, alt = alt }
   end
 
   -- parse a luamark article
-  local res = site.luamark_run(article)
-  return res
+  local res = site.luamark_run(article, macros)
+  return h.main {
+    h.h1(macros.title),
+    res
+  }
 end
 
 -- load the example article
+local article = parse(site.read 'article.lmk')
 
 -- make an example page
 local html = h {
   h.html {
     h.head {
-      h.style(css),
       h.title 'My Website',
       h.link { rel = 'icon', href = '/icon.svg' },
+      h.meta { charset = 'utf-8' },
       h.meta { name = 'viewport', content = 'width=device-width, initial-scale=1.0' },
+      h.style(css),
     },
     h.body {
       class = 'container',
       h.div {
         class = 'main',
-        h.h1 'Hello, world!',
-        h.p 'Edit the files to start making your site!',
-        h.img { class = 'logo', alt = 'SLSG logo', src = 'logo.svg' },
+        -- emit the article we made
+        article
       }
     }
   }
@@ -62,3 +76,4 @@ site.emit('logo.svg', site.logo)
 
 -- and the icon
 site.emit('icon.svg', site.icon)
+

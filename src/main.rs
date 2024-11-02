@@ -8,11 +8,11 @@ use message::print_error;
 use serve::serve;
 
 mod generate;
+mod highlight;
 mod luamark;
 mod message;
 mod serve;
 mod stdlib;
-mod highlight;
 
 // TODO: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_01
 const HELP: &str = "\
@@ -33,6 +33,7 @@ Options:
 
 const NEW_STYLE: &str = include_str!("style.scss");
 const NEW_LUA: &str = include_str!("new.lua");
+const NEW_ARTICLE: &str = include_str!("new.lmk");
 const NEW_META: &str = include_str!("meta.lua");
 
 const NEW_GITIGNORE: &str = "\
@@ -98,6 +99,10 @@ fn new(mut pargs: pico_args::Arguments) {
     std::fs::write(path.join("main.lua"), NEW_LUA)
         .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
 
+    // article
+    std::fs::write(path.join("article.lmk"), NEW_ARTICLE)
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("article.lmk")));
+
     // meta file for the language server
     std::fs::write(path.join("stdlib.meta"), NEW_META)
         .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path.join("stdlib.meta")));
@@ -108,7 +113,7 @@ fn new(mut pargs: pico_args::Arguments) {
 
     // report success
     println!("Created new site in {:?}", path);
-    println!("Run `slsl dev` in the directory to start making your site!");
+    println!("Run `slsg dev` in the directory to start making your site!");
 }
 
 /// Build an existing site

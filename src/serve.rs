@@ -51,7 +51,11 @@ pub(crate) fn serve(addr: String) {
     // watch for changes
     let watcher =
         // we only care about updates, so set the atomic to true if anything happened
-        notify::recommended_watcher(move |_| changed_clone.store(true, Ordering::Relaxed))
+        notify::recommended_watcher(move |e: Result<notify::Event, notify::Error>|
+            // and make sure that said update is not just file access, otherwise we can trigger ourselves
+            if  e.map(|e| !e.kind.is_access()).unwrap_or(false) {
+                changed_clone.store(true, Ordering::Relaxed)
+            })
         // wrap the result ok with the watcher because we don't want it to drop out of scope
         .and_then(|mut watcher| {
             watcher.watch(&PathBuf::from("."), notify::RecursiveMode::Recursive).map(|_| watcher)

@@ -1,4 +1,4 @@
-use mlua::{ErrorContext, Lua, Result, Table, TableExt, Value};
+use mlua::{ErrorContext, Lua, ObjectLike, Result, Table, Value};
 use unicode_width::UnicodeWidthStr;
 
 /// Parser for luamark
@@ -15,13 +15,13 @@ pub(crate) struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Parse a luamark string
-    pub(crate) fn parse<'lua>(
-        lua: &'lua Lua,
+    pub(crate) fn parse(
+        lua: &Lua,
         input: &'a str,
-        macros: Table<'lua>,
+        macros: Table,
         row: usize,
         col: usize,
-    ) -> Result<Value<'lua>> {
+    ) -> Result<Value> {
         let mut parser = Self { input, row, col };
 
         // Current document
@@ -136,6 +136,7 @@ impl<'a> Parser<'a> {
                 let name = tag.split_once('@').map(|x| x.0).unwrap_or(tag);
 
                 // parse the argument
+                // TODO: also allow opening/closing tags here like the other macro type
                 let mut argument = String::new();
                 while !parser.input.starts_with('\n') {
                     // end of input, fail
@@ -300,6 +301,7 @@ impl<'a> Parser<'a> {
                         }
                     }
                     // comment
+                    // TODO: consider seperating with ,?
                     else if parser.input.starts_with('%') {
                         parser.until_pat("\n");
                     }

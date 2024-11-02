@@ -17,9 +17,9 @@ use rsass::{
 use crate::{highlight::Highlighter, luamark::Parser};
 
 #[derive(Debug)]
-struct LuaLoader<'a>(Option<Function<'a>>);
+struct LuaLoader(Option<Function>);
 
-impl<'a> Loader for LuaLoader<'a> {
+impl<'a> Loader for LuaLoader {
     type File = Box<dyn Read>;
     fn find_file(
         &self,
@@ -37,7 +37,7 @@ impl<'a> Loader for LuaLoader<'a> {
             Err(e) => {
                 return Err(rsass::input::LoadError::Input(
                     url.to_string(),
-                    std::io::Error::other(e),
+                    std::io::Error::other(e.context("Failed to call `loader`").to_string()),
                 ))
             }
         };
@@ -55,7 +55,7 @@ impl<'a> Loader for LuaLoader<'a> {
 struct DirIter(ReadDir, u8);
 
 impl UserData for DirIter {
-    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method_mut(MetaMethod::Call, |_, iter, ()| {
             // make sure it matches lfs.dir
             if iter.1 == 0 {
@@ -83,7 +83,7 @@ impl UserData for DirIter {
     }
 }
 
-pub(crate) fn stdlib<'a>(lua: &'a Lua) -> Result<Table<'a>> {
+pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
     let api = lua.create_table()?;
     // list files
     api.set(

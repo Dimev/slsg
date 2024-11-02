@@ -169,14 +169,9 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
         let (key, value): (String, Table) =
             pair.context("Failed to read pair of the emitted files")?;
 
-        let value = match value.get::<&str, String>("type")?.as_str() {
-            "data" => Output::Data(
-                value
-                    .get::<&str, mlua::String>("data")?
-                    .as_bytes()
-                    .to_owned(),
-            ),
-            "file" => Output::File(PathBuf::from(value.get::<&str, String>("original")?)),
+        let value = match value.get::<String>("type")?.as_str() {
+            "data" => Output::Data(value.get::<mlua::String>("data")?.as_bytes().to_owned()),
+            "file" => Output::File(PathBuf::from(value.get::<String>("original")?)),
             "command" => Output::Command {
                 command: value.get("command")?,
                 arguments: value.get("arguments")?,
