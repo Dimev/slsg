@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
 
                 // take the tag name
                 let tag = parser
-                    .until_pred(char::is_whitespace)
+                    .until_pred(|c| c.is_whitespace() || "<{([|$".contains(c))
                     .filter(|x| x.len() > 0)
                     .ok_or_else(|| {
                         mlua::Error::external(format!(
@@ -156,7 +156,7 @@ impl<'a> Parser<'a> {
                 parser.pat(&closing);
 
                 // other arguments
-                arguments.push_back(content.into_lua(lua)?);
+                arguments.push_back(content.trim().into_lua(lua)?);
                 arguments.push_back(Value::Integer(row as i64));
                 arguments.push_back(Value::Integer(col as i64));
 

@@ -5,7 +5,7 @@ local css = site.sass(site.read './style.scss')
 local h = site.html
 
 -- make an example luamark parser
-function parse(article)
+local function parse(article)
   -- table with all values
   local macros = {
     title = '',

@@ -1,28 +1,59 @@
-html {
+h1,
+p {
+  font-family: sans-serif;
+}
+
+h1 {
+  text-align: center;
+}
+
+.container {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
-  font-family: sans-serif;
-}
-
-.logo {
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0;
 }
 
 .main {
+  box-shadow: 5px 5px 20px #aaa;
+  padding: 20px;
+  border-radius: 10px;
   max-width: 80ch;
 }
 
-.comment {
-  color: gray;
+img {
+  max-width: 20ch;
+  width: 100%;
 }
 
-.keyword {
-  color: red;
+.codeblock {
+  font-size: 1.2em;
+  background: #eee;
+  padding: 1ch;
+  border-radius: 10px;
 }
 
-.string {
-  color: darkgreen;
+.codeline {
+  font-size: 1.2em;
+  background: #eee;
+  display: inline;
+  padding: 0.2ch;
 }
+
+.code-comment {
+  color: #666;
+}
+
+.code-macro {
+  color: #e22;
+}
+
+.code-string {
+  color: #090;
+}
+
+.code-function {
+  color: #08b;
+}
+

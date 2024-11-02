@@ -1,27 +1,42 @@
-@title Hello world!
-@date 1-1-1970
+@title Hello SLSG!
+% Image of the site logo
+@img(logo.svg, SLSG logo)
 
-% we have a comment!
-This is a paragraph.
-It consists of multiple lines.
-And an \% escaped character!
-\% is normally reserved for comments
+This is the example site for SLSG, modified from the default template.
+We'll show off some more features here.
+This file is written in luamark, a special markdown language specifically made for SLSG.
+Luamark supports line comments with \%, can escape characters with \\, and do macros
 
-This is a second paragraph
-again, multiple lines
+Macros are started with \@, followed by a name, and then either a list of arguments, or a line,
+As follows: 
+@begin@code(luamark)
+% Line macros
+@name This is the rest!
 
-@section And the third paragraph
-Now with a header!
-We can even have some sample code, see below!
+% Inline macros
+% also possible with (), []
+% {}, <> and || don't do multiple arguments
+@name(arg1, arg2, arg3)
 
-The code @begin@code lua
--- Say hello again!
-print "Hello, world!"
-print "In here, everything is verbatim, so we can print characters like % just fine!"
+% We can also do block macros, to include code verbatim
+% These take all text in them literally, 
+% and only end at the closing @end@name tag
+@begin@name(arg1, arg2, arg3)
+This is all verbatim!
+@end@name
 @end@code
 
-We can also do inline macros, to convert mathml to latex for example
-@math$\sqrt{x^2 + 1}$
-The math environment for macros, delimited with $, ignores all \\ escape sequences,
-except for \\$ and \\%.
-This makes it easier to write latex
+We can also do Math, with LaTeX.
+Internally we can convert this to mathml with 
+@begin@code(lua)
+site.latex_to_mathml [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]
+@end@code
+
+We can then use the macro with $$ to allow latex to work.
+$$ won't escape characters as usual
+
+@math$\int{\exp(-\sqrt{x^2 + t^2})}dt$
+
+This was the short introduction to SLSG!
+run @inline|slsg api| to see the full API as well as examples!
+

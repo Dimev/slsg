@@ -16,8 +16,10 @@ p {
   box-shadow: 5px 5px 20px #aaa;
   padding: 20px;
   border-radius: 10px;
+  max-width: 80ch;
 }
 
 img {
+  max-width: 20ch;
   width: 100%;
 }

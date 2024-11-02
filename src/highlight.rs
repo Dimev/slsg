@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
+use fancy_regex::{Regex, RegexBuilder};
 use mlua::{Result, Table, UserData, UserDataMethods};
-use regex::{Regex, RegexBuilder};
 
 /// Single rule for the parser
 pub(crate) struct Rule {
@@ -74,7 +74,12 @@ impl Highlighter {
                 // find thle closest match
                 if let Some((first, token, next)) = rules
                     .iter()
-                    .filter_map(|x| x.regex.find(text).map(|y| (y, &x.token, &x.next)))
+                    .filter_map(|x| {
+                        x.regex
+                            .find(text)
+                            .unwrap_or(None)
+                            .map(|y| (y, &x.token, &x.next))
+                    })
                     .min_by_key(|x| x.0.start())
                 {
                     // split to the part we don't know of
