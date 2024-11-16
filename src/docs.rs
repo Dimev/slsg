@@ -165,7 +165,7 @@ pub(crate) fn print_docs() {
         },
         Rule {
             token: "control".to_string(),
-            regex: RegexBuilder::new("\\(|\\)|\\,|{|}").build().unwrap(),
+            regex: RegexBuilder::new("\\(|\\)|\\,|{|}|=").build().unwrap(),
             next: None,
         },
         Rule {
@@ -187,6 +187,7 @@ pub(crate) fn print_docs() {
             queue!(
                 stdout,
                 SetAttribute(Attribute::Bold),
+                Print("## "),
                 Print(rest.trim()),
                 SetAttribute(Attribute::Reset),
                 Print("\n")
