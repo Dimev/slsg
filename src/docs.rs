@@ -10,7 +10,7 @@ use crossterm::{
 };
 use fancy_regex::RegexBuilder;
 
-use crate::highlight::{self, Highlighter, Rule};
+use crate::highlight::{Highlighter, Rule};
 
 const DOCSTRING: &str = r#"
 ## SLSG
@@ -50,10 +50,7 @@ function site.latex_to_mathml(latex, inline)
 # and corresponds to the `inline` flag on the MathML `<math>` element
 # Example:
 > site.latex_to_mathml [[ \int{1} dx = x + C ]]
->> "<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
->> <mo>∫</mo><mn>1</mn><mi>d</mi><mi>x</mi>
->> <mo>=</mo><mi>x</mi><mo>+</mo><mi>C</mi></math>"
-# (Note that it does not wrap the lines when actually called)
+>> [[ <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msqrt><mi>x</mi></msqrt></math> ]]
 
 ## Sass
 function site.sass(sass, loader, expand)
@@ -126,7 +123,7 @@ function site.html_element(elem, content)
 # Any entry in the table using a string as key is considered an attribute,
 # any entry in the table using a number as key is considered an element
 > site.html_element('p', { class = 'greetings', 'Hello world!' }):render()
->> "<p class="greetings">Hello world!</p>"
+>> [[ <p class="greetings">Hello world!</p> ]]
 
 site.html
 # A special table to make writing html easier
@@ -137,18 +134,12 @@ site.html
 >   h.h1 'Hello world!'
 >   h.div {
 >     class = 'center',
->     h.p 'This is my site!'
->     h.p 'See, more text!'
+>     h.p 'This is my site!',
+>     h.p 'See, more text!',
 >     h.img { src = 'logo.png', alt = 'Site logo' },
 >   }
 > }
->> "<h1>Hello world!</h1>
->> <div class="center">
->>   <p>This is my site</p>
->>   <p>See, more text!</p>
->>   <img src="logo" alt="Site logo">
->> </div>"
-# (Spaces added to make the result more clear)
+>> [[ <h1>Hello world!</h1><div class="center"><p>This is my site</p><img src="logo" alt="Site logo"></div> ]]
 
 "#;
 
@@ -169,7 +160,7 @@ pub(crate) fn print_docs() {
         },
         Rule {
             token: "name".to_string(),
-            regex: RegexBuilder::new("(?<=\\.|:)\\w+\\(").build().unwrap(),
+            regex: RegexBuilder::new("(?<=\\.|:)\\w+(?=\\()").build().unwrap(),
             next: None,
         },
         Rule {
@@ -179,7 +170,7 @@ pub(crate) fn print_docs() {
         },
         Rule {
             token: "string".to_string(),
-            regex: RegexBuilder::new("(\\[\\[.*\\]\\])|(\".*\")|(\'.*\')")
+            regex: RegexBuilder::new("(\\[\\[[^(\\]\\])]*\\]\\])|(\"[^\\\"]*\")|('[^\\']*')")
                 .build()
                 .unwrap(),
             next: None,
