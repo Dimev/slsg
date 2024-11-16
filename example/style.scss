@@ -23,9 +23,14 @@ h1 {
   max-width: 80ch;
 }
 
+.imgblock {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 img {
   max-width: 20ch;
-  width: 100%;
 }
 
 .codeblock {
@@ -39,7 +44,7 @@ img {
   font-size: 1.2em;
   background: #eee;
   display: inline;
-  padding: 0.2ch;
+  padding: 0.3ch;
 }
 
 .code-comment {
@@ -57,4 +62,3 @@ img {
 .code-function {
   color: #08b;
 }
-

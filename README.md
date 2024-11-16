@@ -11,9 +11,10 @@ When outputting to a build directory however, it does try and prevent writing to
 
 ## Current TODO:
 - [ ] have example site also serve as short intro to slsg (show some features)
+- [ ] Lua language server files
 - [ ] API docs
 - [X] Luamark parser
 - [ ] Luamark parser tests
-- [ ] Syntax highlighting + html generation
+- [X] Syntax highlighting + html generation
 - [X] Functioning macros
 

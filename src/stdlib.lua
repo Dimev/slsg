@@ -126,6 +126,82 @@ local void_elements = {
   wbr = true,
 }
 
+-- render an html element
+function api.html_render(elem)
+  local attrs = {}
+  local elems = ''
+
+  for key, value in pairs(elem.attrs) do
+    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
+  end
+
+  for _, value in ipairs(elem.elems) do
+    if type(value) == 'table' then
+      elems = elems .. value:render()
+    else
+      -- no escape, we accept html in text form here
+      elems = elems .. value
+    end
+  end
+
+  if not elem.elem then
+    -- fragment
+    return elems
+  elseif void_elements[elem.elem] then
+    -- <open>
+    return '<' .. elem.elem .. (#attrs > 0 and ' ' or '')
+        .. table.concat(attrs, ' ') .. '>'
+  else
+    -- <open>inner<close>
+    return '<' .. elem.elem .. (#attrs > 0 and ' ' or '')
+        .. table.concat(attrs, ' ') .. '>'
+        .. elems
+        .. '</' .. elem.elem .. '>'
+  end
+end
+
+-- create an html fragment
+function api.html_fragment(elems)
+  return {
+    attrs = {},
+    elems = elems,
+    render = api.html_render,
+  }
+end
+
+-- merge a list of html elements into a fragment
+-- this means any consecutive elements with the same style will be merged into one longer element
+function api.html_merge(elems)
+  -- fast path if empty
+  if #elems == 0 then
+    return {
+      attrs = {}, elems = {}, render = api.html_render
+    }
+  end
+
+  local merged = {}
+  for _, value in ipairs(elems) do
+    if #merged == 0 then
+      -- empty merged, add it
+      table.insert(merged, value)
+    elseif value.elem == merged[#merged].elem then
+      -- same, merge attributes
+      for k, v in pairs(value.attrs) do merged[#merged].attrs[k] = v end
+      -- merge elements
+      for _, v in ipairs(value.elems) do table.insert(merged[#merged].elems, v) end
+    else
+      -- different, just add
+      table.insert(merged, value)
+    end
+  end
+
+  return {
+    attrs = {},
+    elems = merged,
+    render = api.html_render,
+  }
+end
+
 -- create an html element
 function api.html_element(elem, content)
   -- if we get a string, put it inside an element with no styling
@@ -138,39 +214,24 @@ function api.html_element(elem, content)
 
   for key, value in pairs(content) do
     -- skip if the key is not a string, as that means it's an index on the list
-    if type(key) == 'string' then
-      table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
-    end
+    if type(key) == 'string' then attrs[key] = value end
   end
 
   for _, value in ipairs(content) do
     if void_elements[elem] then
+      -- void elements cannot have children, so crash if it does
       error('Void element `' .. elem .. '` cannot have content')
     else
       table.insert(elems, value)
     end
   end
 
-  -- <open>inner</end>
-  if void_elements[elem] then
-    return '<' .. elem .. (#attrs > 0 and ' ' or '')
-        .. table.concat(attrs, ' ') .. '>'
-  else
-    return '<' .. elem .. (#attrs > 0 and ' ' or '')
-        .. table.concat(attrs, ' ') .. '>'
-        .. table.concat(elems)
-        .. '</' .. elem .. '>'
-  end
-end
-
--- merge a list of html elements
--- this means any consecutive elements with the same style will be merged into one longer element
-function api.html_merge(elems)
-  local res = ''
-  for _, v in ipairs(elems) do
-    -- if the start is the same, remove
-  end
-  return res
+  return {
+    elem = elem,
+    elems = elems,
+    attrs = attrs,
+    render = api.html_render,
+  }
 end
 
 -- create an html element from a table
@@ -178,8 +239,16 @@ end
 api.html = {}
 
 local html_meta = {}
-function html_meta:__call(element)
-  return '<!DOCTYPE html>' .. table.concat(element)
+function html_meta:__call(elems)
+  local res = ''
+  for _, value in ipairs(elems) do
+    if type(value) == 'table' then
+      res = res .. value:render()
+    else
+      res = res .. api.escape_html('' .. value)
+    end
+  end
+  return '<!DOCTYPE html>' .. res
 end
 
 function html_meta:__index(element)
@@ -197,38 +266,92 @@ setmetatable(api.html, html_meta)
 
 -- Same, but for generic xml (atom, svg etc)
 -- aka without void elements
+
+-- render an xml element
+function api.xml_render(elem)
+  local attrs = {}
+  local elems = ''
+
+  for key, value in pairs(elem.attrs) do
+    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
+  end
+
+  for _, value in ipairs(elem.elems) do
+    if type(value) == 'table' then
+      elems = elems .. value:render()
+    else
+      -- no escape, we accept xml in text form here
+      elems = elems .. value
+    end
+  end
+
+  if not elem.elem then
+    -- fragment
+    return elems
+  else
+    -- <open>inner<close>
+    return '<' .. elem.elem .. (#attrs > 0 and ' ' or '')
+        .. table.concat(attrs, ' ') .. '>'
+        .. elems
+        .. '</' .. elem.elem .. '>'
+  end
+end
+
+-- create an xml fragment
+function api.xml_fragment(elems)
+  return {
+    attrs = {},
+    elems = elems,
+    render = api.xml_render,
+  }
+end
+
+-- create an xml element
+function api.xml_element(elem, content)
+  -- if we get a string, put it inside an element with no styling
+  if type(content) == 'string' then
+    content = { api.escape_html(content) }
+  end
+
+  local attrs = {}
+  local elems = {}
+
+  for key, value in pairs(content) do
+    -- skip if the key is not a string, as that means it's an index on the list
+    if type(key) == 'string' then attrs[key] = value end
+  end
+
+  for _, value in ipairs(content) do
+    -- no need too deal with void elements
+    table.insert(elems, value)
+  end
+
+  return {
+    elem = elem,
+    elems = elems,
+    attrs = attrs,
+    render = api.xml_render,
+  }
+end
+
 api.xml = {}
 
 local xml_meta = {}
-function xml_meta:__call(element)
-  return table.concat(element)
+function xml_meta:__call(elems)
+  local res = ''
+  for _, value in ipairs(elems) do
+    if type(value) == 'table' then
+      res = res .. value:render()
+    else
+      res = res .. api.escape_html('' .. value)
+    end
+  end
+  return res
 end
 
 function xml_meta:__index(element)
-  return function(inside)
-    if type(inside) == 'string' then
-      return '<' .. element .. '>' .. api.escape_html(inside) .. '</' .. element .. '>'
-    end
-
-    local attributes = {}
-    local elements = {}
-
-    for key, value in pairs(inside) do
-      if type(key) == 'string' then
-        table.insert(attributes, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
-      end
-    end
-
-    for _, value in ipairs(inside) do
-      table.insert(elements, value)
-    end
-
-    -- <open>inner</end>
-    local open = '<' .. element .. ((#attributes > 0 and ' ') or '') .. table.concat(attributes, ' ') .. '>'
-    local inner = table.concat(elements)
-    local close = '</' .. element .. '>'
-
-    return open .. inner .. close
+  return function(content)
+    return api.xml_element(element, content)
   end
 end
 

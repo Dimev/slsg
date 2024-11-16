@@ -18,12 +18,12 @@ local function parse(article)
 
   -- paragraphs are concatenated from the results
   function macros:paragraph(args)
-    return table.concat(args)
+    return site.html_merge(args)
   end
 
   -- same with the resulting document
   function macros:document(args)
-    return table.concat(args)
+    return site.html_fragment(args)
   end
 
   -- add a title
@@ -36,9 +36,15 @@ local function parse(article)
     return h.img { src = path, alt = alt }
   end
 
+  -- inline code
+  function macros:inline(args)
+    return h.p { h.code { class = 'codeline', args } }
+  end
+
   -- parse a luamark article
   local res = site.luamark_run(article, macros)
   return h.main {
+    class = 'main',
     h.h1(macros.title),
     res
   }
@@ -59,11 +65,10 @@ local html = h {
     },
     h.body {
       class = 'container',
-      h.div {
-        class = 'main',
+
         -- emit the article we made
         article
-      }
+      
     }
   }
 }

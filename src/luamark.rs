@@ -78,8 +78,11 @@ impl<'a> Parser<'a> {
                     break;
                 }
 
-                // string is not empty or does not end in a whitespace? add a whitespace
-                if !text.is_empty() && !text.ends_with(char::is_whitespace) {
+                // text or paragraph is not empty and text does not end in a whitespace? add a whitespace, as we just skipped one
+                // if the parargaph is not empty this means this whitespace is likely desired
+                if (!paragraph.is_empty() || !text.is_empty())
+                    && !text.ends_with(char::is_whitespace)
+                {
                     text.push(' ');
                 }
             }
@@ -90,7 +93,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
 
-                // string is not empty or does not end in a whitespace? add a whitespace
+                // string is not empty or does not end in a whitespace? add a whitespace, as we just skipped one
                 if !text.is_empty() && !text.ends_with(char::is_whitespace) {
                     text.push(' ');
                 }
@@ -237,9 +240,7 @@ impl<'a> Parser<'a> {
                     }
                 } else {
                     // content was the rest of the input
-                    if !parser.input.trim().is_empty() {
-                        text.push_str(parser.input.trim())
-                    }
+                    text.push_str(parser.input.trim_end());
                     parser.input = "";
                 }
             }

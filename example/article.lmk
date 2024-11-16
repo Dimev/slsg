@@ -28,9 +28,7 @@ This is all verbatim!
 
 We can also do Math, with LaTeX.
 Internally we can convert this to mathml with 
-@begin@code(lua)
-site.latex_to_mathml [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]
-@end@code
+@inline|site.latex_to_mathml [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]|
 
 We can then use the macro with $$ to allow latex to work.
 $$ won't escape characters as usual
@@ -39,4 +37,3 @@ $$ won't escape characters as usual
 
 This was the short introduction to SLSG!
 run @inline|slsg api| to see the full API as well as examples!
-

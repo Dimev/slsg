@@ -20,6 +20,17 @@ p {
   max-width: 80ch;
 }
 
+.codeline {
+  background: #eee;
+  padding: 0.3ch;
+}
+
+.imgblock {
+  diplay: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 img {
   max-width: 20ch;
   width: 100%;
