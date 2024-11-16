@@ -6,28 +6,28 @@ use mlua::{Result, Table, UserData, UserDataMethods};
 /// Single rule for the parser
 pub(crate) struct Rule {
     /// Token name to emit
-    token: String,
+    pub token: String,
 
     /// Regex to match with
-    regex: Regex,
+    pub regex: Regex,
 
     /// New state to enter
-    next: Option<String>,
+    pub next: Option<String>,
 }
 
 /// Highlighted span
-struct Span {
+pub(crate) struct Span {
     /// Text that was highlighted
-    text: String,
+    pub text: String,
 
     /// Token it's part of
-    token: String,
+    pub token: String,
 }
 
 /// Highlighter for a language
 pub(crate) struct Highlighter {
     /// All parser rules
-    rules: BTreeMap<String, Vec<Rule>>,
+    pub rules: BTreeMap<String, Vec<Rule>>,
 }
 
 impl Highlighter {
@@ -63,7 +63,7 @@ impl Highlighter {
     }
 
     /// Highlight code
-    fn highlight(&self, mut text: &str) -> Vec<Span> {
+    pub(crate) fn highlight(&self, mut text: &str) -> Vec<Span> {
         let mut spans = Vec::new();
         let mut state = "start".to_string();
 

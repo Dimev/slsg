@@ -3,8 +3,10 @@ use std::{
     path::PathBuf,
 };
 
+use docs::print_docs;
 use generate::generate;
 use message::print_error;
+use mlua::{Lua, Table};
 use serve::serve;
 
 mod generate;
@@ -13,6 +15,7 @@ mod luamark;
 mod message;
 mod serve;
 mod stdlib;
+mod docs;
 
 const HELP: &str = "\
 Scriptable Lua Site Generator
@@ -39,10 +42,6 @@ const NEW_GITIGNORE: &str = "\
 public
 ";
 
-const API_DOCS: &str = "\
-# Example!
-";
-
 fn main() {
     let mut pargs = pico_args::Arguments::from_env();
 
@@ -55,6 +54,13 @@ fn main() {
     // print version
     if pargs.contains(["-v", "--version"]) {
         println!("slsg {}", env!("CARGO_PKG_VERSION"));
+
+        // luajit version
+        let lua = Lua::new();
+        let globals = lua.globals();
+        let jit: Table = globals.get("jit").expect("Failed to get LuaJIT version");
+        let version: String = jit.get("version").expect("Failed to get LuaJIT version");
+        println!("{}", version);
         return;
     }
 
@@ -63,7 +69,7 @@ fn main() {
         Some("dev") => dev(&mut pargs),
         Some("build") => build(&mut pargs),
         Some("new") => new(pargs),
-        Some("api") => println!("{}", API_DOCS),
+        Some("api") => print_docs(),
         _ => println!("{}", HELP),
     }
 }

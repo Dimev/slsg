@@ -382,12 +382,10 @@ impl<'a> Parser<'a> {
                 argument.push_str(content);
             }
             // rest, read until the next special character
-            else {
-                if let Some(content) =
-                    self.until_pred(|c| c.is_whitespace() || "\\%,".contains(c) || c == closing)
-                {
-                    argument.push_str(content);
-                }
+            else if let Some(content) =
+                self.until_pred(|c| c.is_whitespace() || "\\%,".contains(c) || c == closing)
+            {
+                argument.push_str(content);
             }
         }
 
