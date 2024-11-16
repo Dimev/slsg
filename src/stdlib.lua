@@ -90,7 +90,8 @@ function api.escape_html(html)
     ["<"] = "&lt;",
     [">"] = "&gt;",
   }
-  return string.gsub(html, '.', subst)
+  local res = string.gsub(html, '.', subst)
+  return res
 end
 
 -- unescape html
@@ -102,7 +103,8 @@ function api.unescape_html(html)
     ["&lt;"] = "<",
     ["&gt;"] = ">",
   }
-  return string.gsub(html, '.', subst)
+  local res = string.gsub(html, '.', subst)
+  return res
 end
 
 -- html
@@ -124,6 +126,53 @@ local void_elements = {
   wbr = true,
 }
 
+-- create an html element
+function api.html_element(elem, content)
+  -- if we get a string, put it inside an element with no styling
+  if type(content) == 'string' then
+    content = { api.escape_html(content) }
+  end
+
+  local attrs = {}
+  local elems = {}
+
+  for key, value in pairs(content) do
+    -- skip if the key is not a string, as that means it's an index on the list
+    if type(key) == 'string' then
+      table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
+    end
+  end
+
+  for _, value in ipairs(content) do
+    if void_elements[elem] then
+      error('Void element `' .. elem .. '` cannot have content')
+    else
+      table.insert(elems, value)
+    end
+  end
+
+  -- <open>inner</end>
+  if void_elements[elem] then
+    return '<' .. elem .. (#attrs > 0 and ' ' or '')
+        .. table.concat(attrs, ' ') .. '>'
+  else
+    return '<' .. elem .. (#attrs > 0 and ' ' or '')
+        .. table.concat(attrs, ' ') .. '>'
+        .. table.concat(elems)
+        .. '</' .. elem .. '>'
+  end
+end
+
+-- merge a list of html elements
+-- this means any consecutive elements with the same style will be merged into one longer element
+function api.html_merge(elems)
+  local res = ''
+  for _, v in ipairs(elems) do
+    -- if the start is the same, remove
+  end
+  return res
+end
+
 -- create an html element from a table
 -- pairs are the attributes, ipairs are the children
 api.html = {}
@@ -134,40 +183,8 @@ function html_meta:__call(element)
 end
 
 function html_meta:__index(element)
-  return function(inside)
-    -- if we get a string, put it inside an element with no styling
-    if type(inside) == 'string' and void_elements[element] then
-      error('Cannot have a void (' .. element .. ') element with content')
-    elseif type(inside) == 'string' then
-      return '<' .. element .. '>' .. api.escape_html(inside) .. '</' .. element .. '>'
-    end
-
-    local attributes = {}
-    local elements = {}
-
-    for key, value in pairs(inside) do
-      if type(key) == 'string' then
-        table.insert(attributes, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
-      end
-    end
-
-    for _, value in ipairs(inside) do
-      table.insert(elements, value)
-    end
-
-    -- <open>inner</end>
-    local open = '<' .. element .. ((#attributes > 0 and ' ') or '') .. table.concat(attributes, ' ') .. '>'
-    local inner = table.concat(elements)
-    local close = '</' .. element .. '>'
-
-    -- no closing tag if we are a void element
-    if void_elements[element] and #elements > 0 then
-      error 'Cannot have a void element with content'
-    elseif void_elements[element] then
-      return open .. inner
-    else
-      return open .. inner .. close
-    end
+  return function(content)
+    return api.html_element(element, content)
   end
 end
 

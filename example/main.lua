@@ -15,7 +15,7 @@ local languages = {
   lua = site.highlighter {
     start = {
       { token = 'string', regex = [=[\[\[.*\]\]]=] },
-      { token = 'function', regex = [[\w+\s*(?=\[)]]}
+      { token = 'function', regex = [[\w+\s*(?=\[)]] }
     }
   }
 }
