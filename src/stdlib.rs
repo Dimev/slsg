@@ -199,7 +199,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
     // luamark parser, run the code
     api.set(
-        "luamark_run",
+        "luamark",
         lua.create_function(|lua, (string, macros): (String, Table)| {
             Parser::parse(lua, &string, macros, 1, 1)
         })?,

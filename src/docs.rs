@@ -67,13 +67,35 @@ function site.sass(sass, loader, expand)
 # TODO: example and syntax
 # The preferred file extention for luamark is lmk
 
-function site.luamark_run(luamark, macros)
+function site.luamark(luamark, macros)
 # Parses the given luamark, then builds the result from the given macro table
 # Example:
-> local h = site.http
+> local h = site.html
 > local macros = {}
+> -- text gets called for all plain text
 > function macros:text(args)
->   return h.p 
+>   return h.p(args)
+> end
+> 
+> -- paragraph is called for each paragraph, which are seperated by empty lines
+> function macros:paragraph(args)
+>   -- merge the <p> elements, so it looks better
+>   return site.html_merge(args)
+> end
+>
+> -- document is called on after parsing the entire document
+> function macros:document(args)
+>   return site.html_fragment(args)
+> end
+>
+> -- example mathml converter
+> function macros:math(args)
+>   -- returns the raw html
+>   return site.latex_to_mathml(args)
+> end
+>
+> -- parse!
+> site.luamark('The document! @math$ 1 + 1 $ Goodbye!', macros)
 
 ## Syntax highlighting
 function site.highlighter(rules)
@@ -149,8 +171,8 @@ pub(crate) fn print_docs() {
 
     let start_rules = vec![
         Rule {
-            token: "keyword".to_string(),
-            regex: RegexBuilder::new("function|local|return").build().unwrap(),
+            token: "comment".to_string(),
+            regex: RegexBuilder::new("--.*").build().unwrap(),
             next: None,
         },
         Rule {
@@ -161,6 +183,13 @@ pub(crate) fn print_docs() {
         Rule {
             token: "name".to_string(),
             regex: RegexBuilder::new("(?<=\\.|:)\\w+(?=\\()").build().unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "keyword".to_string(),
+            regex: RegexBuilder::new("function|local|return|end|for|do|if|else|elseif|then")
+                .build()
+                .unwrap(),
             next: None,
         },
         Rule {
@@ -195,21 +224,22 @@ pub(crate) fn print_docs() {
             .expect("Failed to print line");
         } else if let Some(rest) = line.strip_prefix("#") {
             // # means a normal doc line
-            queue!(stdout, Print(' '), Print(rest.trim()), Print("\n"))
+            queue!(stdout, Print("  "), Print(rest.trim()), Print("\n"))
                 .expect("Failed to print line");
-        } else if let Some(rest) = line.strip_prefix(">> ") {
+        } else if let Some(rest) = line.strip_prefix(">>") {
             // Highlight example return value
-            queue!(stdout, Print(">> ".dark_grey()),).expect("Failed to print line");
+            queue!(stdout, Print(">>".dark_grey()),).expect("Failed to print line");
             print_lua(&mut stdout, rest, &lua_highlighter);
             queue!(stdout, Print("\n")).expect("Failed to print line");
-        } else if let Some(rest) = line.strip_prefix("> ") {
+        } else if let Some(rest) = line.strip_prefix(">") {
             // Highlight example code
-            queue!(stdout, Print("> ".dark_grey())).expect("Failed to print line");
+            queue!(stdout, Print(">".dark_grey())).expect("Failed to print line");
             print_lua(&mut stdout, rest, &lua_highlighter);
             queue!(stdout, Print("\n")).expect("Failed to print line");
         } else if !line.is_empty() {
             // Highlight code
             print_lua(&mut stdout, line, &lua_highlighter);
+            queue!(stdout, Print("\n")).expect("Failed to print line");
         } else {
             queue!(stdout, Print("\n")).expect("Failed to print line");
         }
@@ -245,6 +275,11 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
             "name" => {
                 stdout
                     .queue(Print(span.text.bold()))
+                    .expect("Failed to print line");
+            }
+            "comment" => {
+                stdout
+                    .queue(Print(span.text.grey()))
                     .expect("Failed to print line");
             }
             _ => {

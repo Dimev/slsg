@@ -71,7 +71,7 @@ local function parse(article)
   end
 
   -- parse a luamark article
-  local res = site.luamark_run(article, macros)
+  local res = site.luamark(article, macros)
   return h.main {
     class = 'main',
     h.h1(macros.title),

@@ -40,7 +40,7 @@ api.latex_to_mathml = internal.latex_to_mathml
 api.sass = internal.sass
 
 -- luamark
-api.luamark_run = internal.luamark_run
+api.luamark = internal.luamark
 
 -- ast for luamark
 local luamark_ast = {}
