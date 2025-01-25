@@ -12,8 +12,7 @@ use fancy_regex::RegexBuilder;
 
 use crate::highlight::{Highlighter, Rule};
 
-const DOCSTRING: &str = r#"
-## SLSG
+const DOCSTRING: &str = r#"## SLSG
 # Scriptable Lua Site Generator
 # SLSG will run the file `main.lua` in the specified directory
 # see `slsg --help` for all command line options

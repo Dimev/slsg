@@ -65,10 +65,8 @@ local html = h {
     },
     h.body {
       class = 'container',
-
-        -- emit the article we made
-        article
-      
+      -- emit the article we made
+      article
     }
   }
 }
@@ -81,4 +79,3 @@ site.emit('logo.svg', site.logo)
 
 -- and the icon
 site.emit('icon.svg', site.icon)
-
