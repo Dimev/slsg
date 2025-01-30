@@ -1,5 +1,5 @@
 -- parse our sass
-local css = site.sass(site.read './style.scss')
+local css = site.compile_sass(site.read './style.scss')
 
 -- shortcut
 local h = site.html
@@ -42,7 +42,7 @@ local function parse(article)
   end
 
   -- parse a luamark article
-  local res = site.luamark(article, macros)
+  local res = site.compile_luamark(article, macros)
   return h.main {
     class = 'main',
     h.h1(macros.title),

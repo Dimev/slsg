@@ -10,11 +10,10 @@ SLSG does no sandboxing, and does not guarantee the lua script can't read or wri
 When outputting to a build directory however, it does try and prevent writing to files outside of this directory.
 
 ## Current TODO:
-- [ ] have example site also serve as short intro to slsg (show some features)
+- [X] have example site also serve as short intro to slsg (show some features)
 - [ ] Lua language server files
 - [ ] API docs
 - [X] Luamark parser
-- [ ] Luamark parser tests
 - [X] Syntax highlighting + html generation
 - [X] Functioning macros
 

@@ -1,6 +1,7 @@
-use mlua::{Error, ErrorContext, ExternalResult, Lua, Result, Table, Value};
+use mlua::{Error, ErrorContext, ExternalResult, IntoLua, Lua, MultiValue, Result, Table, Value};
 use std::{
     collections::HashMap,
+    env,
     fs::{self, File},
     io::{self, Read},
     path::{Path, PathBuf},
@@ -118,6 +119,9 @@ impl Output {
 pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
     let lua = unsafe { Lua::unsafe_new() };
 
+    // load arguments
+    let args: Vec<String> = env::args().skip_while(|x| x != "--").skip(1).collect();
+
     // load our custom functions
     let internal = stdlib(&lua)?;
 
@@ -151,8 +155,14 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
         .into_lua_err()
         .context("Failed to get the current directory")?;
 
+    // convert the arguments
+    let mut arguments = MultiValue::new();
+    for arg in args {
+        arguments.push_back(arg.into_lua(&lua)?);
+    }
+
     // run the script
-    let res = lua.load(PathBuf::from("./main.lua")).exec();
+    let res: Result<()> = lua.load(PathBuf::from("./main.lua")).call(arguments);
 
     // reset the current directory in case it changed
     std::env::set_current_dir(current_dir)

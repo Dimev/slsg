@@ -43,12 +43,12 @@ function site.file_ext(path)
 # This is the file extension of the file name, and corresponds to rust's `Path::extension`
 
 ## MathML
-function site.latex_to_mathml(latex, inline)
+function site.compile_tex(latex, inline)
 # Convert the given LaTeX string to a MathML string
 # The `inline` flag determines whether to display the LaTeX as inline,
 # and corresponds to the `inline` flag on the MathML `<math>` element
 # Example:
-> site.latex_to_mathml [[ \int{1} dx = x + C ]]
+> site.compile_tex [[ \int{1} dx = x + C ]]
 >> [[ <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msqrt><mi>x</mi></msqrt></math> ]]
 
 ## Sass
@@ -62,42 +62,68 @@ function site.sass(sass, loader, expand)
 ## Luamark
 # Luamark is a special markdown language made specifically for SLSG
 # It makes writing code using custom functionality provided from lua easier,
-# compared to using markdown. 
-# TODO: example and syntax
+# compared to using markdown.
 # The preferred file extention for luamark is lmk
 
-function site.luamark(luamark, macros)
+function site.compile_luamark(luamark, macros)
 # Parses the given luamark, then builds the result from the given macro table
 # Example:
 > local h = site.html
-> local macros = {}
-> -- text gets called for all plain text
-> function macros:text(args)
->   return h.p(args)
-> end
+> local function parse(article)
+>   -- table with all values
+>   local macros = {
+>     title = '',
+>   }
 > 
-> -- paragraph is called for each paragraph, which are seperated by empty lines
-> function macros:paragraph(args)
->   -- merge the <p> elements, so it looks better
->   return site.html_merge(args)
+>   -- text is wrapped in <p>
+>   function macros:text(args)
+>     return h.p(args)
+>   end
+> 
+>   -- paragraphs are concatenated from the results
+>   function macros:paragraph(args)
+>     return site.html_merge(args)
+>   end
+> 
+>   -- same with the resulting document
+>   function macros:document(args)
+>     return site.html_fragment(args)
+>   end
+> 
+>   -- add a title
+>   function macros:title(args)
+>     self.title = args
+>   end
+> 
+>   -- add an image
+>   function macros:img(path, alt)
+>     return h.img { src = path, alt = alt }
+>   end
+> 
+>   -- inline code
+>   function macros:inline(args)
+>     return h.p { h.code { class = 'codeline', args } }
+>   end
+> 
+>   -- parse a luamark article
+>   local res = site.compile_luamark(article, macros)
+>   return h.main {
+>     class = 'main',
+>     h.h1(macros.title),
+>     res
+>   }
 > end
->
-> -- document is called on after parsing the entire document
-> function macros:document(args)
->   return site.html_fragment(args)
-> end
->
-> -- example mathml converter
-> function macros:math(args)
->   -- returns the raw html
->   return site.latex_to_mathml(args)
-> end
->
-> -- parse!
-> site.luamark('The document! @math$ 1 + 1 $ Goodbye!', macros)
+# This can then be used to parse a luamark file, like so
+> @title Hello SLSG!
+> @img(logo.svg, SLSG logo)
+> 
+> Edit the files to start making your site!
+> 
+> Run @inline|slsg api| to see what all functions do, 
+> including examples!
 
 ## Syntax highlighting
-function site.highlighter(rules)
+function site.create_highlighter(rules)
 # Create a new syntax highlighter, from the given highlighting rules
 # The regex engine used is from rust's `fancy-regex` crate
 > TODO
@@ -117,12 +143,7 @@ function highlighter.highlight_ast(text)
 function site.escape_html(html)
 # Escapes the given html
 > site.escape_html '<p class="greeting">Hello world!</p>'
->> TODO
-
-function site.unescape_html(html)
-# unescapes the given html
-> TODO
->> TODO
+>> '&lt;p class=&quot;greeting&quot;&gt;Hello world!&lt;/p&gt;'
 
 function site.html_render(elem)
 # Render a html element, which can be created with `create_element('elem', { ... })`, 
@@ -162,53 +183,58 @@ site.html
 > }
 >> [[ <h1>Hello world!</h1><div class="center"><p>This is my site</p><img src="logo" alt="Site logo"></div> ]]
 
+## XML
+A similar set of functions for XML are given as the HTML ones.
+These don't omit closing tags, where HTML allows omitting them.
+
+function site.xml_render(elem)
+# Render a xml element, which can be created with `create_element('elem', { ... })`, 
+# or `site.xml.elem { ... }`
+# This corresponds `to elem:render()`
+
+function site.xml_element(elem, content)
+# Create a new xml element of type `elem`
+# Content is the table of attributes and elements
+# Any entry in the table using a string as key is considered an attribute,
+# any entry in the table using a number as key is considered an element
+> site.xml_element('p', { class = 'greetings', 'Hello world!' }):render()
+>> [[ <p class="greetings">Hello world!</p> ]]
+
+site.xml
+# A special table to make writing xml easier
+# When called directly, it renders the given elements
+# Wen an index is required from the table, it creates a new element
+> local svg = site.xml
+> svg {
+>   svg.svg {
+>     version = '1.1',
+>     width = '100',
+>     height = '100',
+>     xmlns = 'http://www.w3.org/2000/svg',
+>     svg.circle { cx = 50, cy = 50, r = 50, fill = '#1D2951' },
+>     svg.circle { cx = 65, cy = 35, r = 15, fill = 'white' },
+>   }
+> }
+>> [[ <svg width="100" xmlns="http://www.w3.org/2000/svg" height="100" version="1.1"><circle cy="50" r="50" cx="50" fill="\#1D2951"></circle><circle cy="35" r="15" cx="65" fill="white"></circle></svg> ]]
+
+## Other
+site.logo
+# Returns the logo of SLSG
+
+site.icon
+# Returns the icon of SLSG (logo without text)
 "#;
+
+/// Print the stdlib
+pub(crate) fn print_stdlib() {
+    let mut stdout = stdout();
+    print_lua(&mut stdout, include_str!("stdlib.lua"), &lua_highlighter());
+}
 
 /// Print the API documentation
 pub(crate) fn print_docs() {
     let mut stdout = stdout();
-
-    let start_rules = vec![
-        Rule {
-            token: "comment".to_string(),
-            regex: RegexBuilder::new("--.*").build().unwrap(),
-            next: None,
-        },
-        Rule {
-            token: "special".to_string(),
-            regex: RegexBuilder::new("\\w+(?=\\.|:)").build().unwrap(),
-            next: None,
-        },
-        Rule {
-            token: "name".to_string(),
-            regex: RegexBuilder::new("(?<=\\.|:)\\w+(?=\\()").build().unwrap(),
-            next: None,
-        },
-        Rule {
-            token: "keyword".to_string(),
-            regex: RegexBuilder::new("function|local|return|end|for|do|if|else|elseif|then")
-                .build()
-                .unwrap(),
-            next: None,
-        },
-        Rule {
-            token: "control".to_string(),
-            regex: RegexBuilder::new("\\(|\\)|\\,|{|}|=").build().unwrap(),
-            next: None,
-        },
-        Rule {
-            token: "string".to_string(),
-            regex: RegexBuilder::new("(\\[\\[[^(\\]\\])]*\\]\\])|(\"[^\\\"]*\")|('[^\\']*')")
-                .build()
-                .unwrap(),
-            next: None,
-        },
-    ];
-
-    let lua_highlighter = Highlighter {
-        rules: BTreeMap::from_iter([("start".to_string(), start_rules)].into_iter()),
-    };
-
+    let lua_highlighter = lua_highlighter();
     for line in DOCSTRING.lines() {
         if let Some(rest) = line.strip_prefix("##") {
             // ## means a bold line
@@ -253,7 +279,7 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
         match span.token.as_str() {
             "keyword" => {
                 stdout
-                    .queue(Print(span.text.red().bold()))
+                    .queue(Print(span.text.yellow()))
                     .expect("Failed to print line");
             }
             "special" => {
@@ -268,7 +294,7 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
             }
             "control" => {
                 stdout
-                    .queue(Print(span.text.dark_yellow()))
+                    .queue(Print(span.text.yellow()))
                     .expect("Failed to print line");
             }
             "name" => {
@@ -278,7 +304,12 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
             }
             "comment" => {
                 stdout
-                    .queue(Print(span.text.grey()))
+                    .queue(Print(span.text.blue()))
+                    .expect("Failed to print line");
+            }
+            "number" => {
+                stdout
+                    .queue(Print(span.text.red()))
                     .expect("Failed to print line");
             }
             _ => {
@@ -289,3 +320,56 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
         }
     }
 }
+
+/// Highlighter for lua
+fn lua_highlighter() -> Highlighter {
+    let start_rules = vec![
+        Rule {
+            token: "comment".to_string(),
+            regex: RegexBuilder::new("--.*").build().unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "special".to_string(),
+            regex: RegexBuilder::new("\\w+(?=\\.|:)").build().unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "name".to_string(),
+            regex: RegexBuilder::new("(?<=\\.|:)\\w+(?=\\()").build().unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "keyword".to_string(),
+            regex: RegexBuilder::new(r"\b(function|local|return|end|for|do|if|else|elseif|then)\b")
+                .build()
+                .unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "control".to_string(),
+            regex: RegexBuilder::new("\\(|\\)|\\,|{|}|=").build().unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "string".to_string(),
+            regex: RegexBuilder::new("(\\[\\[[^(\\]\\])]*\\]\\])|(\"[^\\\"]*\")|('[^\\']*')")
+                .build()
+                .unwrap(),
+            next: None,
+        },
+        Rule {
+            token: "number".to_string(),
+            regex: RegexBuilder::new(r"\b(\d+)\b")
+                .build()
+                .unwrap(),
+            next: None,
+        },
+    ];
+
+    let lua_highlighter = Highlighter {
+        rules: BTreeMap::from_iter([("start".to_string(), start_rules)].into_iter()),
+    };
+    lua_highlighter
+}
+

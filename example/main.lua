@@ -1,18 +1,18 @@
 -- parse our sass
-local css = site.sass(site.read './style.scss')
+local css = site.compile_sass(site.read './style.scss')
 
 -- shortcut
 local h = site.html
 
 -- syntax highlighting
 local languages = {
-  luamark = site.highlighter {
+  luamark = site.create_highlighter {
     start = {
       { token = 'comment', regex = '%.*' },
       { token = 'macro',   regex = [[@\w+]] },
     }
   },
-  lua = site.highlighter {
+  lua = site.create_highlighter {
     start = {
       { token = 'string',   regex = [=[\[\[.*\]\]]=] },
       { token = 'function', regex = [[\w+\s*(?=\[)]] }
@@ -67,11 +67,11 @@ local function parse(article)
 
   -- add math
   function macros:math(args)
-    return site.latex_to_mathml(args)
+    return site.compile_tex(args)
   end
 
   -- parse a luamark article
-  local res = site.luamark(article, macros)
+  local res = site.compile_luamark(article, macros)
   return h.main {
     class = 'main',
     h.h1(macros.title),

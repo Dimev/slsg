@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use docs::print_docs;
+use docs::{print_docs, print_stdlib};
 use generate::generate;
 use message::print_error;
 use mlua::{Lua, Table};
@@ -25,18 +25,20 @@ Usage:
   slsg build [path] [--output]  Build the site in path (default ./) to output (default path/public)
   slsg new [path]               Create a new site in path
   slsg api                      Show the available functions, and some examples
+  slsg stdlib                   Print out the full stdlib that provides `site`
 
 Options:
   -h --help     Show this screen
   -v --version  Print version and quit
   -a --address  Address and port to use when hosting the dev server
   -o --output   Output directory to use when building the site
+  --            Pass anything after this as arguments to the lua script (the ... table)
 ";
 
-const NEW_STYLE: &str = include_str!("style.scss");
-const NEW_LUA: &str = include_str!("new.lua");
-const NEW_ARTICLE: &str = include_str!("new.lmk");
-const NEW_META: &str = include_str!("meta.lua");
+const NEW_STYLE: &str = include_str!("../template/style.scss");
+const NEW_LUA: &str = include_str!("../template/main.lua");
+const NEW_ARTICLE: &str = include_str!("../template/article.lmk");
+const NEW_META: &str = include_str!("../template/meta.lua");
 
 const NEW_GITIGNORE: &str = "\
 public
@@ -70,6 +72,7 @@ fn main() {
         Some("build") => build(&mut pargs),
         Some("new") => new(pargs),
         Some("api") => print_docs(),
+        Some("stdlib") => print_stdlib(),
         _ => println!("{}", HELP),
     }
 }

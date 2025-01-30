@@ -150,7 +150,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
     // latex to mathml
     api.set(
-        "latex_to_mathml",
+        "compile_tex",
         lua.create_function(|_, (latex, inline): (String, Option<bool>)| {
             latex_to_mathml(
                 &latex,
@@ -167,7 +167,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
     // sass parser
     api.set(
-        "sass",
+        "compile_sass",
         lua.create_function(
             |lua, (sass, loader, expand): (String, Option<Function>, Option<bool>)| {
                 // loader so we can load our own files
@@ -199,7 +199,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
     // luamark parser, run the code
     api.set(
-        "luamark",
+        "compile_luamark",
         lua.create_function(|lua, (string, macros): (String, Table)| {
             Parser::parse(lua, &string, macros, 1, 1)
         })?,
@@ -207,12 +207,9 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
     // syntax highlighting, create highlighter
     api.set(
-        "highlighter",
+        "create_highlighter",
         lua.create_function(|_, text| Highlighter::from_rules(text))?,
     )?;
-
-    // TODO: slugify
-    // TODO: clean up naming
 
     Ok(api)
 }

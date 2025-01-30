@@ -1,5 +1,6 @@
 local api = {}
 
+-- internal is provided from the rust side
 -- Development mode
 api.dev = internal.dev
 
@@ -34,13 +35,13 @@ function api.emit_command(path, command, ...)
 end
 
 -- latex to mathml
-api.latex_to_mathml = internal.latex_to_mathml
+api.compile_tex = internal.compile_tex
 
 -- sass
-api.sass = internal.sass
+api.compile_sass = internal.compile_sass
 
 -- luamark
-api.luamark = internal.luamark
+api.compile_luamark = internal.compile_luamark
 
 -- ast for luamark
 local luamark_ast = {}
@@ -74,11 +75,11 @@ setmetatable(luamark_ast, luamark_meta)
 
 -- create an ast instead, from the lua side
 api.luamark_ast = function(text)
-  return internal.luamark_run(text, luamark_ast)
+  return internal.compile_luamark(text, luamark_ast)
 end
 
 -- syntax highlighting
-api.highlighter = internal.highlighter
+api.create_highlighter = internal.create_highlighter
 
 
 -- escape html
@@ -89,19 +90,6 @@ function api.escape_html(html)
     ["'"] = "&apos;",
     ["<"] = "&lt;",
     [">"] = "&gt;",
-  }
-  local res = string.gsub(html, '.', subst)
-  return res
-end
-
--- unescape html
-function api.unescape_html(html)
-  local subst = {
-    ["&amp;"] = "&",
-    ['&quot;'] = '"',
-    ["&apos;"] = "'",
-    ["&lt;"] = "<",
-    ["&gt;"] = ">",
   }
   local res = string.gsub(html, '.', subst)
   return res
