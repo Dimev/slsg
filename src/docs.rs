@@ -17,6 +17,13 @@ const DOCSTRING: &str = r#"## SLSG
 # SLSG will run the file `main.lua` in the specified directory
 # see `slsg --help` for all command line options
 
+## Arguments
+# Any argument from the command line after -- are passed as function arguments to the `main.lua` file
+# This means they can be accessed as follows:
+> local args = { ... }
+# If the arguments are `slsg dev -- a b c`, this results in the following:
+>> local args = { 'a', 'b', 'c' }
+
 ## Debugging
 site.dev
 # Boolean indicating whether slsg is currendly running under dev mode (`slsg dev`) or not

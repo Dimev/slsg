@@ -61,9 +61,9 @@ pub(crate) fn serve(addr: String) {
             watcher.watch(&PathBuf::from("."), notify::RecursiveMode::Recursive).map(|_| watcher)
         });
 
-    // notify for an error, borrow to let it live
+    // notify for an error, borrow to not drop it, as doing so would stop the watcher
     if let Err(e) = &watcher {
-        print_warning("Failed to watch for changes", e);
+        print_warning("Failed to watch for changes", e)
     };
 
     // generate the initial site
@@ -167,8 +167,14 @@ fn respond(
 
     // otherwise, push the 404 page
     } else {
-        // TODO: not found page template, have it show all links
-        (Box::new(b"rstoeh".as_slice()), 404, Some("text/html"))
+        // 404, return the not found page
+        (
+            Box::new(Cursor::new(
+                format!(include_str!("not_found_template.html"), file_path).into_bytes(),
+            )),
+            404,
+            Some("text/html"),
+        )
     };
 
     // update notify script, allows reloading the page when we send a message
