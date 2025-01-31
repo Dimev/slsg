@@ -56,7 +56,7 @@ function site.compile_tex(latex, inline)
 # and corresponds to the `inline` flag on the MathML `<math>` element
 # Example:
 > site.compile_tex [[ \int{1} dx = x + C ]]
->> [[ <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msqrt><mi>x</mi></msqrt></math> ]]
+>> '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msqrt><mi>x</mi></msqrt></math>'
 
 ## Sass
 function site.sass(sass, loader, expand)
@@ -133,18 +133,35 @@ function site.compile_luamark(luamark, macros)
 function site.create_highlighter(rules)
 # Create a new syntax highlighter, from the given highlighting rules
 # The regex engine used is from rust's `fancy-regex` crate
-> TODO
+# The highlighter expects a table of table of rules,
+# where each rule tries to match the regex, and if it matches, emits the token
+# Optionally, there can also be a `next` rule, to move to a new rule
+> local highlighter = site.create_highlighter {
+>   start = {
+>     { token = 'comment', regex = '%.*' },
+>     { token = 'macro',   regex = [[@\w+]] },
+>     { token = 'multi',   regex = [[@begin@\w+]], next = 'multi' }
+>   },
+>   multi = {
+>     { token = 'end', regex = [[@end@\w+]], next = 'start' }
+>   }
+> }
 
-function highlighter.highlight_html(text, class)
+function highlighter:highlight_html(text, class)
 # Highlight the given text, and return it as html
 # `class` is appended in front of all token names, 
 # and then used as class names for the spans of code
-> TODO
+> highlighter.highlight_html('Hello % comment', 'code-')
+>> '<span class="code-">Hello </span><span class="code-comment">% comment</span>'
 
-function highlighter.highlight_ast(text)
+function highlighter:highlight_ast(text)
 # Highlight the given text, then return it as a table of nodes
 # Each node is a table with the token name, and it's corresponding text
-> TODO
+> highlighter.highlight_html('Hello % comment', 'code-')
+>> {
+>>    { token = '', text = 'Hello ' },
+>>    { token = 'comment', text = '% comment' },
+>> }
 
 ## HTML
 function site.escape_html(html)
@@ -172,7 +189,7 @@ function site.html_element(elem, content)
 # Any entry in the table using a string as key is considered an attribute,
 # any entry in the table using a number as key is considered an element
 > site.html_element('p', { class = 'greetings', 'Hello world!' }):render()
->> [[ <p class="greetings">Hello world!</p> ]]
+>> '<p class="greetings">Hello world!</p>'
 
 site.html
 # A special table to make writing html easier
@@ -188,11 +205,11 @@ site.html
 >     h.img { src = 'logo.png', alt = 'Site logo' },
 >   }
 > }
->> [[ <h1>Hello world!</h1><div class="center"><p>This is my site</p><img src="logo" alt="Site logo"></div> ]]
+>> '<h1>Hello world!</h1><div class="center"><p>This is my site</p><img src="logo" alt="Site logo"></div>'
 
 ## XML
-A similar set of functions for XML are given as the HTML ones.
-These don't omit closing tags, where HTML allows omitting them.
+# A similar set of functions for XML are given as the HTML ones.
+# These don't omit closing tags, where HTML allows omitting them.
 
 function site.xml_render(elem)
 # Render a xml element, which can be created with `create_element('elem', { ... })`, 
@@ -205,7 +222,7 @@ function site.xml_element(elem, content)
 # Any entry in the table using a string as key is considered an attribute,
 # any entry in the table using a number as key is considered an element
 > site.xml_element('p', { class = 'greetings', 'Hello world!' }):render()
->> [[ <p class="greetings">Hello world!</p> ]]
+>> '<p class="greetings">Hello world!</p>'
 
 site.xml
 # A special table to make writing xml easier
@@ -222,7 +239,7 @@ site.xml
 >     svg.circle { cx = 65, cy = 35, r = 15, fill = 'white' },
 >   }
 > }
->> [[ <svg width="100" xmlns="http://www.w3.org/2000/svg" height="100" version="1.1"><circle cy="50" r="50" cx="50" fill="\#1D2951"></circle><circle cy="35" r="15" cx="65" fill="white"></circle></svg> ]]
+>> '<svg width="100" xmlns="http://www.w3.org/2000/svg" height="100" version="1.1"><circle cy="50" r="50" cx="50" fill="\#1D2951"></circle><circle cy="35" r="15" cx="65" fill="white"></circle></svg>'
 
 ## Other
 site.logo
