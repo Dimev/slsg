@@ -90,6 +90,37 @@ function site.sass(sass, loader, expand)
 # It makes writing code using custom functionality provided from lua easier,
 # compared to using markdown.
 # The preferred file extention for luamark is lmk
+# Luamark uses % to mark comments, which end on a newline
+# Escaping can be done with \, which will emit every character afterwards until a whitespace
+# there are 3 macro types that can be used to call lua functions
+# line macros
+> @name The arguments!
+# which use the rest of the line as argument
+# Inline macros, which are like function calls.
+> @name(arg1, arg2, arg3)
+# These can be called with [] as well
+# as well as {}, <>, $$ and ||, but these do not seperate arguments on a comma
+# The last type is a block macro
+> @begin@name@tag(arg1, arg2, arg3)
+> Content!
+> @end@name@tag
+# block macros are similar to inline macros, but can have internal content
+# @tag is optional, and marks how the macro should be closed
+# A full example below:
+> % Line macros
+> @name This is the rest!
+> 
+> % Inline macros
+> % also possible with (), []
+> % {}, <>, $$ and || don't do multiple arguments
+> @name(arg1, arg2, arg3)
+> 
+> % We can also do block macros, to include code verbatim
+> % These take all text in them literally, 
+> % and only end at the closing @end@name tag
+> @begin@name(arg1, arg2, arg3)
+> This is all verbatim!
+> @end@name
 
 function site.compile_luamark(luamark, macros)
 # Parses the given luamark, then builds the result from the given macro table
@@ -369,7 +400,7 @@ fn lua_highlighter() -> Highlighter {
     let start_rules = vec![
         Rule {
             token: "comment".to_string(),
-            regex: RegexBuilder::new("--.*").build().unwrap(),
+            regex: RegexBuilder::new("--.*|%.*").build().unwrap(),
             next: None,
         },
         Rule {
@@ -384,7 +415,7 @@ fn lua_highlighter() -> Highlighter {
         },
         Rule {
             token: "keyword".to_string(),
-            regex: RegexBuilder::new(r"\b(function|local|return|end|for|do|if|else|elseif|then)\b")
+            regex: RegexBuilder::new(r"@\w+|\b(function|local|return|end|for|do|if|else|elseif|then)\b")
                 .build()
                 .unwrap(),
             next: None,
