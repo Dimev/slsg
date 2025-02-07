@@ -20,6 +20,7 @@ use crate::{
 };
 
 const VERY_LONG_PATH: &str = "very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
+const VERY_LONG_404: &str = "very-long-path-name-intentionally-used-to-mark-the-404-file-please-do-not-name-your-files-like-this.rs";
 const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
 
 pub(crate) fn serve(addr: String) {
@@ -101,12 +102,16 @@ fn respond(
 
     // get the url
     let file_path = request
-        .trim_start_matches("GET")
-        .trim_end_matches(|x: char| x.is_numeric() || x == '.')
-        .trim_end_matches("HTTP/")
-        .trim()
-        // all paths in the site are relative
-        .trim_start_matches('/');
+        .trim_start_matches(char::is_alphabetic) // trim GET/POST or similar
+        .trim() // trim the space
+        .trim_end_matches(|x: char| x.is_numeric() || x == '.') // trim any of the numbers indicating the http version
+        .trim_end_matches("HTTP/") // trim the http itself
+        .trim() // remove any extra spaces
+        .trim_start_matches('/'); // trim starting /, as all paths are relative in the vec we use
+
+    // trim any queries
+    let file_path = file_path.split_once('?').map(|x| x.0).unwrap_or(file_path);
+    let file_path = file_path.split_once('#').map(|x| x.0).unwrap_or(file_path);
 
     // get the file
     let (mut content, status, mime): (Box<dyn Read>, u16, Option<&str>) = if let Some(file) = site
@@ -166,6 +171,19 @@ fn respond(
         (Box::new(Cursor::new(error_page)), 500, Some("text/html"))
 
     // otherwise, push the 404 page
+    } else if let Some(file) = site
+        .as_ref()
+        .ok()
+        .and_then(|x| x.get(&PathBuf::from(VERY_LONG_404)))
+    {
+        // 404, return the not found page if we can get it
+        match file.as_stream() {
+            Ok(stream) => (stream, 404, Some("text/html")),
+            Err(e) => {
+                print_warning(&format!("Failed to serve file {}", file_path), &e);
+                (Box::new("Error!".as_bytes()), 500, Some("text/html"))
+            }
+        }
     } else {
         // 404, return the not found page
         (

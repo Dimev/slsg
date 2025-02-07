@@ -30,8 +30,8 @@ We can also do Math, with LaTeX.
 Internally we can convert this to mathml with 
 @inline|site.latex_to_mathml [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]|
 
-We can then use the macro with @inline|$$| to allow latex to work.
-@inline|$$| won't escape characters as usual
+We can then use the macro with $$ to allow latex to work.
+$$ won't escape characters as usual
 
 @math$\int{\exp(-\sqrt{x^2 + t^2})}dt$
 

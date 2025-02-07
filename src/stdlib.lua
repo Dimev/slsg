@@ -34,6 +34,12 @@ function api.emit_command(path, command, ...)
   }
 end
 
+function api.set_404(path)
+  if not out[path] then error('404 page `' .. path .. '` not emitted yet!') end
+  out['very-long-path-name-intentionally-used-to-mark-the-404-file-please-do-not-name-your-files-like-this.rs'] = out
+  [path]
+end
+
 -- latex to mathml
 api.compile_tex = internal.compile_tex
 
