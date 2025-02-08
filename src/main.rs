@@ -21,7 +21,7 @@ const HELP: &str = "\
 Scriptable Lua Site Generator
 
 Usage:
-  slsg dev [path] [--address]   Serve the site in path (default ./) to address (default 127.0.0.1)
+  slsg dev [path] [--address]   Serve the site in path (default ./) to address (default 127.0.0.1:1111)
   slsg build [path] [--output]  Build the site in path (default ./) to output (default path/public)
   slsg new [path]               Create a new site in path
   slsg api                      Show the available functions, and some examples

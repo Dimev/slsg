@@ -22,38 +22,25 @@ local languages = {
 
 -- make an example luamark parser
 local function parse(article)
+  -- title
+  local title = ''
+
   -- table with all values
   local macros = {
-    title = '',
+    text = h.p,                        -- wrap in <p>
+    paragraph = site.html_merge,       -- concatenate tags from the results
+    document = site.html_fragment,     -- same, but don't concatenate tags
+    title = function(t) title = t end, -- set the title
+    math = site.compile_tex,           -- compile tex to mathml
   }
 
-  -- text is wrapped in <p>
-  function macros:text(args)
-    return h.p(args)
-  end
-
-  -- paragraphs are concatenated from the results
-  function macros:paragraph(args)
-    return site.html_merge(args)
-  end
-
-  -- same with the resulting document
-  function macros:document(args)
-    return site.html_fragment(args)
-  end
-
-  -- add a title
-  function macros:title(args)
-    self.title = args
-  end
-
   -- add an image
-  function macros:img(path, alt)
+  function macros.img(path, alt)
     return h.div { class = 'imgblock', h.img { src = path, alt = alt } }
   end
 
   -- code block
-  function macros:code(language, content)
+  function macros.code(language, content)
     return h.pre {
       class = 'codeblock',
       h.code { languages[language]:highlight_html(content, 'code-') }
@@ -61,20 +48,15 @@ local function parse(article)
   end
 
   -- inline code
-  function macros:inline(args)
+  function macros.inline(args)
     return h.p { h.code { class = 'codeline', args } }
-  end
-
-  -- add math
-  function macros:math(args)
-    return site.compile_tex(args)
   end
 
   -- parse a luamark article
   local res = site.compile_luamark(article, macros)
   return h.main {
     class = 'main',
-    h.h1(macros.title),
+    h.h1(title),
     res
   }
 end

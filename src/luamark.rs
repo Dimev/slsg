@@ -46,7 +46,7 @@ impl<'a> Parser<'a> {
                     {
                         if !text.is_empty() {
                             let res: Value = macros
-                                .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                                .call_function("text", (text, Value::Nil, parser.row, parser.col))
                                 .context(format!(
                                     "[string]:{}:{}: Failed to call macro `text`",
                                     parser.row, parser.col
@@ -58,7 +58,7 @@ impl<'a> Parser<'a> {
 
                         // call the paragraph macro
                         let res: Value = macros
-                            .call_method(
+                            .call_function(
                                 "paragraph",
                                 (paragraph, Value::Nil, parser.row, parser.col),
                             )
@@ -164,15 +164,15 @@ impl<'a> Parser<'a> {
                 arguments.push_back(Value::Integer(col as i64));
 
                 // run the macro
-                let result: Value = macros.call_method(name, arguments).context(format!(
-                    "[string]:{}:{}: Failed to call method `{name}`",
+                let result: Value = macros.call_function(name, arguments).context(format!(
+                    "[string]:{}:{}: Failed to call macro `{name}`",
                     parser.row, parser.col
                 ))?;
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
                     let res: Value = macros
-                        .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                        .call_function("text", (text, Value::Nil, parser.row, parser.col))
                         .context(format!(
                             "[string]:{}:{}: Failed to call macro `text`",
                             parser.row, parser.col
@@ -208,15 +208,15 @@ impl<'a> Parser<'a> {
                 arguments.push_back(Value::Integer(parser.col as i64));
 
                 // run the macro
-                let result: Value = macros.call_method(name, arguments).context(format!(
-                    "[string]:{}:{}: Failed to call method `{name}`",
+                let result: Value = macros.call_function(name, arguments).context(format!(
+                    "[string]:{}:{}: Failed to call macro `{name}`",
                     parser.row, parser.col
                 ))?;
 
                 // push the current string, as that's valid content
                 if !text.is_empty() {
                     let res: Value = macros
-                        .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                        .call_function("text", (text, Value::Nil, parser.row, parser.col))
                         .context(format!(
                             "[string]:{}:{}: Failed to call macro `text`",
                             parser.row, parser.col
@@ -249,7 +249,7 @@ impl<'a> Parser<'a> {
         // close the paragraph
         if !text.is_empty() {
             let res: Value = macros
-                .call_method("text", (text, Value::Nil, parser.row, parser.col))
+                .call_function("text", (text, Value::Nil, parser.row, parser.col))
                 .context(format!(
                     "[string]:{}:{}: Failed to call macro `text`",
                     parser.row, parser.col
@@ -260,7 +260,7 @@ impl<'a> Parser<'a> {
 
         if !paragraph.is_empty() {
             let res: Value = macros
-                .call_method("paragraph", (paragraph, Value::Nil, parser.row, parser.col))
+                .call_function("paragraph", (paragraph, Value::Nil, parser.row, parser.col))
                 .context(format!(
                     "[string]:{}:{}: Failed to call macro `paragraph`",
                     parser.row, parser.col
@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
 
         // close the document
         macros
-            .call_method("document", (document, Value::Nil, row, col))
+            .call_function("document", (document, Value::Nil, row, col))
             .context(format!(
                 "[string]:{}:{}: Failed to call macro `document`",
                 parser.row, parser.col

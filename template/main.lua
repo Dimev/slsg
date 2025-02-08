@@ -6,38 +6,24 @@ local h = site.html
 
 -- make an example luamark parser
 local function parse(article)
+  -- title of the article
+  local title = ''
+
   -- table with all values
   local macros = {
-    title = '',
+    text = h.p,                        -- wrap in <p>
+    paragraph = site.html_merge,       -- concatenate tags from the results
+    document = site.html_fragment,     -- same, but don't concatenate tags
+    title = function(t) title = t end, -- set the title
   }
 
-  -- text is wrapped in <p>
-  function macros:text(args)
-    return h.p(args)
-  end
-
-  -- paragraphs are concatenated from the results
-  function macros:paragraph(args)
-    return site.html_merge(args)
-  end
-
-  -- same with the resulting document
-  function macros:document(args)
-    return site.html_fragment(args)
-  end
-
-  -- add a title
-  function macros:title(args)
-    self.title = args
-  end
-
   -- add an image
-  function macros:img(path, alt)
+  function macros.img(path, alt)
     return h.img { src = path, alt = alt }
   end
 
   -- inline code
-  function macros:inline(args)
+  function macros.inline(args)
     return h.p { h.code { class = 'codeline', args } }
   end
 
@@ -45,7 +31,7 @@ local function parse(article)
   local res = site.compile_luamark(article, macros)
   return h.main {
     class = 'main',
-    h.h1(macros.title),
+    h.h1(title),
     res
   }
 end

@@ -134,53 +134,45 @@ function site.sass(sass, loader, expand)
 
 function site.compile_luamark(luamark, macros)
 # Parses the given luamark, then builds the result from the given macro table
+# `macros:text` is called for every consecutive sequence of text.
+# `macros:paragraph` is called for every paragraph.
+# A paragraph is any block of text and macros seperated by an empty line.
+# `macros:document` is called for the final document
+# block and inline macros called with () or [] receive their arguments as a list
+# The last three arguments are the contents of a block (nil otherwise),
+# the row of where the text is in the file and the column of where the text is in the file.
+# line macros, and inline macros not using () or [] receive only one argument instead of multiple.
 # Example:
 > local h = site.html
-> local function parse(article)
->   -- table with all values
->   local macros = {
->     title = '',
->   }
+> -- title of the article
+> local title = ''
 > 
->   -- text is wrapped in <p>
->   function macros:text(args)
->     return h.p(args)
->   end
+> -- table with all values
+> local macros = {
+>   text = h.p,                        -- wrap in <p>
+>   paragraph = site.html_merge,       -- concatenate tags from the results
+>   document = site.html_fragment,     -- same, but don't concatenate tags
+>   title = function(t) title = t end, -- set the title
+> }
 > 
->   -- paragraphs are concatenated from the results
->   function macros:paragraph(args)
->     return site.html_merge(args)
->   end
-> 
->   -- same with the resulting document
->   function macros:document(args)
->     return site.html_fragment(args)
->   end
-> 
->   -- add a title
->   function macros:title(args)
->     self.title = args
->   end
-> 
->   -- add an image
->   function macros:img(path, alt)
->     return h.img { src = path, alt = alt }
->   end
-> 
->   -- inline code
->   function macros:inline(args)
->     return h.p { h.code { class = 'codeline', args } }
->   end
-> 
->   -- parse a luamark article
->   local res = site.compile_luamark(article, macros)
->   return h.main {
->     class = 'main',
->     h.h1(macros.title),
->     res
->   }
+> -- add an image
+> function macros.img(path, alt)
+>   return h.img { src = path, alt = alt }
 > end
-# This can then be used to parse a luamark file, like so
+> 
+> -- inline code
+> function macros.inline(args)
+>   return h.p { h.code { class = 'codeline', args } }
+> end
+> 
+> -- parse a luamark article
+> local res = site.compile_luamark(article, macros)
+> return h.main {
+>   class = 'main',
+>   h.h1(title),
+>   res
+> }
+# This can then be used to parse a luamark file, like this one:
 > @title Hello SLSG!
 > @img(logo.svg, SLSG logo)
 > 
@@ -188,6 +180,7 @@ function site.compile_luamark(luamark, macros)
 > 
 > Run @inline|slsg api| to see what all functions do, 
 > including examples!
+# by using it as the variable in article
 
 ## Syntax highlighting
 function site.create_highlighter(rules)
