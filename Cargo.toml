@@ -15,5 +15,5 @@ mlua = { version = "0.10.0", features = ["luajit"] }
 notify = { version = "8.0.0", default-features = false, features = ["macos_kqueue"] }
 pico-args = "0.5.0"
 fancy-regex = "0.14.0"
-rsass = "0.28.10"
+rsass = "0.29.0"
 unicode-width = "0.2.0"
