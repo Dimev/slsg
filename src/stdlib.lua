@@ -5,7 +5,8 @@ local api = {}
 api.dev = internal.dev
 
 -- read files and directories
-api.dir = internal.dir
+api.dirs = internal.dirs
+api.files = internal.files
 api.read = internal.read
 
 -- file names

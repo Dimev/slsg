@@ -48,10 +48,14 @@ site.dev
 # Boolean indicating whether slsg is currendly running under dev mode (`slsg dev`) or not
 
 ## Filesystem
-function site.dir(path)
-# Read a directory at the specified path
-# Returns an iterator over all files and directories, excluding `.` and `..`
-# This is the similar to LFS' dir (which includes . and ..)
+function site.dirs(path)
+# Returns an iterator over all directory names at the given path
+# Does not include `.` and `..`
+> for dir in site.dirs '.' do print(dir) end
+
+function site.files(path)
+# Returns an iterator over all file names at the given path
+> for file in site.files '.' do print(file) end
 
 function site.read(path)
 # Returns the content of the file at `path` as a string

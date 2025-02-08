@@ -53,31 +53,71 @@ impl<'a> Loader for LuaLoader {
 }
 
 struct DirIter(ReadDir);
+struct FileIter(ReadDir);
 
 impl UserData for DirIter {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method_mut(MetaMethod::Call, |_, iter, ()| {
-            // do the rest of the directory
-            match iter.0.next() {
-                Some(e) => {
-                    let res = e.into_lua_err().context("Failed to read directory entry")?;
-                    let file = res.file_name().into_string().map_err(|x| {
-                        Error::external(format!("Failed to convert filename {:?} into String", x))
-                            .context("Failed to read directory entry")
-                    })?;
-                    Ok(Some(file))
+            while let Some(e) = iter.0.next() {
+                // read the entry
+                let res = e.into_lua_err().context("Failed to read directory entry")?;
+
+                // skip if it's not a directory
+                if !res
+                    .file_type()
+                    .into_lua_err()
+                    .context("Failed to read directory entry type")?
+                    .is_dir()
+                {
+                    continue;
                 }
-                None => Ok(None),
+
+                // return the name
+                return Ok(Some(res.file_name().into_string().map_err(|x| {
+                    Error::external(format!("Failed to convert filename {:?} into String", x))
+                        .context("Failed to read directory entry")
+                })?));
             }
+
+            Ok(None)
+        });
+    }
+}
+
+impl UserData for FileIter {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method_mut(MetaMethod::Call, |_, iter, ()| {
+            while let Some(e) = iter.0.next() {
+                // read the entry
+                let res = e.into_lua_err().context("Failed to read directory entry")?;
+
+                // skip if it's not a file
+                if !res
+                    .file_type()
+                    .into_lua_err()
+                    .context("Failed to read directory entry type")?
+                    .is_file()
+                {
+                    continue;
+                }
+
+                // return the name
+                return Ok(Some(res.file_name().into_string().map_err(|x| {
+                    Error::external(format!("Failed to convert filename {:?} into String", x))
+                        .context("Failed to read directory entry")
+                })?));
+            }
+
+            Ok(None)
         });
     }
 }
 
 pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
     let api = lua.create_table()?;
-    // list files
+    // list directories
     api.set(
-        "dir",
+        "dirs",
         lua.create_function(|_, path: String| {
             let path = PathBuf::from(path);
 
@@ -86,9 +126,24 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
                 .into_lua_err()
                 .context(format!("Failed to read directory {:?}", path))?;
 
-            // make it an iterator
-            // this is to matsh the lfs API, tho we don't include the . and .. entries
             let iter = DirIter(entries);
+
+            Ok(iter)
+        })?,
+    )?;
+
+    // list files
+    api.set(
+        "files",
+        lua.create_function(|_, path: String| {
+            let path = PathBuf::from(path);
+
+            // read the entries
+            let entries = std::fs::read_dir(&path)
+                .into_lua_err()
+                .context(format!("Failed to read directory {:?}", path))?;
+
+            let iter = FileIter(entries);
 
             Ok(iter)
         })?,
