@@ -195,7 +195,7 @@ fn build(pargs: &mut pico_args::Arguments) {
         Ok(files) => {
             // write out all files
             for (path, file) in files {
-                file.to_file(&output_path.join(path)).expect("balls");
+                file.to_file(&output_path.join(path)).expect("failed to output file");
             }
         }
         Err(err) => print_error("Failed to build site", &err),

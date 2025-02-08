@@ -85,6 +85,12 @@ impl Output {
     }
 
     pub(crate) fn to_file(&self, path: &Path) -> std::io::Result<()> {
+        // ensure the path exists
+        fs::create_dir_all(
+            path.parent()
+                .ok_or(std::io::Error::other("Tried to output a directory"))?,
+        )?;
+
         match self {
             Self::Data(vec) => fs::write(path, vec)?,
             Self::File(original) => {
