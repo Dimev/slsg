@@ -149,6 +149,24 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
         })?,
     )?;
 
+    // does directory exist?
+    api.set(
+        "dir_exists",
+        lua.create_function(|_, path: String| {
+            let path = PathBuf::from(path);
+            Ok(path.is_dir())
+        })?,
+    )?;
+
+    // does a file exist?
+    api.set(
+        "file_exists",
+        lua.create_function(|_, path: String| {
+            let path = PathBuf::from(path);
+            Ok(path.is_dir())
+        })?,
+    )?;
+
     // read file
     api.set(
         "read",

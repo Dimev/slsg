@@ -8,6 +8,8 @@ api.dev = internal.dev
 api.dirs = internal.dirs
 api.files = internal.files
 api.read = internal.read
+api.dir_exists = internal.dir_exists
+api.file_exists = internal.file_exists
 
 -- file names
 api.file_name = internal.file_name

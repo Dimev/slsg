@@ -60,6 +60,12 @@ function site.files(path)
 function site.read(path)
 # Returns the content of the file at `path` as a string
 
+function site.dir_exists(path)
+# Checks whether the directory at the path exists
+
+function site.file_exists(path)
+# Checks whether the file at the path exists
+
 function site.file_name(path)
 # Returns the file name at `path`
 # This is the final component of the path, and corresponds to rust's `Path::file_name`
