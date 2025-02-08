@@ -51,7 +51,7 @@ site.dev
 function site.dir(path)
 # Read a directory at the specified path
 # Returns an iterator over all files and directories, excluding `.` and `..`
-# This is the same as LFS' dir
+# This is the similar to LFS' dir (which includes . and ..)
 
 function site.read(path)
 # Returns the content of the file at `path` as a string

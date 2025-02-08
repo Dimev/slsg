@@ -52,21 +52,11 @@ impl<'a> Loader for LuaLoader {
     }
 }
 
-struct DirIter(ReadDir, u8);
+struct DirIter(ReadDir);
 
 impl UserData for DirIter {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method_mut(MetaMethod::Call, |_, iter, ()| {
-            // make sure it matches lfs.dir
-            if iter.1 == 0 {
-                iter.1 += 1;
-                return Ok(Some(String::from(".")));
-            }
-            if iter.1 == 1 {
-                iter.1 += 1;
-                return Ok(Some(String::from("..")));
-            }
-
             // do the rest of the directory
             match iter.0.next() {
                 Some(e) => {
@@ -98,7 +88,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
 
             // make it an iterator
             // this is to matsh the lfs API, tho we don't include the . and .. entries
-            let iter = DirIter(entries, 0);
+            let iter = DirIter(entries);
 
             Ok(iter)
         })?,
