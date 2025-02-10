@@ -1,5 +1,7 @@
 <script>
-  const src = new EventSource("/very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs");
-  src.onmessage = e => e.data == "update" && location.reload();
+  const ver = "{version}";
+  const src = new EventSource("{path}");
+  // reload when the version differs
+  src.onmessage = e => e.data != ver && location.reload();
   window.onbeforeunload = () => src.close();
 </script>

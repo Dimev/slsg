@@ -134,24 +134,14 @@ pub(crate) fn generate(dev: bool) -> Result<HashMap<PathBuf, Output>> {
     // whether we are in dev mode
     internal.set("dev", dev)?;
 
-    // add custom functions to global scope
-    lua.globals().set("internal", internal)?;
-
     // add the table we read our output from to the global scope
     let output = lua.create_table()?;
-    lua.globals().set("output", &output)?;
 
     // load our standard library
     let stdlib: Value = lua
         .load(include_str!("stdlib.lua"))
         .set_name("=stdlib.lua")
-        .call(())?;
-
-    // unload our custom functions as they are no longer needed in the global scope
-    lua.globals().set("internal", Value::Nil)?;
-
-    // unload the output table
-    lua.globals().set("output", Value::Nil)?;
+        .call((internal, &output))?;
 
     // add stdlib to the globals
     lua.globals().set("site", stdlib)?;

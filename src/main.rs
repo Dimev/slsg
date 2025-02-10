@@ -3,42 +3,44 @@ use std::{
     path::PathBuf,
 };
 
-use docs::{print_docs, print_stdlib};
+use docs::{print_docs, print_meta, print_stdlib};
 use generate::generate;
 use message::print_error;
 use mlua::{Lua, Table};
 use serve::serve;
 
+mod docs;
 mod generate;
 mod highlight;
 mod luamark;
 mod message;
 mod serve;
 mod stdlib;
-mod docs;
 
 const HELP: &str = "\
-Scriptable Lua Site Generator
+SLSG - Scriptable Lua Site Generator
 
 Usage:
-  slsg dev [path] [--address]   Serve the site in path (default ./) to address (default 127.0.0.1:1111)
-  slsg build [path] [--output]  Build the site in path (default ./) to output (default path/public)
+  slsg dev [path] [--address]   Serve the site in path (default ./)
+  slsg build [path] [--output]  Build the site in path (default ./)
   slsg new [path]               Create a new site in path
   slsg api                      Show the available functions, and some examples
   slsg stdlib                   Print out the full stdlib that provides `site`
+  slsg meta                     Print the meta file needed by the lua language server
 
 Options:
   -h --help     Show this screen
-  -v --version  Print version and quit
-  -a --address  Address and port to use when hosting the dev server
-  -o --output   Output directory to use when building the site
+  -v --version  Print SLSG and luaJIT version
+
+  -a --address  Address and port to use when hosting the dev server (default 127.0.0.1:1111)
+  -o --output   Output directory to use when building the site (default path/public/)
   --            Pass anything after this as arguments to the lua script (the ... table)
 ";
 
-const NEW_STYLE: &str = include_str!("../template/style.scss");
-const NEW_LUA: &str = include_str!("../template/main.lua");
-const NEW_ARTICLE: &str = include_str!("../template/article.lmk");
-const NEW_META: &str = include_str!("../template/meta.lua");
+const NEW_STYLE: &str = include_str!("../example/style.scss");
+const NEW_LUA: &str = include_str!("../example/main.lua");
+const NEW_ARTICLE: &str = include_str!("../example/article.lmk");
+const NEW_META: &str = include_str!("../example/meta.lua");
 
 const NEW_GITIGNORE: &str = "\
 public
@@ -55,7 +57,7 @@ fn main() {
 
     // print version
     if pargs.contains(["-v", "--version"]) {
-        println!("slsg {}", env!("CARGO_PKG_VERSION"));
+        println!("SLSG {}", env!("CARGO_PKG_VERSION"));
 
         // luajit version
         let lua = Lua::new();
@@ -73,6 +75,7 @@ fn main() {
         Some("new") => new(pargs),
         Some("api") => print_docs(),
         Some("stdlib") => print_stdlib(),
+        Some("meta") => print_meta(),
         _ => println!("{}", HELP),
     }
 }
@@ -112,12 +115,12 @@ fn new(mut pargs: pico_args::Arguments) {
         .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("article.lmk")));
 
     // meta file for the language server
-    std::fs::write(path.join("stdlib.meta"), NEW_META)
-        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path.join("stdlib.meta")));
+    std::fs::write(path.join("meta.lua"), NEW_META)
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("meta.lua")));
 
     // gitignore
     std::fs::write(path.join(".gitignore"), NEW_GITIGNORE)
-        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path.join(".gitignore")));
+        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join(".gitignore")));
 
     // report success
     println!("Created new site in {:?}", path);
@@ -195,7 +198,8 @@ fn build(pargs: &mut pico_args::Arguments) {
         Ok(files) => {
             // write out all files
             for (path, file) in files {
-                file.to_file(&output_path.join(path)).expect("failed to output file");
+                file.to_file(&output_path.join(path))
+                    .expect("failed to output file");
             }
         }
         Err(err) => print_error("Failed to build site", &err),

@@ -14,7 +14,7 @@ use rsass::{
     output::{Format, Style},
 };
 
-use crate::{highlight::Highlighter, luamark::Parser};
+use crate::{highlight::Highlighter, luamark::Parser, serve::VERY_LONG_404};
 
 #[derive(Debug)]
 struct LuaLoader(Option<Function>);
@@ -115,6 +115,9 @@ impl UserData for FileIter {
 
 pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
     let api = lua.create_table()?;
+    // long path
+    api.set("long_404_path", VERY_LONG_404)?;
+    
     // list directories
     api.set(
         "dirs",

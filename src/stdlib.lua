@@ -1,3 +1,4 @@
+local internal, output = ...
 local api = {}
 
 -- internal is provided from the rust side
@@ -38,9 +39,9 @@ function api.emit_command(path, command, ...)
 end
 
 function api.set_404(path)
+  if not api.dev then return end
   if not out[path] then error('404 page `' .. path .. '` not emitted yet!') end
-  out['very-long-path-name-intentionally-used-to-mark-the-404-file-please-do-not-name-your-files-like-this.rs'] = out
-  [path]
+  out[internal.long_404_path] = out[path]
 end
 
 -- latex to mathml

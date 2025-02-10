@@ -1,7 +1,0 @@
-@title Hello SLSG!
-@img(logo.svg, SLSG logo)
-
-Edit the files to start making your site!
-
-Run @inline|slsg api| to see what all functions do, 
-including examples!

@@ -2,11 +2,11 @@
 % Image of the site logo
 @img(logo.svg, SLSG logo)
 
-This is the example site for SLSG, modified from the default template.
-We'll show off some more features here.
-This file is written in luamark, a special markdown language specifically made for SLSG.
-Luamark supports line comments with \%, can escape characters with \\, and do macros
+Edit any file to see the changes!
+This example serves as a short introduction to SLSG and it's template language, luamark.
+An example of the luamark syntax can be seen below.
 
+Luamark comments are started with \%.
 Macros are started with \@, followed by a name, and then either a list of arguments, or a line,
 As follows: 
 @begin@code(luamark)
@@ -15,7 +15,7 @@ As follows:
 
 % Inline macros
 % also possible with (), []
-% {}, <> and || don't do multiple arguments
+% {}, <>, || and $$ don't do multiple arguments
 @name(arg1, arg2, arg3)
 
 % We can also do block macros, to include code verbatim
@@ -28,7 +28,7 @@ This is all verbatim!
 
 We can also do Math, with LaTeX.
 Internally we can convert this to mathml with 
-@inline|site.latex_to_mathml [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]|
+@inline|site.compile_tex [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]|
 
 We can then use the macro with $$ to allow latex to work.
 $$ won't escape characters as usual

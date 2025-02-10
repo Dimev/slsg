@@ -1,10 +1,10 @@
 [package]
 name = "slsg"
 description = "Scriptable Lua Site Generator"
-version = "0.2.0"
+version = "0.3.0"
 license = "GPL-3.0-only"
 repository = "https://github.com/Dimev/slsg"
-keywords = ["lua", "website", "html", "javascript"]
+keywords = ["lua", "website", "html", "blog", "markdown"]
 categories = ["web-programming", "template-engine", "command-line-utilities"]
 edition = "2021"
 

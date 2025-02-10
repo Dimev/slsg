@@ -4,7 +4,7 @@ use std::{
     net::{TcpListener, TcpStream},
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::channel,
         Arc,
     },
@@ -20,8 +20,7 @@ use crate::{
 };
 
 const VERY_LONG_PATH: &str = "very-long-path-name-intentionally-used-to-get-update-notifications-please-do-not-name-your-files-like-this.rs";
-const VERY_LONG_404: &str = "very-long-path-name-intentionally-used-to-mark-the-404-file-please-do-not-name-your-files-like-this.rs";
-const UPDATE_NOTIFY_SCRIPT: &str = include_str!("update_notify.html");
+pub(crate) const VERY_LONG_404: &str = "very-long-path-name-intentionally-used-to-mark-the-404-file-please-do-not-name-your-files-like-this.rs";
 
 pub(crate) fn serve(addr: String) {
     // run the server
@@ -45,9 +44,13 @@ pub(crate) fn serve(addr: String) {
         }
     });
 
-    // detect changes, we only care when it's changed
+    // detect changes, we only care when it's changed, and what version it was changed to
+    // version allows the other side to detect what version we are on since serving started
+    // this means it can reload if the server stops and then starts again, for whatever reason
+    let version = Arc::new(AtomicUsize::new(0));
     let changed = Arc::new(AtomicBool::new(false));
     let changed_clone = changed.clone();
+    let version_clone = version.clone();
 
     // watch for changes
     let watcher =
@@ -55,7 +58,8 @@ pub(crate) fn serve(addr: String) {
         notify::recommended_watcher(move |e: Result<notify::Event, notify::Error>|
             // and make sure that said update is not just file access, otherwise we can trigger ourselves
             if  e.map(|e| !e.kind.is_access()).unwrap_or(false) {
-                changed_clone.store(true, Ordering::Relaxed)
+                changed_clone.store(true, Ordering::Relaxed);
+                version_clone.fetch_add(1, Ordering::Relaxed);
             })
         // wrap the result ok with the watcher because we don't want it to drop out of scope
         .and_then(|mut watcher| {
@@ -81,8 +85,8 @@ pub(crate) fn serve(addr: String) {
     loop {
         let stream = incoming.recv_timeout(Duration::from_millis(200));
         match stream {
-            Ok(s) => respond(s, &site, &mut update_notify),
-            Err(_) => reload(&changed, &mut site, &mut update_notify),
+            Ok(s) => respond(s, &site, &version, &mut update_notify),
+            Err(_) => reload(&changed, &mut site, &version, &mut update_notify),
         }
     }
 }
@@ -90,6 +94,7 @@ pub(crate) fn serve(addr: String) {
 fn respond(
     mut stream: TcpStream,
     site: &Result<HashMap<PathBuf, Output>, mlua::Error>,
+    version: &Arc<AtomicUsize>,
     update_notify: &mut Vec<TcpStream>,
 ) {
     // read the url
@@ -153,7 +158,10 @@ fn respond(
                 b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
             ).unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
         stream
-            .write_all(b"data: initial\n\n")
+            .write_all(b"data: ")
+            .unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
+        stream
+            .write_all(format!("{}\n\n", version.load(Ordering::Relaxed)).as_bytes())
             .unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
         stream
             .flush()
@@ -162,7 +170,7 @@ fn respond(
         // put it on the update notify list
         update_notify.push(stream);
 
-        // no need to write
+        // no need to write anything else
         return;
 
     // if the site is an error, push the error page
@@ -197,9 +205,13 @@ fn respond(
 
     // update notify script, allows reloading the page when we send a message
     let update_notify = if mime == Some("text/html") {
-        UPDATE_NOTIFY_SCRIPT
+        format!(
+            include_str!("update_notify.html"),
+            version = version.load(Ordering::Relaxed),
+            path = VERY_LONG_PATH
+        )
     } else {
-        ""
+        String::new()
     };
 
     // send the page back
@@ -237,6 +249,7 @@ fn respond(
 fn reload(
     changed: &Arc<AtomicBool>,
     site: &mut Result<std::collections::HashMap<PathBuf, Output>, mlua::Error>,
+    version: &Arc<AtomicUsize>,
     update_notify: &mut Vec<TcpStream>,
 ) {
     // went ok and there is no request, check if the site needs reloading
@@ -256,7 +269,10 @@ fn reload(
         // notify the listeners we got updated as well
         // only retain the ones that haven't errored out due to likely not being connected anymore
         update_notify.retain_mut(|s| {
-            s.write_all(b"data: update\n\n")
+            s.write_all(b"data: ")
+                .and_then(|_| {
+                    s.write_all(format!("{}\n\n", version.load(Ordering::Relaxed)).as_bytes())
+                })
                 .and_then(|_| s.flush())
                 .is_ok()
         });

@@ -12,6 +12,7 @@ use fancy_regex::RegexBuilder;
 
 use crate::highlight::{Highlighter, Rule};
 
+// TODO: see if we can replace this with meta.lua somehow?
 const DOCSTRING: &str = r#"## SLSG
 # Scriptable Lua Site Generator
 # SLSG will run the file `main.lua` in the specified directory
@@ -306,6 +307,12 @@ site.icon
 pub(crate) fn print_stdlib() {
     let mut stdout = stdout();
     print_lua(&mut stdout, include_str!("stdlib.lua"), &lua_highlighter());
+}
+
+/// Print the meta file
+pub(crate) fn print_meta() {
+    let mut stdout = stdout();
+    print_lua(&mut stdout, include_str!("../example/meta.lua"), &lua_highlighter());
 }
 
 /// Print the API documentation
