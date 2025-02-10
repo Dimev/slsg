@@ -274,7 +274,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
     // syntax highlighting, create highlighter
     api.set(
         "create_highlighter",
-        lua.create_function(|_, text| Highlighter::from_rules(text))?,
+        lua.create_function(|_, rules| Highlighter::from_rules(rules))?,
     )?;
 
     Ok(api)

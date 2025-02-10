@@ -53,41 +53,6 @@ api.compile_sass = internal.compile_sass
 -- luamark
 api.compile_luamark = internal.compile_luamark
 
--- ast for luamark
-local luamark_ast = {}
-
-function luamark_ast:document(items)
-  items.type = 'document'
-  return items
-end
-
-function luamark_ast:paragraph(items)
-  items.type = 'paragraph'
-  return items
-end
-
-local luamark_meta = {}
-
-function luamark_meta:__index(name)
-  return function(argument, content, row, col)
-    return {
-      type = 'macro',
-      name = name,
-      argument = argument,
-      content = content,
-      row = row,
-      col = col,
-    }
-  end
-end
-
-setmetatable(luamark_ast, luamark_meta)
-
--- create an ast instead, from the lua side
-api.luamark_ast = function(text)
-  return internal.compile_luamark(text, luamark_ast)
-end
-
 -- syntax highlighting
 api.create_highlighter = internal.create_highlighter
 

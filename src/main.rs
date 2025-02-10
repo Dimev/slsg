@@ -33,7 +33,7 @@ Options:
   -v --version  Print SLSG and luaJIT version
 
   -a --address  Address and port to use when hosting the dev server (default 127.0.0.1:1111)
-  -o --output   Output directory to use when building the site (default path/public/)
+  -o --output   Output directory to use when building the site (default path/dist/)
   --            Pass anything after this as arguments to the lua script (the ... table)
 ";
 
@@ -41,9 +41,10 @@ const NEW_STYLE: &str = include_str!("../example/style.scss");
 const NEW_LUA: &str = include_str!("../example/main.lua");
 const NEW_ARTICLE: &str = include_str!("../example/article.lmk");
 const NEW_META: &str = include_str!("../example/meta.lua");
+const DEFAULT_OUT_DIR: &str = "dist";
 
 const NEW_GITIGNORE: &str = "\
-public
+dist
 ";
 
 fn main() {
@@ -138,7 +139,7 @@ fn build(pargs: &mut pico_args::Arguments) {
         .expect("Failed to parse arguments")
         .unwrap_or(PathBuf::from("."));
 
-    // force clear the directory, only if we are building the current site's ./public folder
+    // force clear the directory, only if we are building the current site's ./dist folder
     // or are passed the --force argument
     let force_clear = pargs.contains(["-f", "--force"]) || output_path.is_some();
 
@@ -160,9 +161,9 @@ fn build(pargs: &mut pico_args::Arguments) {
         {
             panic!("Output directory has items in it!");
         }
-    } else if path.join("public").is_dir() {
+    } else if path.join(DEFAULT_OUT_DIR).is_dir() {
         // remove if it's relative to the input, as we are in our own directory now
-        remove_dir_all(path.join("public")).unwrap_or_else(|e| {
+        remove_dir_all(path.join(DEFAULT_OUT_DIR)).unwrap_or_else(|e| {
             panic!(
                 "Failed to remove the content of output directory {:?}: {}",
                 output_path, e
@@ -171,13 +172,13 @@ fn build(pargs: &mut pico_args::Arguments) {
     }
 
     // make sure the path exists
-    create_dir_all(&output_path.as_ref().unwrap_or(&path.join("public")))
+    create_dir_all(&output_path.as_ref().unwrap_or(&path.join(DEFAULT_OUT_DIR)))
         .unwrap_or_else(|e| panic!("Failed to create output directory {:?}: {}", output_path, e));
 
     // make it canonical
     let output_path = output_path
         .as_ref()
-        .unwrap_or(&path.join("public"))
+        .unwrap_or(&path.join(DEFAULT_OUT_DIR))
         .canonicalize()
         .unwrap_or_else(|e| {
             panic!(
