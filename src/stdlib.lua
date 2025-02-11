@@ -175,8 +175,11 @@ end
 
 -- create an html element
 function api.html_element(elem, content)
-  -- if we get a string, put it inside an element with no styling
-  if type(content) == 'string' then
+  -- if we get a string, put it inside an element with no attributes
+  -- but only escape it's contents if it's not a style or script element
+  if type(content) == 'string' and elem ~= 'style' and elem ~= 'script' then
+    content = { content }
+  elseif type(content) == 'string' then
     content = { api.escape_html(content) }
   end
 
@@ -244,7 +247,7 @@ function api.xml_render(elem)
   local elems = ''
 
   for key, value in pairs(elem.attrs) do
-    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
+    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
   end
 
   for _, value in ipairs(elem.elems) do
