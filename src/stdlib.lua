@@ -61,10 +61,18 @@ api.create_highlighter = internal.create_highlighter
 function api.escape_html(html)
   local subst = {
     ["&"] = "&amp;",
-    ['"'] = "&quot;",
-    ["'"] = "&apos;",
     ["<"] = "&lt;",
     [">"] = "&gt;",
+  }
+  local res = string.gsub(html, '.', subst)
+  return res
+end
+
+-- escape a html quote ("x" and 'x")
+function api.escape_html_quote(html)
+  local subst = {
+    ['"'] = "&quot;",
+    ["'"] = "&#39;",
   }
   local res = string.gsub(html, '.', subst)
   return res
@@ -95,7 +103,7 @@ function api.html_render(elem)
   local elems = ''
 
   for key, value in pairs(elem.attrs) do
-    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html(value) .. '"')
+    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
   end
 
   for _, value in ipairs(elem.elems) do

@@ -169,10 +169,15 @@ function highlighter:highlight_html(text, class) end
 --- @return table<Span> the resulting ast, as a list of spans
 function highlighter:highlight_ast(text) end
 
---- Escape html
+--- Escape html, replaces <, > and & with &lt;, &gt; and &amp;
 ---@param html string
 ---@returns html string the escaped html
 function site.escape_html(html) end
+
+--- Escape html quotes, replaces ' and " with &#39; and &quot;
+---@param html string
+---@returns html string the escaped html
+function site.escape_html_quote(html) end
 
 ---@class Elem An html/xml element
 ---@field elem string The element type

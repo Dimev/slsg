@@ -155,7 +155,7 @@ fn respond(
 
         // send the response
         stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n\r\n",
             ).unwrap_or_else(|e| print_warning("Failed to write on stream", &e));
         stream
             .write_all(b"data: ")
@@ -184,6 +184,12 @@ fn respond(
         .ok()
         .and_then(|x| x.get(&PathBuf::from(VERY_LONG_404)))
     {
+        // warn that we serve the 404 page
+        print_warning(
+            &format!("Failed to serve file (404) {}", file_path),
+            &"Forgot to emit the file?",
+        );
+
         // 404, return the not found page if we can get it
         match file.as_stream() {
             Ok(stream) => (stream, 404, Some("text/html")),
@@ -193,6 +199,12 @@ fn respond(
             }
         }
     } else {
+        // warn that we serve the 404 page
+        print_warning(
+            &format!("Failed to serve file (404) {}", file_path),
+            &"Forgot to emit the file?",
+        );
+
         // 404, return the not found page
         (
             Box::new(Cursor::new(
@@ -216,7 +228,7 @@ fn respond(
 
     // send the page back
     let response = format!(
-        "HTTP/1.1 {status}\r\nCache-Control: no-cache\r\n{}\r\n",
+        "HTTP/1.1 {status}\r\nCache-Control: no-store\r\n{}\r\n",
         if let Some(mime) = mime {
             format!("Content-Type: {mime}\r\n")
         } else {
