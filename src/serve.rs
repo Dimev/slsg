@@ -238,8 +238,7 @@ fn respond(
 
     // write the page back
     stream
-        .write(&response.as_bytes())
-        .map(|_| ())
+        .write_all(&response.as_bytes())
         .unwrap_or_else(|e| print_warning("Error while writing response", &e));
 
     // copy the stream
@@ -249,8 +248,7 @@ fn respond(
 
     // add the update notify script
     stream
-        .write(update_notify.as_bytes())
-        .map(|_| ())
+        .write_all(update_notify.as_bytes())
         .unwrap_or_else(|e| print_warning("Error while writing response", &e));
 
     stream
