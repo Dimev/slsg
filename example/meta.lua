@@ -204,11 +204,73 @@ function site.html_fragment(elems) end
 function site.html_merge(elems) end
 
 --- Create an html element
+--- This automatically omits closing tags that are not needed when rendering
 ---@param elem string the element type
 ---@param content table the content of the element, pairs are attributes, ipairs are children
 ---@return Elem the resulting element
 function site.html_element(elem, content) end
 
--- TODO: how represent the html table?
+--- Render HTML, or render an HTML element
+--- When accessing a field of this table,
+--- returns a function that creates an element with that name
+--- @see site.html_element
+--- When called as a function, renders the given element
+--- @see site.html_render
+--- This can be used to create html as follows:
+--- ```lua
+--- local h = site.html
+--- local page = h {
+---   h.h1 'Hello world!'
+---   h.div {
+---     class = 'center',
+---     h.p 'This is my site!',
+---     h.p 'See, more text!',
+---     h.img { src = 'logo.png', alt = 'Site logo' },
+---   }
+--- }
+--- ```
+--- @type { [string]: fun(content: table): Elem }
+--- @overload fun(elem: Elem): string
+site.html = {}
+
+--- Render a xml element
+---@param elem Elem the html element
+---@return string the resulting html
+function site.xml_render(elem) end
+
+--- Create a xml fragment, from a list of elements
+---@param elems table<Elem> the elements
+-- @return Elem the fragment
+function site.xml_fragment(elems) end
+
+--- Create an xml element
+---@param elem string the element type
+---@param content table the content of the element, pairs are attributes, ipairs are children
+---@return Elem the resulting element
+function site.xml_element(elem, content) end
+
+--- Render XML, or render an XML element
+--- When accessing a field of this table,
+--- returns a function that creates an element with that name
+--- @see site.html_element
+--- When called as a function, renders the given element
+--- @see site.html_render
+--- This can be used to create html as follows:
+--- ```lua
+--- local svg = site.xml
+--- svg {
+---   svg.svg {
+---     version = '1.1',
+---     width = '100',
+---     height = '100',
+---     xmlns = 'http://www.w3.org/2000/svg',
+---     svg.circle { cx = 50, cy = 50, r = 50, fill = '#1D2951' },
+---     svg.circle { cx = 65, cy = 35, r = 15, fill = 'white' },
+---   }
+--- }
+--- ```
+--- @type { [string]: fun(content: table): Elem }
+--- @overload fun(elem: Elem): string
+site.xml = {}
 
 return site

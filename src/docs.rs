@@ -405,22 +405,23 @@ fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
     }
 }
 
+// TODO: also highlight markdown here, so it's easier to print out the entire thing
 /// Highlighter for lua
 fn lua_highlighter() -> Highlighter {
     let start_rules = vec![
         Rule {
             token: "comment".to_string(),
-            regex: RegexBuilder::new("--.*|%.*").build().unwrap(),
+            regex: RegexBuilder::new(r"--.*|%.*").build().unwrap(),
             next: None,
         },
         Rule {
             token: "special".to_string(),
-            regex: RegexBuilder::new("\\w+(?=\\.|:)").build().unwrap(),
+            regex: RegexBuilder::new(r"\w+(?=\.|:)").build().unwrap(),
             next: None,
         },
         Rule {
             token: "name".to_string(),
-            regex: RegexBuilder::new("(?<=\\.|:)\\w+(?=\\()").build().unwrap(),
+            regex: RegexBuilder::new(r"(?<=\.|:)\w+(?=\()").build().unwrap(),
             next: None,
         },
         Rule {
@@ -432,12 +433,12 @@ fn lua_highlighter() -> Highlighter {
         },
         Rule {
             token: "control".to_string(),
-            regex: RegexBuilder::new("\\(|\\)|\\,|{|}|=").build().unwrap(),
+            regex: RegexBuilder::new(r"\(|\)|\,|{|}|=").build().unwrap(),
             next: None,
         },
         Rule {
             token: "string".to_string(),
-            regex: RegexBuilder::new("(\\[\\[[^(\\]\\])]*\\]\\])|(\"[^\\\"]*\")|('[^\\']*')")
+            regex: RegexBuilder::new(r#"(\[\[[^(\]\])]*\]\])|("[^\"]*")|('[^\']*')"#)
                 .build()
                 .unwrap(),
             next: None,
