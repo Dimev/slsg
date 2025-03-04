@@ -228,7 +228,7 @@ fn respond(
 
     // send the page back
     let response = format!(
-        "HTTP/1.1 {status}\r\nCache-Control: no-store\r\n{}\r\n",
+        "HTTP/1.1 {status}\r\nCache-Control: no-store, max-age=0\r\nClear-Site-Data: \"cache\"\r\n{}\r\n",
         if let Some(mime) = mime {
             format!("Content-Type: {mime}\r\n")
         } else {

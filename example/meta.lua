@@ -141,6 +141,8 @@ highlighter = {}
 --- Create a syntax highlighter from the given rules
 --- The highlighter starts at the `start` ruleset, then tries to match all rules on the text
 --- it emits a token for each matching rule
+--- The regex is provided by the `fancy-regex` crate
+--- The highlighter is inspired by the one provided by the `ace` editor
 --- A simple syntax highlighter for luamark would look as follows:
 --- ```
 --- site.create_highlighter {
