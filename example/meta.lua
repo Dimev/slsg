@@ -230,7 +230,7 @@ function site.html_element(elem, content) end
 --- }
 --- ```
 --- @type { [string]: fun(content: table): Elem }
---- @overload fun(elem: Elem): string
+--- @overload fun(elem: table<Elem>): string
 site.html = {}
 
 --- Render a xml element
@@ -270,7 +270,7 @@ function site.xml_element(elem, content) end
 --- }
 --- ```
 --- @type { [string]: fun(content: table): Elem }
---- @overload fun(elem: Elem): string
+--- @overload fun(elem: table<Elem>): string
 site.xml = {}
 
 return site
