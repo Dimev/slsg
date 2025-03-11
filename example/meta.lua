@@ -78,6 +78,12 @@ function site.file_stem(path) end
 ---@return string the file name
 function site.file_ext(path) end
 
+--- Get the directory a file is in
+--- This function is the same as rust's `Path::parent`
+---@param path string the path to use
+---@return string the directory name
+function site.file_ext(path) end
+
 --- Compile a tex expression to mathml
 --- @param tex string the tex expression
 --- @param inline? boolean whether to inline the mathml. Doing so sets `inline` on the `<math>` element to true

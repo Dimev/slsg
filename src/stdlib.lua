@@ -16,6 +16,7 @@ api.file_exists = internal.file_exists
 api.file_name = internal.file_name
 api.file_stem = internal.file_stem
 api.file_ext = internal.file_ext
+api.file_parent = internal.file_parent
 
 -- where to output files to
 -- provided from the rust side, but is removed before the site is run

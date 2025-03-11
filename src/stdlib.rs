@@ -214,6 +214,16 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
         })?,
     )?;
 
+    // file parent
+    api.set(
+        "file_parent",
+        lua.create_function(|_, path: String| {
+            Ok(PathBuf::from(path)
+                .parent()
+                .map(|x| x.to_str().map(String::from)))
+        })?,
+    )?;
+
     // latex to mathml
     api.set(
         "compile_tex",
