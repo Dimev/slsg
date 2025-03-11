@@ -57,7 +57,6 @@ api.compile_luamark = internal.compile_luamark
 -- syntax highlighting
 api.create_highlighter = internal.create_highlighter
 
-
 -- escape html
 function api.escape_html(html)
   local subst = {
@@ -179,9 +178,9 @@ function api.html_element(elem, content)
   -- if we get a string, put it inside an element with no attributes
   -- but only escape it's contents if it's not a style or script element
   if type(content) == 'string' and elem ~= 'style' and elem ~= 'script' then
-    content = { content }
-  elseif type(content) == 'string' then
     content = { api.escape_html(content) }
+  elseif type(content) == 'string' then
+    content = { content }
   end
 
   local attrs = {}
@@ -196,6 +195,9 @@ function api.html_element(elem, content)
     if void_elements[elem] then
       -- void elements cannot have children, so crash if it does
       error('Void element `' .. elem .. '` cannot have content')
+    elseif type(content[i]) == 'string' then
+      -- escape string content
+      table.insert(elems, api.escape_html(content[i]))
     else
       table.insert(elems, content[i])
     end
@@ -215,15 +217,23 @@ api.html = {}
 
 local html_meta = {}
 function html_meta:__call(elems)
-  local res = ''
-  for i = 1, #elems do
-    if type(elems[i]) == 'table' then
-      res = res .. elems[i]:render()
-    else
-      res = res .. api.escape_html('' .. elems[i])
+  if type(elems) == 'table' then
+    local res = ''
+    for i = 1, #elems do
+      if type(elems[i]) == 'table' then
+        res = res .. elems[i]:render()
+      else
+        res = res .. api.escape_html('' .. elems[i])
+      end
     end
+    return '<!DOCTYPE html>' .. res
+  else
+    return {
+      elems = {},
+      attrs = {},
+      render = function() return elems end
+    }
   end
-  return '<!DOCTYPE html>' .. res
 end
 
 function html_meta:__index(element)
@@ -298,7 +308,12 @@ function api.xml_element(elem, content)
 
   for i = 1, #content do
     -- no need too deal with void elements
-    table.insert(elems, content[i])
+    -- but we do need to ensure strings are escaped
+    if type(content[i]) == 'string' then
+      table.insert(elems, api.escape_html(content[i]))
+    else
+      table.insert(elems, content[i])
+    end
   end
 
   return {
@@ -313,15 +328,23 @@ api.xml = {}
 
 local xml_meta = {}
 function xml_meta:__call(elems)
-  local res = ''
-  for i = 1, #elems do
-    if type(elems[i]) == 'table' then
-      res = res .. elems[i]:render()
-    else
-      res = res .. api.escape_html('' .. elems[i])
+  if type(elems) == 'table' then
+    local res = ''
+    for i = 1, #elems do
+      if type(elems[i]) == 'table' then
+        res = res .. elems[i]:render()
+      else
+        res = res .. api.escape_html('' .. elems[i])
+      end
     end
+    return res
+  else
+    return {
+      elems = {},
+      attrs = {},
+      render = function() return elems end
+    }
   end
-  return res
 end
 
 function xml_meta:__index(element)

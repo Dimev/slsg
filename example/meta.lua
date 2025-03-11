@@ -220,7 +220,8 @@ function site.html_element(elem, content) end
 --- When accessing a field of this table,
 --- returns a function that creates an element with that name
 --- @see site.html_element
---- When called as a function, renders the given element
+--- When called as a function, renders the given element,
+--- or returns the text as a raw html element
 --- @see site.html_render
 --- This can be used to create html as follows:
 --- ```lua
@@ -237,6 +238,7 @@ function site.html_element(elem, content) end
 --- ```
 --- @type { [string]: fun(content: table): Elem }
 --- @overload fun(elem: table<Elem>): string
+--- @overload fun(elem: string): Elem
 site.html = {}
 
 --- Render a xml element
@@ -259,7 +261,8 @@ function site.xml_element(elem, content) end
 --- When accessing a field of this table,
 --- returns a function that creates an element with that name
 --- @see site.html_element
---- When called as a function, renders the given element
+--- When called as a function, renders the given element,
+--- or returns the text as a raw xml element
 --- @see site.html_render
 --- This can be used to create html as follows:
 --- ```lua
@@ -276,7 +279,8 @@ function site.xml_element(elem, content) end
 --- }
 --- ```
 --- @type { [string]: fun(content: table): Elem }
---- @overload fun(elem: table<Elem>): string
+--- @overload fun(elem: table<Elem>): Elem
+--- @overload fun(elem: string): Elem
 site.xml = {}
 
 return site
