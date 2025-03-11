@@ -345,6 +345,7 @@ impl<'a> Parser<'a> {
                     // push to the argument list
                     if !argument.trim().is_empty() {
                         arguments.push_back(argument.trim().into_lua(lua)?);
+                        argument.clear();
                     }
                 } else {
                     // just push it
