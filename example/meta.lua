@@ -82,7 +82,7 @@ function site.file_ext(path) end
 --- This function is the same as rust's `Path::parent`
 ---@param path string the path to use
 ---@return string the directory name
-function site.file_ext(path) end
+function site.file_parent(path) end
 
 --- Compile a tex expression to mathml
 --- @param tex string the tex expression
