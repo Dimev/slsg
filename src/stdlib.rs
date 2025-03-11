@@ -166,7 +166,7 @@ pub(crate) fn stdlib(lua: &Lua) -> Result<Table> {
         "file_exists",
         lua.create_function(|_, path: String| {
             let path = PathBuf::from(path);
-            Ok(path.is_dir())
+            Ok(path.is_file())
         })?,
     )?;
 
