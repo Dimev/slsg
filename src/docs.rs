@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    io::{stdout, Stdout, Write},
+    io::{stdout, IsTerminal, Stdout, Write},
 };
 
 use crossterm::{
@@ -312,7 +312,11 @@ pub(crate) fn print_stdlib() {
 /// Print the meta file
 pub(crate) fn print_meta() {
     let mut stdout = stdout();
-    print_lua(&mut stdout, include_str!("../example/meta.lua"), &lua_highlighter());
+    print_lua(
+        &mut stdout,
+        include_str!("../example/meta.lua"),
+        &lua_highlighter(),
+    );
 }
 
 /// Print the API documentation
@@ -359,47 +363,53 @@ pub(crate) fn print_docs() {
 
 /// Print a lua code line
 fn print_lua(stdout: &mut Stdout, line: &str, highlighter: &Highlighter) {
-    for span in highlighter.highlight(line).into_iter() {
-        match span.token.as_str() {
-            "keyword" => {
-                stdout
-                    .queue(Print(span.text.yellow()))
-                    .expect("Failed to print line");
-            }
-            "special" => {
-                stdout
-                    .queue(Print(span.text.cyan()))
-                    .expect("Failed to print line");
-            }
-            "string" => {
-                stdout
-                    .queue(Print(span.text.green()))
-                    .expect("Failed to print line");
-            }
-            "control" => {
-                stdout
-                    .queue(Print(span.text.yellow()))
-                    .expect("Failed to print line");
-            }
-            "name" => {
-                stdout
-                    .queue(Print(span.text.bold()))
-                    .expect("Failed to print line");
-            }
-            "comment" => {
-                stdout
-                    .queue(Print(span.text.blue()))
-                    .expect("Failed to print line");
-            }
-            "number" => {
-                stdout
-                    .queue(Print(span.text.red()))
-                    .expect("Failed to print line");
-            }
-            _ => {
-                stdout
-                    .queue(Print(span.text))
-                    .expect("Failed to print line");
+    if !stdout.is_terminal() {
+        stdout
+            .write_all(line.as_bytes())
+            .expect("Failed to print line");
+    } else {
+        for span in highlighter.highlight(line).into_iter() {
+            match span.token.as_str() {
+                "keyword" => {
+                    stdout
+                        .queue(Print(span.text.yellow()))
+                        .expect("Failed to print line");
+                }
+                "special" => {
+                    stdout
+                        .queue(Print(span.text.cyan()))
+                        .expect("Failed to print line");
+                }
+                "string" => {
+                    stdout
+                        .queue(Print(span.text.green()))
+                        .expect("Failed to print line");
+                }
+                "control" => {
+                    stdout
+                        .queue(Print(span.text.yellow()))
+                        .expect("Failed to print line");
+                }
+                "name" => {
+                    stdout
+                        .queue(Print(span.text.bold()))
+                        .expect("Failed to print line");
+                }
+                "comment" => {
+                    stdout
+                        .queue(Print(span.text.blue()))
+                        .expect("Failed to print line");
+                }
+                "number" => {
+                    stdout
+                        .queue(Print(span.text.red()))
+                        .expect("Failed to print line");
+                }
+                _ => {
+                    stdout
+                        .queue(Print(span.text))
+                        .expect("Failed to print line");
+                }
             }
         }
     }
@@ -426,9 +436,11 @@ fn lua_highlighter() -> Highlighter {
         },
         Rule {
             token: "keyword".to_string(),
-            regex: RegexBuilder::new(r"@\w+|\b(function|local|return|end|for|do|if|else|elseif|then)\b")
-                .build()
-                .unwrap(),
+            regex: RegexBuilder::new(
+                r"@\w+|\b(function|local|return|end|for|do|if|else|elseif|then)\b",
+            )
+            .build()
+            .unwrap(),
             next: None,
         },
         Rule {
@@ -445,9 +457,7 @@ fn lua_highlighter() -> Highlighter {
         },
         Rule {
             token: "number".to_string(),
-            regex: RegexBuilder::new(r"\b(\d+)\b")
-                .build()
-                .unwrap(),
+            regex: RegexBuilder::new(r"\b(\d+)\b").build().unwrap(),
             next: None,
         },
     ];
@@ -457,4 +467,3 @@ fn lua_highlighter() -> Highlighter {
     };
     lua_highlighter
 }
-
