@@ -98,7 +98,7 @@ local not_found = h {
       h.main {
         class = 'main',
         h.h1 'Page not found!',
-        h.div { class = 'imgblock', h.img { src = 'logo.svg', alt = 'SLSG logo' } },
+        h.div { class = 'imgblock', h.img { src = '/logo.svg', alt = 'SLSG logo' } },
         h.p {
           'see ',
           h.a {

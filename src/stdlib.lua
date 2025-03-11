@@ -156,7 +156,7 @@ function api.html_merge(elems)
     if #merged == 0 then
       -- empty merged, add it
       table.insert(merged, elems[i])
-    elseif elems[i].elem == merged[#merged].elem then
+    elseif elems[i].elem == merged[#merged].elem and not void_elements[elems[i].elem] then
       -- same, merge attributes
       for k, v in pairs(elems[i].attrs) do merged[#merged].attrs[k] = v end
       -- merge elements

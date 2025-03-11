@@ -42,9 +42,9 @@ impl<'a> Parser<'a> {
                     // more than 2 whitespaces, aka an empty line? round off the paragraph
                     // if it's not empty at least
                     if content.chars().filter(|c| *c == '\n').count() >= 2
-                        && (!text.is_empty() || !paragraph.is_empty())
+                        && (!text.trim().is_empty() || !paragraph.is_empty())
                     {
-                        if !text.is_empty() {
+                        if !text.trim().is_empty() {
                             let res: Value = macros
                                 .call_function("text", (text, Value::Nil, parser.row, parser.col))
                                 .context(format!(
@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
                 ))?;
 
                 // push the current string, as that's valid content
-                if !text.is_empty() {
+                if !text.trim().is_empty() {
                     let res: Value = macros
                         .call_function("text", (text, Value::Nil, parser.row, parser.col))
                         .context(format!(
@@ -214,7 +214,7 @@ impl<'a> Parser<'a> {
                 ))?;
 
                 // push the current string, as that's valid content
-                if !text.is_empty() {
+                if !text.trim().is_empty() {
                     let res: Value = macros
                         .call_function("text", (text, Value::Nil, parser.row, parser.col))
                         .context(format!(
@@ -247,7 +247,7 @@ impl<'a> Parser<'a> {
         }
 
         // close the paragraph
-        if !text.is_empty() {
+        if !text.trim().is_empty() {
             let res: Value = macros
                 .call_function("text", (text, Value::Nil, parser.row, parser.col))
                 .context(format!(
