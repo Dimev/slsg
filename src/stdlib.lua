@@ -106,12 +106,12 @@ function api.html_render(elem)
     table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
   end
 
-  for _, value in ipairs(elem.elems) do
-    if type(value) == 'table' then
-      elems = elems .. value:render()
+  for i = 1, #elem.elems do
+    if type(elem.elems[i]) == 'table' then
+      elems = elems .. elem.elems[i]:render()
     else
       -- no escape, we accept html in text form here
-      elems = elems .. value
+      elems = elems .. elem.elems[i]
     end
   end
 
@@ -151,18 +151,18 @@ function api.html_merge(elems)
   end
 
   local merged = {}
-  for _, value in ipairs(elems) do
+  for i = 1, #elems do
     if #merged == 0 then
       -- empty merged, add it
-      table.insert(merged, value)
-    elseif value.elem == merged[#merged].elem then
+      table.insert(merged, elems[i])
+    elseif elems[i].elem == merged[#merged].elem then
       -- same, merge attributes
-      for k, v in pairs(value.attrs) do merged[#merged].attrs[k] = v end
+      for k, v in pairs(elems[i].attrs) do merged[#merged].attrs[k] = v end
       -- merge elements
-      for _, v in ipairs(value.elems) do table.insert(merged[#merged].elems, v) end
+      for j = 1, #elems[i].elems do table.insert(merged[#merged].elems, elems[i].elems[j]) end
     else
       -- different, just add
-      table.insert(merged, value)
+      table.insert(merged, elems[i])
     end
   end
 
@@ -191,12 +191,12 @@ function api.html_element(elem, content)
     if type(key) == 'string' then attrs[key] = value end
   end
 
-  for _, value in ipairs(content) do
+  for i = 1, #content do
     if void_elements[elem] then
       -- void elements cannot have children, so crash if it does
       error('Void element `' .. elem .. '` cannot have content')
     else
-      table.insert(elems, value)
+      table.insert(elems, content[i])
     end
   end
 
@@ -215,11 +215,11 @@ api.html = {}
 local html_meta = {}
 function html_meta:__call(elems)
   local res = ''
-  for _, value in ipairs(elems) do
-    if type(value) == 'table' then
-      res = res .. value:render()
+  for i = 1, #elems do
+    if type(elems[i]) == 'table' then
+      res = res .. elems[i]:render()
     else
-      res = res .. api.escape_html('' .. value)
+      res = res .. api.escape_html('' .. elems[i])
     end
   end
   return '<!DOCTYPE html>' .. res
@@ -250,12 +250,12 @@ function api.xml_render(elem)
     table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
   end
 
-  for _, value in ipairs(elem.elems) do
-    if type(value) == 'table' then
-      elems = elems .. value:render()
+  for i = 1, #elem.elems do
+    if type(elem.elems[i]) == 'table' then
+      elems = elems .. elem.elems[i]:render()
     else
       -- no escape, we accept xml in text form here
-      elems = elems .. value
+      elems = elems .. elem.elems[i]
     end
   end
 
@@ -295,9 +295,9 @@ function api.xml_element(elem, content)
     if type(key) == 'string' then attrs[key] = value end
   end
 
-  for _, value in ipairs(content) do
+  for i = 1, #content do
     -- no need too deal with void elements
-    table.insert(elems, value)
+    table.insert(elems, content[i])
   end
 
   return {
@@ -313,11 +313,11 @@ api.xml = {}
 local xml_meta = {}
 function xml_meta:__call(elems)
   local res = ''
-  for _, value in ipairs(elems) do
-    if type(value) == 'table' then
-      res = res .. value:render()
+  for i = 1, #elems do
+    if type(elems[i]) == 'table' then
+      res = res .. elems[i]:render()
     else
-      res = res .. api.escape_html('' .. value)
+      res = res .. api.escape_html('' .. elems[i])
     end
   end
   return res
