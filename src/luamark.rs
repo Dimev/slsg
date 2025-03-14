@@ -293,14 +293,15 @@ impl<'a> Parser<'a> {
             .or_else(|| self.pat("["))
             .or_else(|| self.pat("|"))
             .or_else(|| self.pat("$"))
-            .or_else(|| self.until_pred(|c| !c.is_whitespace()))
+            .or_else(|| self.until_pred(|c| !c.is_whitespace() || c == '\n'))
             .ok_or(mlua::Error::external(format!(
                 "[string]:{}:{}: Expected any of `<`, `{{`, `(`, `[`, `|`, `$` or a whitespace",
                 self.row, self.col
             )))?;
 
         // get the closing delimiter
-        let closing = if delimiter.starts_with(char::is_whitespace) {
+        // if the closing delimiter is empty, we got a newline right after, so close on there
+        let closing = if delimiter.is_empty() || delimiter.starts_with(char::is_whitespace) {
             '\n'
         } else {
             closing
