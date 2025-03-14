@@ -1,8 +1,12 @@
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
-use fancy_regex::{Regex, RegexBuilder};
+use fancy_regex::Regex;
 use mlua::{Result, Table, UserData, UserDataMethods};
 
+thread_local! {
+    /// Regex cache, speeds up highlighting in development mode
+    static CACHE: RefCell<BTreeMap<String, Regex>> = RefCell::new(BTreeMap::new());
+}
 /// Single rule for the parser
 pub(crate) struct Rule {
     /// Token name to emit
@@ -46,14 +50,19 @@ impl Highlighter {
                 let regex: String = rule.get("regex")?;
                 let next: Option<String> = rule.get("next")?;
 
+                // build or get the regex
+                let regex = if CACHE.with_borrow(|x| x.contains_key(&regex)) {
+                    CACHE.with_borrow(|x| x[&regex].clone())
+                } else {
+                    let re = Regex::new(&regex).map_err(|x| mlua::Error::external(x))?;
+
+                    // insert the regex into the map
+                    CACHE.with_borrow_mut(|x| x.insert(regex, re.clone()));
+                    re
+                };
+
                 // push to our own rules
-                own_rules.push(Rule {
-                    token,
-                    regex: RegexBuilder::new(&regex)
-                        .build()
-                        .map_err(|x| mlua::Error::external(x))?,
-                    next,
-                });
+                own_rules.push(Rule { token, regex, next });
             }
 
             states.insert(name, own_rules);
@@ -69,7 +78,6 @@ impl Highlighter {
 
         // as long as there's text input
         while !text.is_empty() {
-            // find the closest match
             if let Some(rules) = self.rules.get(&state) {
                 // find thle closest match
                 if let Some((first, token, next)) = rules
@@ -80,6 +88,8 @@ impl Highlighter {
                             .unwrap_or(None)
                             .map(|y| (y, &x.token, &x.next))
                     })
+                    // ensure progress
+                    .filter(|x| x.0.end() > 0)
                     .min_by_key(|x| x.0.start())
                 {
                     // split to the part we don't know of
@@ -172,5 +182,3 @@ impl UserData for Highlighter {
         });
     }
 }
-
-// TODO: tests

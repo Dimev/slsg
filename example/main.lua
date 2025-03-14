@@ -43,7 +43,7 @@ local function parse(article)
   function macros.code(language, content)
     return h.pre {
       class = 'codeblock',
-      h.code { languages[language]:highlight_html(content, 'code-') }
+      h.code { h(languages[language]:highlight_html(content, 'code-')) }
     }
   end
 
