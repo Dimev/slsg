@@ -109,6 +109,8 @@ function api.html_render(elem)
   for i = 1, #elem.elems do
     if type(elem.elems[i]) == 'table' then
       elems = elems .. elem.elems[i]:render()
+    elseif type(elem.elems[i]) == 'nil' then
+      -- do nothing
     else
       -- no escape, we accept html in text form here
       elems = elems .. elem.elems[i]
@@ -264,6 +266,8 @@ function api.xml_render(elem)
   for i = 1, #elem.elems do
     if type(elem.elems[i]) == 'table' then
       elems = elems .. elem.elems[i]:render()
+    elseif type(elem.elems[i]) == 'nil' then
+      -- do nothing
     else
       -- no escape, we accept xml in text form here
       elems = elems .. elem.elems[i]
