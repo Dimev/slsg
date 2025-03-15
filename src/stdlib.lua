@@ -1,80 +1,21 @@
-local internal, output = ...
-local api = {}
-
--- internal is provided from the rust side
--- Development mode
-api.dev = internal.dev
-
--- read files and directories
-api.dirs = internal.dirs
-api.files = internal.files
-api.read = internal.read
-api.dir_exists = internal.dir_exists
-api.file_exists = internal.file_exists
-
--- file names
-api.file_name = internal.file_name
-api.file_stem = internal.file_stem
-api.file_ext = internal.file_ext
-api.file_parent = internal.file_parent
-
--- where to output files to
--- provided from the rust side, but is removed before the site is run
-local out = output
-
--- emit files to the site generator
-function api.emit(path, data)
-  out[path] = { type = 'data', data = data }
-end
-
-function api.emit_file(path, original)
-  out[path] = { type = 'file', original = original }
-end
-
-function api.emit_command(path, command, ...)
-  out[path] = {
-    type = 'command',
-    command = command,
-    arguments = { ... }
-  }
-end
-
-function api.set_404(path)
-  if not api.dev then return end
-  if not out[path] then error('404 page `' .. path .. '` not emitted yet!') end
-  out[internal.long_404_path] = out[path]
-end
-
--- latex to mathml
-api.compile_tex = internal.compile_tex
-
--- sass
-api.compile_sass = internal.compile_sass
-
--- luamark
-api.compile_luamark = internal.compile_luamark
-
--- syntax highlighting
-api.create_highlighter = internal.create_highlighter
-
 -- escape html
-function api.escape_html(html)
+function site.escape_xml(xml)
   local subst = {
     ["&"] = "&amp;",
     ["<"] = "&lt;",
     [">"] = "&gt;",
   }
-  local res = string.gsub(html, '.', subst)
+  local res = string.gsub(xml, '.', subst)
   return res
 end
 
 -- escape a html quote ("x" and 'x")
-function api.escape_html_quote(html)
+function site.escape_xml_quote(xml)
   local subst = {
     ['"'] = "&quot;",
     ["'"] = "&#39;",
   }
-  local res = string.gsub(html, '.', subst)
+  local res = string.gsub(xml, '.', subst)
   return res
 end
 
@@ -97,20 +38,24 @@ local void_elements = {
   wbr = true,
 }
 
--- render an html element
-function api.html_render(elem)
+-- render an xml element
+local function xml_render(elem, void)
   local attrs = {}
   local elems = ''
 
   for key, value in pairs(elem.attrs) do
-    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
+    table.insert(attrs, site.escape_xml(key) .. '="' .. site.escape_xml_quote(value) .. '"')
   end
 
   for i = 1, #elem.elems do
     if type(elem.elems[i]) == 'table' then
+      -- render the element
       elems = elems .. elem.elems[i]:render()
     elseif type(elem.elems[i]) == 'nil' then
       -- do nothing
+    elseif type(elem.elems[i]) == 'function' then
+      -- call the function to render the element
+      elems = elems .. elem.elems[i]():render()
     else
       -- no escape, we accept html in text form here
       elems = elems .. elem.elems[i]
@@ -120,7 +65,7 @@ function api.html_render(elem)
   if not elem.elem then
     -- fragment
     return elems
-  elseif void_elements[elem.elem] then
+  elseif void[elem.elem] then
     -- <open>
     return '<' .. elem.elem .. (#attrs > 0 and ' ' or '')
         .. table.concat(attrs, ' ') .. '>'
@@ -133,56 +78,32 @@ function api.html_render(elem)
   end
 end
 
--- create an html fragment
-function api.html_fragment(elems)
+-- create an xml fragment
+function site.xml_fragment(elems)
   return {
     attrs = {},
     elems = elems,
-    render = api.html_render,
+    render = xml_render,
   }
 end
 
--- merge a list of html elements into a fragment
--- this means any consecutive elements with the same style will be merged into one longer element
-function api.html_merge(elems)
-  -- fast path if empty
-  if #elems == 0 then
-    return {
-      attrs = {}, elems = {}, render = api.html_render
-    }
-  end
-
-  local merged = {}
-  for i = 1, #elems do
-    if #merged == 0 then
-      -- empty merged, add it
-      table.insert(merged, elems[i])
-    elseif elems[i].elem == merged[#merged].elem and not void_elements[elems[i].elem] then
-      -- same, merge attributes
-      for k, v in pairs(elems[i].attrs) do merged[#merged].attrs[k] = v end
-      -- merge elements
-      for j = 1, #elems[i].elems do table.insert(merged[#merged].elems, elems[i].elems[j]) end
-    else
-      -- different, just add
-      table.insert(merged, elems[i])
-    end
-  end
-
+-- create an html fragment
+function site.html_fragment(elems)
   return {
     attrs = {},
-    elems = merged,
-    render = api.html_render,
+    elems = elems,
+    render = function(self) xml_render(self, void_elements) end,
   }
 end
 
 -- create an html element
-function api.html_element(elem, content)
+local function xml_element(elem, content, void)
   -- if we get a string, put it inside an element with no attributes
-  -- but only escape it's contents if it's not a style or script element
-  if type(content) == 'string' and elem ~= 'style' and elem ~= 'script' then
-    content = { api.escape_html(content) }
-  elseif type(content) == 'string' then
+  -- Also render it raw
+  if type(content) == 'string' then
     content = { content }
+  elseif type(content) == 'function' then
+    content = content()
   end
 
   local attrs = {}
@@ -194,12 +115,12 @@ function api.html_element(elem, content)
   end
 
   for i = 1, #content do
-    if void_elements[elem] then
+    if void[elem] then
       -- void elements cannot have children, so crash if it does
       error('Void element `' .. elem .. '` cannot have content')
     elseif type(content[i]) == 'string' then
       -- escape string content
-      table.insert(elems, api.escape_html(content[i]))
+      table.insert(elems, site.escape_html(content[i]))
     else
       table.insert(elems, content[i])
     end
@@ -209,13 +130,13 @@ function api.html_element(elem, content)
     elem = elem,
     elems = elems,
     attrs = attrs,
-    render = api.html_render,
+    render = function(self) xml_render(self, void) end,
   }
 end
 
 -- create an html element from a table
 -- pairs are the attributes, ipairs are the children
-api.html = {}
+site.html = {}
 
 local html_meta = {}
 function html_meta:__call(elems)
@@ -225,13 +146,13 @@ function html_meta:__call(elems)
       if type(elems[i]) == 'table' then
         res = res .. elems[i]:render()
       else
-        res = res .. api.escape_html('' .. elems[i])
+        res = res .. site.escape_xml('' .. elems[i])
       end
     end
     return '<!DOCTYPE html>' .. res
   else
     return {
-      elems = {},
+      elems = elems,
       attrs = {},
       render = function() return elems end
     }
@@ -240,7 +161,7 @@ end
 
 function html_meta:__index(element)
   return function(content)
-    return api.html_element(element, content)
+    return xml_element(element, content, void_elements)
   end
 end
 
@@ -251,118 +172,7 @@ end
 -- meta table for this to work
 setmetatable(api.html, html_meta)
 
--- Same, but for generic xml (atom, svg etc)
--- aka without void elements
-
--- render an xml element
-function api.xml_render(elem)
-  local attrs = {}
-  local elems = ''
-
-  for key, value in pairs(elem.attrs) do
-    table.insert(attrs, api.escape_html(key) .. '="' .. api.escape_html_quote(value) .. '"')
-  end
-
-  for i = 1, #elem.elems do
-    if type(elem.elems[i]) == 'table' then
-      elems = elems .. elem.elems[i]:render()
-    elseif type(elem.elems[i]) == 'nil' then
-      -- do nothing
-    else
-      -- no escape, we accept xml in text form here
-      elems = elems .. elem.elems[i]
-    end
-  end
-
-  if not elem.elem then
-    -- fragment
-    return elems
-  else
-    -- <open>inner<close>
-    return '<' .. elem.elem .. (#attrs > 0 and ' ' or '')
-        .. table.concat(attrs, ' ') .. '>'
-        .. elems
-        .. '</' .. elem.elem .. '>'
-  end
-end
-
--- create an xml fragment
-function api.xml_fragment(elems)
-  return {
-    attrs = {},
-    elems = elems,
-    render = api.xml_render,
-  }
-end
-
--- create an xml element
-function api.xml_element(elem, content)
-  -- if we get a string, put it inside an element with no styling
-  if type(content) == 'string' then
-    content = { api.escape_html(content) }
-  end
-
-  local attrs = {}
-  local elems = {}
-
-  for key, value in pairs(content) do
-    -- skip if the key is not a string, as that means it's an index on the list
-    if type(key) == 'string' then attrs[key] = value end
-  end
-
-  for i = 1, #content do
-    -- no need too deal with void elements
-    -- but we do need to ensure strings are escaped
-    if type(content[i]) == 'string' then
-      table.insert(elems, api.escape_html(content[i]))
-    else
-      table.insert(elems, content[i])
-    end
-  end
-
-  return {
-    elem = elem,
-    elems = elems,
-    attrs = attrs,
-    render = api.xml_render,
-  }
-end
-
-api.xml = {}
-
-local xml_meta = {}
-function xml_meta:__call(elems)
-  if type(elems) == 'table' then
-    local res = ''
-    for i = 1, #elems do
-      if type(elems[i]) == 'table' then
-        res = res .. elems[i]:render()
-      else
-        res = res .. api.escape_html('' .. elems[i])
-      end
-    end
-    return res
-  else
-    return {
-      elems = {},
-      attrs = {},
-      render = function() return elems end
-    }
-  end
-end
-
-function xml_meta:__index(element)
-  return function(content)
-    return api.xml_element(element, content)
-  end
-end
-
--- add nothing
-function xml_meta:__newindex()
-end
-
--- meta table for this to work
-setmetatable(api.xml, xml_meta)
+-- TODO: xml
 
 -- SLSG logo
 local svg = api.xml
