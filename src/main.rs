@@ -3,15 +3,13 @@ use std::{
     path::PathBuf,
 };
 
-use docs::{print_docs, print_meta, print_stdlib};
 use generate::generate;
 use message::print_error;
 use mlua::{Lua, Table};
 use serve::serve;
 
-mod docs;
 mod generate;
-mod highlight;
+
 mod luamark;
 mod message;
 mod serve;
@@ -74,9 +72,9 @@ fn main() {
         Some("dev") => dev(&mut pargs),
         Some("build") => build(&mut pargs),
         Some("new") => new(pargs),
-        Some("api") => print_docs(),
-        Some("stdlib") => print_stdlib(),
-        Some("meta") => print_meta(),
+        // Some("api") => print_docs(),
+        // Some("stdlib") => print_stdlib(),
+        // Some("meta") => print_meta(),
         _ => println!("{}", HELP),
     }
 }

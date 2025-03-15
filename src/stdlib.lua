@@ -1,3 +1,5 @@
+site = {}
+
 -- escape html
 function site.escape_xml(xml)
   local subst = {
@@ -83,7 +85,7 @@ function site.xml_fragment(elems)
   return {
     attrs = {},
     elems = elems,
-    render = xml_render,
+    render = function(self) return xml_render(self, {}) end,
   }
 end
 
@@ -92,7 +94,7 @@ function site.html_fragment(elems)
   return {
     attrs = {},
     elems = elems,
-    render = function(self) xml_render(self, void_elements) end,
+    render = function(self) return xml_render(self, void_elements) end,
   }
 end
 
@@ -120,7 +122,7 @@ local function xml_element(elem, content, void)
       error('Void element `' .. elem .. '` cannot have content')
     elseif type(content[i]) == 'string' then
       -- escape string content
-      table.insert(elems, site.escape_html(content[i]))
+      table.insert(elems, site.escape_xml(content[i]))
     else
       table.insert(elems, content[i])
     end
@@ -130,9 +132,48 @@ local function xml_element(elem, content, void)
     elem = elem,
     elems = elems,
     attrs = attrs,
-    render = function(self) xml_render(self, void) end,
+    render = function(self) return xml_render(self, void) end,
   }
 end
+
+
+-- create an html element from a table
+-- pairs are the attributes, ipairs are the children
+site.xml = {}
+
+local xml_meta = {}
+function xml_meta:__call(elems)
+  if type(elems) == 'table' then
+    local res = ''
+    for i = 1, #elems do
+      if type(elems[i]) == 'table' then
+        res = res .. elems[i]:render()
+      else
+        res = res .. site.escape_xml('' .. elems[i])
+      end
+    end
+    return res
+  else
+    return {
+      elems = elems,
+      attrs = {},
+      render = function() return elems end
+    }
+  end
+end
+
+function xml_meta:__index(element)
+  return function(content)
+    return xml_element(element, content, {})
+  end
+end
+
+-- add nothing
+function xml_meta:__newindex()
+end
+
+-- meta table for this to work
+setmetatable(site.xml, xml_meta)
 
 -- create an html element from a table
 -- pairs are the attributes, ipairs are the children
@@ -170,13 +211,13 @@ function html_meta:__newindex()
 end
 
 -- meta table for this to work
-setmetatable(api.html, html_meta)
+setmetatable(site.html, html_meta)
 
 -- TODO: xml
 
 -- SLSG logo
-local svg = api.xml
-api.logo = svg {
+local svg = site.xml
+site.logo = svg {
   svg.svg {
     version = '1.1',
     width = '210',
@@ -198,7 +239,7 @@ api.logo = svg {
 }
 
 -- Icon version, without the text
-api.icon = svg {
+site.icon = svg {
   svg.svg {
     version = '1.1',
     width = '100',
@@ -208,5 +249,3 @@ api.icon = svg {
     svg.circle { cx = 65, cy = 35, r = 15, fill = 'white' },
   }
 }
-
-return api
