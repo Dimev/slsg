@@ -38,22 +38,23 @@ src/index.lmk:
 @date = 15-03-2025
 
 -- String, to support multiline
-@desc: "A hello world!"
+@desc = "A hello world!
+Now with multiple lines!"
 
 = Hello world
 This is some text!
-__italic!__ **Bold!** `Monospace`
+_italic!_ *Bold!* `Monospace`
 Next up, an image!
 
-@image(the SLSG logo, logo.svg)
+@image(the SLSG logo; logo.svg)
 
 Inline macros are possible too!
 If not seperated by newlines, they are put inside the `<p>` element
-like so! @link(Home, /)
+like so! @link(Home; /)
 
 Next up, a codeblock!
 
-@block code(lua)
+@begin code(lua)
 -- Templates are defined as follows:
 local templates
 function templates:page(content)

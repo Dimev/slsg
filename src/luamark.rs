@@ -1,5 +1,112 @@
+use std::collections::BTreeMap;
+
 use mlua::{ErrorContext, IntoLua, Lua, MultiValue, ObjectLike, Result, Table, Value};
 use unicode_width::UnicodeWidthStr;
+
+/// Ast
+/// Each node refers to the nodes that follow up on it
+enum Ast {
+    /// Paragraph
+    Paragraph { len: usize },
+
+    /// Normal text, start and end are
+    Text { content: String },
+
+    /// Italic content
+    Italic { len: usize },
+
+    /// Bold content
+    Bold { len: usize },
+
+    /// Monospaced content
+    Mono { len: usize },
+
+    /// Heading content
+    Head { depth: u8, len: usize },
+
+    /// Call to a macro
+    Macro { name: String, len: usize },
+
+    /// Argument to a macro
+    Arg { len: usize },
+}
+
+/// Luamark document
+struct Luamark {
+    /// Meta values
+    meta: BTreeMap<String, String>,
+
+    /// Document, aka the AST
+    document: Vec<Ast>,
+}
+
+impl Luamark {
+    fn new(lmk: &str) -> Result<Self> {
+        // parser state
+        let mut state = ParserState {
+            inp: lmk,
+            row: 1,
+            col: 1,
+        };
+
+        // Ast
+        let mut ast: Vec<Ast> = Vec::new();
+
+        // call stack, refers to where in the ast the last node is
+        let mut stack: Vec<usize> = Vec::new();
+
+        // start parsing
+        // @name = text
+        // @name = 'text'
+        // @name = "text"
+        // to set meta
+        // @begin name(arg1; arg2; arg3) content @end
+        // for a function call where the last argument is the text verbatim
+        // @name(arg1; arg2; arg3)
+        // for a function call
+        // = content
+        // for a header
+        // `content`
+        // for monospace
+        // *content*
+        // for bold
+        // _content_
+        // for italic
+        // \content
+        // for escaping
+
+        todo!()
+    }
+
+    /// Compile to lua
+    fn compile(&self, lua: &Lua) -> Result<Value> {
+        for (i, node) in self.document.iter().enumerate() {
+            match node {
+                Ast::Paragraph { len } => (),
+                Ast::Text { content } => (),
+                Ast::Italic { len } => (),
+                Ast::Bold { len } => (),
+                Ast::Mono { len } => (),
+                Ast::Head { depth, len } => (),
+                Ast::Macro { name, len } => (),
+                Ast::Arg { len } => (),
+            }
+        }
+
+        todo!()
+    }
+}
+
+struct ParserState<'a> {
+    /// Remaining input
+    inp: &'a str,
+
+    /// Current row
+    row: usize,
+
+    /// Current column
+    col: usize,
+}
 
 /// Parser for luamark
 pub(crate) struct Parser<'a> {
