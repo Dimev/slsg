@@ -3,7 +3,7 @@ Scriptable Lua Site Generator
 
 ## How it works (Soon:tm:):
 Generated site is output to `dist/`.
-`src/` is scanned for luamark (`*.lmk`) files AND lua (`*.lua`) files
+The project root is scanned for luamark (`*.lmk`) files.
 `name.lmk` and `name/index.lmk` are treated the same.
 `main.lua` is then run using the meta information from the files found.
 `main.lua` is expected to output the table of templates to use. A template is

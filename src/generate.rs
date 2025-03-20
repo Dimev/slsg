@@ -122,7 +122,7 @@ fn read_directory(lua: &Lua, path: &Path) -> Result<()> {
         } else if entry.file_type()?.is_dir() && entry.path().join("index.lmk").exists() {
             // is there a luamark file in the directory?
             // read
-            let content = fs::read_to_string(entry.path())
+            let content = fs::read_to_string(entry.path().join("index.lmk"))
                 .into_lua_err()
                 .context("Failed to read file")?;
 
