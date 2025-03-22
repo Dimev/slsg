@@ -1,34 +1,34 @@
 use std::collections::BTreeMap;
 
 use mlua::{ErrorContext, IntoLua, Lua, MultiValue, ObjectLike, Result, Table, Value};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Ast
 /// Each node refers to the nodes that follow up on it
 enum Ast {
-    /// Paragraph
-    Paragraph { len: usize },
+    /// Paragraph or block, inside <p> tag
+    Paragraph(Vec<Ast>),
 
-    /// Normal text, start and end are
-    Text { content: String },
+    /// Raw text
+    Text(String),
 
-    /// Italic content
-    Italic { len: usize },
+    /// Italic content <i>
+    Italic(Vec<Ast>),
 
-    /// Bold content
-    Bold { len: usize },
+    /// Bold content <b>
+    Bold(Vec<Ast>),
 
-    /// Monospaced content
-    Mono { len: usize },
+    /// Monospaced content <code>
+    Mono(Vec<Ast>),
 
-    /// Heading content
-    Head { depth: u8, len: usize },
+    /// Heading content <h1>, <h2>, ...
+    Head(u8, Vec<Ast>),
 
     /// Call to a macro
-    Macro { name: String, len: usize },
+    Macro(String, Vec<Ast>),
 
-    /// Argument to a macro
-    Arg { len: usize },
+    /// Call to a block macro
+    Block(String, Vec<Ast>, String),
 }
 
 /// Luamark document
@@ -41,74 +41,20 @@ struct Luamark {
 }
 
 impl Luamark {
-    fn new(lmk: &str) -> Result<Self> {
+    fn from_str(lmk: &str) -> Result<Self> {
         // parser state
-        let mut state = ParserState {
-            inp: lmk,
+        let mut state = Parser {
+            input: lmk,
             row: 1,
             col: 1,
         };
 
-        // Ast
-        let mut ast: Vec<Ast> = Vec::new();
-
-        // call stack, refers to where in the ast the last node is
-        let mut stack: Vec<usize> = Vec::new();
-
-        // start parsing
-        // @name = text
-        // @name = 'text'
-        // @name = "text"
-        // to set meta
-        // @begin name(arg1; arg2; arg3) content @end
-        // for a function call where the last argument is the text verbatim
-        // @name(arg1; arg2; arg3)
-        // for a function call
-        // = content
-        // for a header
-        // `content`
-        // for monospace
-        // *content*
-        // for bold
-        // _content_
-        // for italic
-        // \content
-        // for escaping
-
         todo!()
     }
-
-    /// Compile to lua
-    fn compile(&self, lua: &Lua) -> Result<Value> {
-        for (i, node) in self.document.iter().enumerate() {
-            match node {
-                Ast::Paragraph { len } => (),
-                Ast::Text { content } => (),
-                Ast::Italic { len } => (),
-                Ast::Bold { len } => (),
-                Ast::Mono { len } => (),
-                Ast::Head { depth, len } => (),
-                Ast::Macro { name, len } => (),
-                Ast::Arg { len } => (),
-            }
-        }
-
-        todo!()
-    }
-}
-
-struct ParserState<'a> {
-    /// Remaining input
-    inp: &'a str,
-
-    /// Current row
-    row: usize,
-
-    /// Current column
-    col: usize,
 }
 
 /// Parser for luamark
+#[derive(Clone)]
 pub(crate) struct Parser<'a> {
     /// current remaining input
     input: &'a str,
@@ -121,396 +67,168 @@ pub(crate) struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    /// Parse a luamark string
-    pub(crate) fn parse(
-        lua: &Lua,
-        input: &'a str,
-        macros: Table,
-        row: usize,
-        col: usize,
-    ) -> Result<Value> {
-        let mut parser = Self { input, row, col };
-
-        // Current document
-        let document = lua.create_table()?;
-
-        // current paragraph
-        let mut paragraph = lua.create_table()?;
-
-        // current text
-        let mut text = String::new();
-
-        // as long as there's text
-        while !parser.input.is_empty() {
-            // if we start with whitespace, take that
-            if parser.input.starts_with(char::is_whitespace) {
-                // push the paragraph
-                if let Some(content) = parser.until_pred(|c| !c.is_whitespace()) {
-                    // more than 2 whitespaces, aka an empty line? round off the paragraph
-                    // if it's not empty at least
-                    if content.chars().filter(|c| *c == '\n').count() >= 2
-                        && (!text.trim().is_empty() || !paragraph.is_empty())
-                    {
-                        if !text.trim().is_empty() {
-                            let res: Value = macros
-                                .call_function("text", (text, Value::Nil, parser.row, parser.col))
-                                .context(format!(
-                                    "[string]:{}:{}: Failed to call macro `text`",
-                                    parser.row, parser.col
-                                ))?;
-
-                            paragraph.push(res)?;
-                            text = String::new();
-                        }
-
-                        // call the paragraph macro
-                        let res: Value = macros
-                            .call_function(
-                                "paragraph",
-                                (paragraph, Value::Nil, parser.row, parser.col),
-                            )
-                            .context(format!(
-                                "[string]:{}:{}: Failed to call macro `paragraph`",
-                                parser.row, parser.col
-                            ))?;
-
-                        // push the paragraph to the document
-                        document.push(res)?;
-
-                        // new paragraph
-                        paragraph = lua.create_table()?;
-                    }
-                } else {
-                    // no match means end of input, so stop
-                    break;
-                }
-
-                // text or paragraph is not empty and text does not end in a whitespace? add a whitespace, as we just skipped one
-                // if the parargaph is not empty this means this whitespace is likely desired
-                if (!paragraph.is_empty() || !text.is_empty())
-                    && !text.ends_with(char::is_whitespace)
-                {
-                    text.push(' ');
-                }
-            }
-            // if we start with a %, parse a comment
-            else if parser.input.starts_with('%') {
-                // take until the newline
-                if parser.until_pat("\n").is_none() {
-                    break;
-                }
-
-                // string is not empty or does not end in a whitespace? add a whitespace, as we just skipped one
-                if !text.is_empty() && !text.ends_with(char::is_whitespace) {
-                    text.push(' ');
-                }
-            }
-            // if we start with a \, parse an escape sequence
-            else if parser.input.starts_with('\\') {
-                // take the first \
-                parser.pat("\\");
-
-                // take until the whitespace
-                if let Some(content) = parser.until_pred(char::is_whitespace) {
-                    // add it to the string
-                    text.push_str(content);
-                } else {
-                    // else, end of file, push the rest
-                    text.push_str(parser.input);
-                    break;
-                }
-            }
-            // if we start with a @begin, parse a block macro
-            else if parser.input.starts_with("@begin") {
-                // take the @begin
-                parser.pat("@begin");
-
-                // take the @
-                parser.pat("@").ok_or(mlua::Error::external(format!(
-                    "[string]:{}:{}: Expected a @name after the @begin of a block macro",
-                    parser.row, parser.col
-                )))?;
-
-                // take the tag name
-                let tag = parser
-                    .until_pred(|c| c.is_whitespace() || "<{([|$".contains(c))
-                    .filter(|x| x.len() > 0)
-                    .ok_or_else(|| {
-                        mlua::Error::external(format!(
-                            "[string]:{}:{}: Expected a macro name",
-                            parser.row, parser.col
-                        ))
-                    })?;
-
-                // name of the macro
-                let name = tag.split_once('@').map(|x| x.0).unwrap_or(tag);
-
-                // parse the argument list
-                let mut arguments = parser.arg_list(lua)?;
-
-                // content starts here
-                let (row, col) = (parser.row, parser.col);
-
-                // closing tag
-                let closing = format!("@end@{tag}");
-
-                // read until the closing tag
-                let content = parser
-                    .until_pat(&closing)
-                    .ok_or(mlua::Error::external(format!(
-                        "[string]:{}:{}: Expected a closing {closing}, but did not get it",
-                        parser.row, parser.col
-                    )))?;
-
-                // read the closing tag
-                parser.pat(&closing);
-
-                // other arguments
-                arguments.push_back(content.trim().into_lua(lua)?);
-                arguments.push_back(Value::Integer(row as i64));
-                arguments.push_back(Value::Integer(col as i64));
-
-                // run the macro
-                let result: Value = macros.call_function(name, arguments).context(format!(
-                    "[string]:{}:{}: Failed to call macro `{name}`",
-                    parser.row, parser.col
-                ))?;
-
-                // push the current string, as that's valid content
-                if !text.trim().is_empty() {
-                    let res: Value = macros
-                        .call_function("text", (text, Value::Nil, parser.row, parser.col))
-                        .context(format!(
-                            "[string]:{}:{}: Failed to call macro `text`",
-                            parser.row, parser.col
-                        ))?;
-
-                    paragraph.push(res)?;
-                    text = String::new();
-                }
-
-                // push the macro to the paragrah
-                paragraph.push(result)?;
-            }
-            // if we start with a @, parse a normal macro
-            else if parser.input.starts_with('@') {
-                // take the @
-                parser.pat("@");
-
-                // take the name
-                let name = parser
-                    .until_pred(|c| c.is_whitespace() || "<{([|$".contains(c))
-                    .filter(|x| x.len() > 0)
-                    .ok_or_else(|| {
-                        mlua::Error::external(format!(
-                            "[string]:{}:{}: Expected a macro name",
-                            parser.row, parser.col
-                        ))
-                    })?;
-
-                // parse the argument list
-                let mut arguments = parser.arg_list(lua)?;
-                arguments.push_back(Value::Nil);
-                arguments.push_back(Value::Integer(parser.row as i64));
-                arguments.push_back(Value::Integer(parser.col as i64));
-
-                // run the macro
-                let result: Value = macros.call_function(name, arguments).context(format!(
-                    "[string]:{}:{}: Failed to call macro `{name}`",
-                    parser.row, parser.col
-                ))?;
-
-                // push the current string, as that's valid content
-                if !text.trim().is_empty() {
-                    let res: Value = macros
-                        .call_function("text", (text, Value::Nil, parser.row, parser.col))
-                        .context(format!(
-                            "[string]:{}:{}: Failed to call macro `text`",
-                            parser.row, parser.col
-                        ))?;
-
-                    paragraph.push(res)?;
-                    text = String::new();
-                }
-
-                // push the macro to the paragrah
-                paragraph.push(result)?;
-            }
-            // we now have normal text, eat up until the next special character
-            else {
-                if let Some(content) =
-                    parser.until_pred(|c| c.is_whitespace() || "\\@%".contains(c))
-                {
-                    // add content
-                    if !content.is_empty() {
-                        text.push_str(content)
-                    }
-                } else {
-                    // content was the rest of the input
-                    text.push_str(parser.input.trim_end());
-                    parser.input = "";
-                }
-            }
-        }
-
-        // close the paragraph
-        if !text.trim().is_empty() {
-            let res: Value = macros
-                .call_function("text", (text, Value::Nil, parser.row, parser.col))
-                .context(format!(
-                    "[string]:{}:{}: Failed to call macro `text`",
-                    parser.row, parser.col
-                ))?;
-
-            paragraph.push(res)?;
-        }
-
-        if !paragraph.is_empty() {
-            let res: Value = macros
-                .call_function("paragraph", (paragraph, Value::Nil, parser.row, parser.col))
-                .context(format!(
-                    "[string]:{}:{}: Failed to call macro `paragraph`",
-                    parser.row, parser.col
-                ))?;
-
-            // push the paragraph to the document
-            document.push(res)?;
-        }
-
-        // close the document
-        macros
-            .call_function("document", (document, Value::Nil, row, col))
-            .context(format!(
-                "[string]:{}:{}: Failed to call macro `document`",
-                parser.row, parser.col
-            ))
+    /// parse a comment
+    /// --.*\n
+    fn comment(&mut self) -> Option<()> {
+        self.pat("%")?;
+        self.until_pat("\n")?;
+        Some(())
     }
 
-    /// Parse an argument list, for macros
-    fn arg_list(&mut self, lua: &Lua) -> Result<MultiValue> {
-        // characters to open/close the argument with
-        let opening = "<{([|$";
-        let closing = ">})]|$";
+    /// Parse escaped content
+    /// \anything-non-whitespace
+    fn escaped(&mut self) -> Option<&str> {
+        self.pat("\\")?;
+        self.until_pred(char::is_whitespace)
+    }
 
-        // take the delimiter
-        let delimiter = self
-            .pat("<")
-            .or_else(|| self.pat("{"))
-            .or_else(|| self.pat("("))
-            .or_else(|| self.pat("["))
-            .or_else(|| self.pat("|"))
-            .or_else(|| self.pat("$"))
-            .or_else(|| self.until_pred(|c| !c.is_whitespace() || c == '\n'))
-            .ok_or(mlua::Error::external(format!(
-                "[string]:{}:{}: Expected any of `<`, `{{`, `(`, `[`, `|`, `$` or a whitespace",
-                self.row, self.col
-            )))?;
+    /// Parse a macro name
+    fn name(&mut self) -> Option<&str> {
+        // alphanum or _
+        self.pred(|x| x.is_alphanumeric() || x == '_')
+    }
 
-        // get the closing delimiter
-        // if the closing delimiter is empty, we got a newline right after, so close on there
-        let closing = if delimiter.is_empty() || delimiter.starts_with(char::is_whitespace) {
-            '\n'
+    /// Parse a meta variable
+    fn meta(&mut self) -> Option<(String, String)> {
+        // @ and name
+        let mut cx = self.clone();
+        cx.pat("@")?;
+
+        // meta name
+        let name = cx.name()?.to_string();
+
+        // trim any whitespace
+        cx.pred(char::is_whitespace)?;
+        cx.pat("=")?;
+        cx.pred(char::is_whitespace)?;
+
+        // split based on how the string is escaped
+        // content
+        let mut content = String::new();
+        if cx.pat("\"").is_some() {
+            while !cx.input.starts_with('"') {
+                // text
+                if let Some(x) = cx.until_pred(|x| "\"\\".contains(x)) {
+                    content.push_str(x);
+                }
+
+                // escape
+                if let Some(x) = cx.escaped() {
+                    content.push_str(x);
+                }
+            }
+
+            // close
+            cx.pat("\"")?;
+        } else if cx.pat("'").is_some() {
+            while !cx.input.starts_with('\'') {
+                // text
+                if let Some(x) = cx.until_pred(|x| "'\\".contains(x)) {
+                    content.push_str(x);
+                }
+
+                // escape
+                if let Some(x) = cx.escaped() {
+                    content.push_str(x);
+                }
+            }
+
+            // close
+            cx.pat("'")?;
         } else {
-            closing
-                .chars()
-                .nth(opening.find(delimiter).unwrap())
-                .unwrap()
-        };
-
-        // parse the argument
-        let mut argument = String::new();
-        let mut arguments = MultiValue::new();
-        while !self.input.starts_with(closing) {
-            // end of input, fail
-            if self.input.is_empty() {
-                Err(mlua::Error::external(format!(
-                    "[string]:{}:{}: Expected a newline and rest of block macro, got end of input",
-                    self.row, self.col
-                )))?
-            }
-            // whitespace
-            else if self
-                .input
-                .starts_with(|c: char| c.is_whitespace() && c != closing)
-            {
-                // consume the whitespace
-                self.until_pred(|c| !c.is_whitespace() || c == closing);
-
-                // push a space if the string is not empty or does not have a whitespace already
-                if !argument.is_empty() && !argument.ends_with(char::is_whitespace) {
-                    argument.push(' ');
+            while !cx.input.starts_with(['\n', '%']) {
+                // text
+                if let Some(x) = cx.until_pred(|x| "%\n\\".contains(x)) {
+                    content.push_str(x);
                 }
-            }
-            // comment
-            else if self.input.starts_with('%') {
-                self.until_pat("\n");
-            }
-            // argument delimiter
-            else if self.input.starts_with(",") {
-                self.pat(",");
-                // in () and [], acts as an actual delimiter
-                if "])".contains(closing) {
-                    // push to the argument list
-                    if !argument.trim().is_empty() {
-                        arguments.push_back(argument.trim().into_lua(lua)?);
-                        argument.clear();
-                    }
-                } else {
-                    // just push it
-                    argument.push(',');
+
+                // escape
+                if let Some(x) = cx.escaped() {
+                    content.push_str(x);
                 }
-            }
-            // math environment escape, parse \$ as a $
-            else if self.input.starts_with("\\$") && closing == '$' {
-                self.pat("\\$");
-                argument.push('$');
-            }
-            // math environment escape, parse \% as a %
-            else if self.input.starts_with("\\%") && closing == '$' {
-                self.pat("\\%");
-                argument.push('%');
-            }
-            // other escape for the math environment does nothing
-            else if self.input.starts_with('\\') && closing == '$' {
-                self.pat("\\");
-                argument.push('\\');
-            }
-            // escaped, only count if it's not enclosed in a math environment (aka $)
-            else if self.input.starts_with('\\') && closing != '$' {
-                // take \
-                self.pat("\\");
-
-                // take until a whitespace
-                let content = self.until_pred(char::is_whitespace)
-                            .ok_or(mlua::Error::external(format!(
-                                "[string]:{}:{}: Expected a closing delimiter to the inline macro, got end of input",
-                                self.row, self.col
-                            )))?;
-
-                // push the escaped value
-                argument.push_str(content);
-            }
-            // rest, read until the next special character
-            else if let Some(content) =
-                self.until_pred(|c| c.is_whitespace() || "\\%,".contains(c) || c == closing)
-            {
-                argument.push_str(content);
             }
         }
 
-        // closing tag as a string
-        let mut buf = [0 as u8; 4];
-        let closing = closing.encode_utf8(&mut buf);
+        // advance own state
+        *self = cx;
+        Some((name, content))
+    }
 
-        // read the closing tag
-        self.pat(closing);
+    /// Parse macro arguments
+    fn args(&mut self) -> Option<Vec<Ast>> {
+        let mut cx = self.clone();
+        cx.pat("(")?;
 
-        // push the last string
-        if !argument.trim().is_empty() {
-            arguments.push_back(argument.trim().into_lua(lua)?);
+        // TODO: paragraph
+
+        // close
+        cx.pat(")")?;
+
+        // advance own state
+        *self = cx;
+        todo!()
+    }
+
+    /// Parse a macro call
+    fn call(&mut self) -> Option<Ast> {
+        let mut cx = self.clone();
+        cx.pat("@")?;
+
+        // macro name
+        let name = cx.name()?.to_string();
+
+        // arguments
+        cx.pred(char::is_whitespace)?;
+        let args = cx.args()?;
+
+        // advance own state
+        *self = cx;
+        Some(Ast::Macro(name, args))
+    }
+
+    /// Parse a block macro
+    fn block(&mut self) -> Option<Ast> {
+        let mut cx = self.clone();
+        cx.pat("@begin")?;
+
+        cx.pred(char::is_whitespace)?;
+
+        // macro name
+        let name = cx.name()?.to_string();
+
+        // args
+        cx.pred(char::is_whitespace)?;
+        let args = cx.args()?;
+
+        // read until the @end
+        // escape only escapes the @end here
+        let mut content = String::new();
+        while !cx.input.ends_with("@end") {
+            // up till the escape or @ character
+            if let Some(x) = cx.until_pred(|x| "@\\".contains(x)) {
+                content.push_str(x);
+            }
+
+            // consume an \@end
+            if let Some(x) = cx.pat("\\@end") {
+                content.push_str(x);
+            } else if let Some(x) = cx.pat("\\") {
+                // or a normal escape
+                content.push_str(x);
+            } else if cx.input.starts_with("@end") {
+                // escaped versions have been consumed
+                // now we have the real one
+                break;
+            } else {
+                // otherwise, a normal @
+                cx.pat("@")?;
+                content.push('@');
+            }
         }
 
-        Ok(arguments)
+        // advance own state
+        *self = cx;
+        Some(Ast::Block(name, args, content))
     }
 
     /// take until we match a predicate
@@ -523,17 +241,18 @@ impl<'a> Parser<'a> {
 
         // advance cursor
         self.input = rest;
-        self.col = if content.contains('\n') {
-            1 + content
-                .rsplit_once('\n')
-                .map(|x| x.1.width_cjk())
-                .unwrap_or(0)
-        } else {
-            self.col + content.width_cjk()
-        };
+        self.col = content
+            .rsplit_once('\n')
+            .map(|x| 1 + x.1.width())
+            .unwrap_or(self.col + content.width());
         self.row += content.chars().filter(|x| *x == '\n').count();
 
         Some(content)
+    }
+
+    /// Take while we match a predicate
+    fn pred<F: FnMut(char) -> bool>(&mut self, mut pred: F) -> Option<&'a str> {
+        self.until_pred(|x| !pred(x))
     }
 
     /// take until we find the specific pattern
@@ -546,14 +265,10 @@ impl<'a> Parser<'a> {
 
         // advance cursor
         self.input = rest;
-        self.col = if content.contains('\n') {
-            1 + content
-                .rsplit_once('\n')
-                .map(|x| x.1.width_cjk())
-                .unwrap_or(0)
-        } else {
-            self.col + content.width_cjk()
-        };
+        self.col = content
+            .rsplit_once('\n')
+            .map(|x| 1 + x.1.width())
+            .unwrap_or(self.col + content.width());
         self.row += content.chars().filter(|x| *x == '\n').count();
 
         Some(content)
@@ -565,11 +280,11 @@ impl<'a> Parser<'a> {
 
         // advance cursor
         self.input = rest;
-        self.col = if pat.contains('\n') {
-            1 + pat.rsplit_once('\n').map(|x| x.1.width_cjk()).unwrap_or(0)
-        } else {
-            self.col + pat.width_cjk()
-        };
+
+        self.col = pat
+            .rsplit_once('\n')
+            .map(|x| 1 + x.1.width())
+            .unwrap_or(self.col + pat.width());
         self.row += pat.chars().filter(|x| *x == '\n').count();
 
         Some(pat)
@@ -578,19 +293,25 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    //use nom::Parser;
-    // TODO: tests
-    use mlua::FromLua;
-
-    use super::*;
-
-    impl<'a> Parser<'a> {
-        fn new(input: &'a str) -> Self {
-            Self {
-                input,
-                row: 1,
-                col: 1,
-            }
-        }
+    fn meta() {
+        todo!()
+    }
+    fn paragraph() {
+        todo!()
+    }
+    fn header() {
+        todo!()
+    }
+    fn italic() {
+        todo!()
+    }
+    fn bold() {
+        todo!()
+    }
+    fn code() {
+        todo!()
+    }
+    fn call() {
+        todo!()
     }
 }

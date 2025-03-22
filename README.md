@@ -31,13 +31,13 @@ Other API functions are provided
 ## Example:
 src/index.lmk:
 ```
--- Use a template function called `default`
--- This is the same as not specifying any template
+% Use a template function called `default`
+% This is the same as not specifying any template
 @template = default
 @title = Hello world!
 @date = 15-03-2025
 
--- String, to support multiline
+% String, to support multiline
 @desc = "A hello world!
 Now with multiple lines!"
 
