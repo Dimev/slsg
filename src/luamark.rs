@@ -5,6 +5,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Ast
 /// Each node refers to the nodes that follow up on it
+#[derive(Clone, Debug)]
 enum Ast {
     /// Paragraph or block, inside <p> tag
     Paragraph(Vec<Ast>),
@@ -22,7 +23,7 @@ enum Ast {
     Mono(Vec<Ast>),
 
     /// Heading content <h1>, <h2>, ...
-    Head(u8, Vec<Ast>),
+    Heading(u8, String),
 
     /// Call to a macro
     Macro(String, Vec<Ast>),
@@ -32,7 +33,7 @@ enum Ast {
 }
 
 /// Luamark document
-struct Luamark {
+pub struct Luamark {
     /// Meta values
     meta: BTreeMap<String, String>,
 
@@ -41,13 +42,35 @@ struct Luamark {
 }
 
 impl Luamark {
-    fn from_str(lmk: &str) -> Result<Self> {
+    pub fn parse(lmk: &str) -> Result<Self> {
         // parser state
-        let mut state = Parser {
+        let mut cx = Parser {
             input: lmk,
             row: 1,
             col: 1,
         };
+
+        // meta flags
+        let mut meta = BTreeMap::new();
+
+        // parse
+        while !cx.input.is_empty() {
+            // skip comment
+            cx.comment();
+
+            // try parsing a meta
+            if let Some((key, value)) = cx.meta() {
+                println!("@{} = {}", key, value);
+                // add to the map
+                meta.insert(key, value.trim().to_string());
+            } else if let Some(x) = cx.call() {
+                println!("@{:?}(...)", x);
+            } else if let Some(x) = cx.heading() {
+                println!("= {:?}", x);
+            } else {
+                cx.until_pred(|x| "%@=".contains(x));
+            }
+        }
 
         todo!()
     }
@@ -66,9 +89,11 @@ pub(crate) struct Parser<'a> {
     col: usize,
 }
 
+// TODO: only escape needed characters?
+
 impl<'a> Parser<'a> {
     /// parse a comment
-    /// --.*\n
+    /// %.*\n
     fn comment(&mut self) -> Option<()> {
         self.pat("%")?;
         self.until_pat("\n")?;
@@ -80,6 +105,26 @@ impl<'a> Parser<'a> {
     fn escaped(&mut self) -> Option<&str> {
         self.pat("\\")?;
         self.until_pred(char::is_whitespace)
+    }
+
+    /// Parse a heading
+    fn heading(&mut self) -> Option<Ast> {
+        self.pat("=")?;
+
+        // count the remaining
+        let mut depth = 1u8;
+        while self.pat("=").is_some() {
+            depth = depth.saturating_add(1);
+        }
+
+        // read until the newline or comment start
+        let content = self.until_pred(|x| x == '%' || x == '\n')?;
+        Some(Ast::Heading(depth, content.trim().to_string()))
+    }
+
+    /// Parse a paragraph
+    fn paragraph(&mut self) -> Option<Ast> {
+        todo!()
     }
 
     /// Parse a macro name
@@ -159,7 +204,7 @@ impl<'a> Parser<'a> {
         let mut cx = self.clone();
         cx.pat("(")?;
 
-        // TODO: paragraph
+        // TODO: paragraph, without the ;
 
         // close
         cx.pat(")")?;

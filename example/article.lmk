@@ -1,6 +1,12 @@
-@title Hello SLSG!
+@title = Hello SLSG! % comment
+@desc = "Intro to \"SLSG!" "
+@date = '22-03-2025'
+
+= Hello SLSG!
 % Image of the site logo
-@img(logo.svg, SLSG logo)
+
+== Hello logo!
+@img(logo.svg; SLSG logo)
 
 Edit any file to see the changes!
 This example serves as a short introduction to SLSG and it's template language, luamark.

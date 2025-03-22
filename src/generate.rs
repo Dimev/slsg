@@ -12,7 +12,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::{message::notify, stdlib::stdlib};
+use crate::{luamark::Luamark, message::notify, stdlib::stdlib};
 
 /// Output result
 pub(crate) enum Output {
@@ -114,7 +114,8 @@ fn read_directory(lua: &Lua, path: &Path) -> Result<()> {
                 .context("Failed to read file")?;
 
             // parse
-            // TODO
+            let luamark = Luamark::parse(&content)?;
+
             // This will work by manually calling the stdlib API
             // macros are function calls that are resolved when rendering to html
             // this is done by making the table they are part of empty before parsing,
@@ -127,7 +128,8 @@ fn read_directory(lua: &Lua, path: &Path) -> Result<()> {
                 .context("Failed to read file")?;
 
             // parse
-            // TODO
+            let luamark = Luamark::parse(&content)?;
+
             // This will work by manually calling the stdlib API
             // macros are function calls that are resolved when rendering to html
             // this is done by making the table they are part of empty before parsing,
