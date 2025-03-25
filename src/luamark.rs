@@ -73,19 +73,18 @@ impl Luamark {
                 println!("@{} = {}", key, value);
                 // add to the map
                 meta.insert(key, value.trim().to_string());
-            }
-
-            if let Some(x) = cx.heading() {
+            } else if let Some(x) = cx.heading() {
                 // print the heading
                 println!("= {:?}", x);
                 document.push(x);
             }
-
             // paragraph, stop on headings as we parse those here
-            if let Some(x) = cx.paragraph("=") {
+            else if let Some(x) = cx.paragraph("=") {
                 println!("Paragraph! {:?}", x);
                 // TODO: ignore if empty
                 document.push(x);
+            } else {
+                println!("scrong")
             }
         }
 
@@ -316,40 +315,37 @@ impl<'a> Parser<'a> {
             if !text.is_empty() {
                 content.push(Ast::Text(text));
             }
-
+            // TODO: make this work correctly by switching on the first character
+            // this would also allow correct error messages
             // parse escaped
-            if let Some(x) = self.escaped() {
+            else if let Some(x) = self.escaped() {
                 content.push(Ast::Text(x.to_string()));
             }
-
             // parse math
-            if let Some(x) = self.math() {
+            else if let Some(x) = self.math() {
                 content.push(x);
             }
-            
             // parse italic
-            if let Some(x) = self.italic() {
+            else if let Some(x) = self.italic() {
                 content.push(x);
             }
-
             // parse bold
-            if let Some(x) = self.bold() {
+            else if let Some(x) = self.bold() {
                 content.push(x);
             }
-
             // parse monospace
-            if let Some(x) = self.monospace() {
+            else if let Some(x) = self.monospace() {
                 content.push(x);
             }
-
             // parse macro
-            if let Some(x) = self.call() {
+            else if let Some(x) = self.call() {
                 content.push(x);
             }
-
             // parse block macro
-            if let Some(x) = self.block() {
+            else if let Some(x) = self.block() {
                 content.push(x);
+            } else {
+                println!("gluhhh")
             }
         }
 
@@ -448,11 +444,12 @@ impl<'a> Parser<'a> {
                 if let Some(x) = cx.heading() {
                     content.push(x);
                 }
-
                 // paragraph, stop on headings as we parse those here
-                if let Some(x) = cx.paragraph("=;)") {
+                else if let Some(x) = cx.paragraph("=;)") {
                     // TODO: ignore if empty
                     content.push(x);
+                } else {
+                    println!("bluhhhh")
                 }
             }
 
@@ -505,7 +502,7 @@ impl<'a> Parser<'a> {
         // read until the @end
         // escape only escapes the @end here
         let mut content = String::new();
-        while !cx.input.ends_with("@end") && !self.input.is_empty() {
+        while !cx.input.ends_with("@end") && !cx.input.is_empty() {
             // up till the escape or @ character
             let x = cx.take_until_pred(|x| "@\\".contains(x));
             content.push_str(x);
@@ -526,6 +523,9 @@ impl<'a> Parser<'a> {
                 content.push('@');
             }
         }
+
+        // close
+        cx.pat("@end")?;
 
         // advance own state
         *self = cx;

@@ -23,6 +23,8 @@ _italic *and* bold `and` monospaced!_
 == Subheaders!
 === More subheaders!
 
+@macro 
+
 @macro()
 
 @macro(
@@ -37,5 +39,12 @@ _italic *and* bold `and` monospaced!_
 )
 
 mogus
+
+@begin code(lua)
+-- make a lua function
+function add(a, b)
+	return a + b
+end
+@end
 
 $math$
