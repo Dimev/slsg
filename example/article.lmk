@@ -3,43 +3,24 @@
 @date = '22-03-2025'
 
 = Hello SLSG!
-% Image of the site logo
+This is a short introduction to *Luamark*, the markup language used within
+`SLSG`. This is a paragraph
 
-== Hello logo!
-@img(logo.svg; SLSG logo)
+And another paragraph
+And more text!
+% A comment
+More text
+teeeext!
 
-Edit any file to see the changes!
-This example serves as a short introduction to SLSG and it's template language, luamark.
-An example of the luamark syntax can be seen below.
+new paragraph
+New comment!
 
-Luamark comments are started with \%.
-Macros are started with \@, followed by a name, and then either a list of arguments, or a line,
-As follows: 
-@begin@code(luamark)
-% Line macros
-@name This is the rest!
+Let's do some more!
+_italic *and* bold `and` monospaced!_
+% Comments
+% More comments!
+@lstohn = Mogus!
+== Subheaders!
+=== More subheaders!
 
-% Inline macros
-% also possible with (), []
-% {}, <>, || and $$ don't do multiple arguments
-@name(arg1, arg2, arg3)
-
-% We can also do block macros, to include code verbatim
-% These take all text in them literally, 
-% and only end at the closing @end@name tag
-@begin@name(arg1, arg2, arg3)
-This is all verbatim!
-@end@name
-@end@code
-
-We can also do Math, with LaTeX.
-Internally we can convert this to mathml with 
-@inline|site.compile_tex [[ \int{\exp(-\sqrt{x^2 + t^2})}dt ]]|
-
-We can then use the macro with $$ to allow latex to work.
-$$ won't escape characters as usual
-
-@math$\int{\exp(-\sqrt{x^2 + t^2})}dt$
-
-This was the short introduction to SLSG!
-run @inline|slsg api| to see the full API as well as examples!
+@macro()

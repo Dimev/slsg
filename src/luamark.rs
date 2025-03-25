@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crossterm::style::Stylize;
 use mlua::{ErrorContext, IntoLua, Lua, MultiValue, ObjectLike, Result, Table, Value};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -53,26 +54,38 @@ impl Luamark {
         // meta flags
         let mut meta = BTreeMap::new();
 
+        // document
+        let mut document = Vec::new();
+
         // parse
         while !cx.input.is_empty() {
             // skip comment
             cx.comment();
+
+            // skip empty
+            cx.take_pred(char::is_whitespace);
 
             // try parsing a meta
             if let Some((key, value)) = cx.meta() {
                 println!("@{} = {}", key, value);
                 // add to the map
                 meta.insert(key, value.trim().to_string());
-            } else if let Some(x) = cx.call() {
-                println!("@{:?}(...)", x);
-            } else if let Some(x) = cx.heading() {
+            }
+
+            if let Some(x) = cx.heading() {
+                // print the heading
                 println!("= {:?}", x);
-            } else {
-                cx.until_pred(|x| "%@=".contains(x));
+                document.push(x);
+            }
+
+            if let Some(x) = cx.paragraph("") {
+                println!("Paragraph! {:?}", x);
+                // TODO: ignore if empty
+                document.push(x);
             }
         }
 
-        todo!()
+        Ok(Luamark { meta, document })
     }
 }
 
@@ -104,7 +117,7 @@ impl<'a> Parser<'a> {
     /// \anything-non-whitespace
     fn escaped(&mut self) -> Option<&str> {
         self.pat("\\")?;
-        self.until_pred(char::is_whitespace)
+        Some(self.take_until_pred(char::is_whitespace))
     }
 
     /// Parse a heading
@@ -118,19 +131,206 @@ impl<'a> Parser<'a> {
         }
 
         // read until the newline or comment start
-        let content = self.until_pred(|x| x == '%' || x == '\n')?;
+        let content = self.take_until_pred(|x| x == '%' || x == '\n');
         Some(Ast::Heading(depth, content.trim().to_string()))
     }
 
+    /// Parse italic
+    fn italic(&mut self) -> Option<Ast> {
+        self.pat("_")?;
+
+        let mut content = Vec::new();
+        while !self.input.starts_with("_") && !self.input.is_empty() {
+            // until the next special
+            let text = self.take_until_pred(|x| "%_*`\\".contains(x));
+            content.push(Ast::Text(text.to_string()));
+
+            // skip any comment
+            self.comment();
+
+            // add any escaped text
+            if let Some(x) = self.escaped() {
+                content.push(Ast::Text(x.to_string()));
+            }
+
+            // add any bold text
+            if let Some(x) = self.bold() {
+                content.push(x);
+            }
+
+            // add any monospace text
+            if let Some(x) = self.monospace() {
+                content.push(x);
+            }
+        }
+
+        self.pat("_")?;
+        Some(Ast::Italic(content))
+    }
+
+    // Parse bold
+    fn bold(&mut self) -> Option<Ast> {
+        self.pat("*")?;
+
+        let mut content = Vec::new();
+        while !self.input.starts_with("*") && !self.input.is_empty() {
+            // until the next special
+            let text = self.take_until_pred(|x| "%_*`\\".contains(x));
+            content.push(Ast::Text(text.to_string()));
+
+            // skip any comment
+            self.comment();
+
+            // add any escaped text
+            if let Some(x) = self.escaped() {
+                content.push(Ast::Text(x.to_string()));
+            }
+
+            // add any italic text
+            if let Some(x) = self.italic() {
+                content.push(x);
+            }
+
+            // add any monospace text
+            if let Some(x) = self.monospace() {
+                content.push(x);
+            }
+        }
+
+        self.pat("*")?;
+        Some(Ast::Bold(content))
+    }
+
+    // Parse monospace
+    fn monospace(&mut self) -> Option<Ast> {
+        self.pat("`")?;
+
+        let mut content = Vec::new();
+        while !self.input.starts_with("`") && !self.input.is_empty() {
+            // until the next special
+            let text = self.take_until_pred(|x| "%_*`\\".contains(x));
+            content.push(Ast::Text(text.to_string()));
+
+            // skip any comment
+            self.comment();
+
+            // add any escaped text
+            if let Some(x) = self.escaped() {
+                content.push(Ast::Text(x.to_string()));
+            }
+
+            // add any italic text
+            if let Some(x) = self.italic() {
+                content.push(x);
+            }
+
+            // add any bold text
+            if let Some(x) = self.bold() {
+                content.push(x);
+            }
+        }
+
+        self.pat("`")?;
+        Some(Ast::Mono(content))
+    }
+
     /// Parse a paragraph
-    fn paragraph(&mut self) -> Option<Ast> {
-        todo!()
+    fn paragraph(&mut self, also_stop: &str) -> Option<Ast> {
+        let mut content = Vec::new();
+
+        // while we have not hit an empty line, meta, any of the stop characters, or end of input:
+        while !self.clone().empty_line().is_some()
+            && !self.clone().meta().is_some()
+            && !self.clone().heading().is_some()
+            && !also_stop.chars().any(|x| self.input.starts_with(x))
+            && !self.input.is_empty()
+        {
+            // parse comments
+            self.comment();
+
+            // Parse up to any of the special characters
+            // ensure we don't skip any empty lines here
+            let mut text = String::new();
+            while !self.input.starts_with(|x| "%_*`@=\\".contains(x)) && !self.input.is_empty() {
+                // any non-escaped non-newline text
+                let x = self.take_until_pred(|x| "%_*`@=\\\n".contains(x));
+
+                // add it
+                for word in x.split_whitespace() {
+                    // add a whitespace if we don't have one already
+                    if !text
+                        .chars()
+                        .rev()
+                        .next()
+                        .map(char::is_whitespace)
+                        .unwrap_or(true)
+                    {
+                        text.push(' ');
+                    }
+
+                    // add the word
+                    text.push_str(word.trim());
+                }
+
+                // stop if we hit the empty line
+                if self.clone().empty_line().is_some() {
+                    break;
+                }
+
+                // else, skip empty
+                if !self.take_pred(char::is_whitespace).is_empty()
+                    && !text
+                        .chars()
+                        .rev()
+                        .next()
+                        .map(char::is_whitespace)
+                        .unwrap_or(true)
+                {
+                    text.push(' ');
+                }
+            }
+            if !text.is_empty() {
+                content.push(Ast::Text(text));
+            }
+
+            // parse escaped
+            if let Some(x) = self.escaped() {
+                content.push(Ast::Text(x.to_string()));
+            }
+
+            // parse italic
+            if let Some(x) = self.italic() {
+                content.push(x);
+            }
+
+            // parse bold
+            if let Some(x) = self.bold() {
+                content.push(x);
+            }
+
+            // parse monospace
+            if let Some(x) = self.monospace() {
+                content.push(x);
+            }
+
+            // parse macro
+            if let Some(x) = self.call() {
+                content.push(x);
+            }
+
+            // parse block macro
+            if let Some(x) = self.block() {
+                content.push(x);
+            }
+        }
+
+        Some(Ast::Paragraph(content))
     }
 
     /// Parse a macro name
-    fn name(&mut self) -> Option<&str> {
+    fn name(&mut self) -> &str {
         // alphanum or _
-        self.pred(|x| x.is_alphanumeric() || x == '_')
+        self.take_pred(|x| x.is_alphanumeric() || x == '_')
     }
 
     /// Parse a meta variable
@@ -140,22 +340,21 @@ impl<'a> Parser<'a> {
         cx.pat("@")?;
 
         // meta name
-        let name = cx.name()?.to_string();
+        let name = cx.name().to_string();
 
         // trim any whitespace
-        cx.pred(char::is_whitespace)?;
+        cx.take_pred(char::is_whitespace);
         cx.pat("=")?;
-        cx.pred(char::is_whitespace)?;
+        cx.take_pred(char::is_whitespace);
 
         // split based on how the string is escaped
         // content
         let mut content = String::new();
         if cx.pat("\"").is_some() {
-            while !cx.input.starts_with('"') {
+            while !cx.input.starts_with('"') && !self.input.is_empty() {
                 // text
-                if let Some(x) = cx.until_pred(|x| "\"\\".contains(x)) {
-                    content.push_str(x);
-                }
+                let x = cx.take_until_pred(|x| "\"\\".contains(x));
+                content.push_str(x);
 
                 // escape
                 if let Some(x) = cx.escaped() {
@@ -166,11 +365,10 @@ impl<'a> Parser<'a> {
             // close
             cx.pat("\"")?;
         } else if cx.pat("'").is_some() {
-            while !cx.input.starts_with('\'') {
+            while !cx.input.starts_with('\'') && !self.input.is_empty() {
                 // text
-                if let Some(x) = cx.until_pred(|x| "'\\".contains(x)) {
-                    content.push_str(x);
-                }
+                let x = cx.take_until_pred(|x| "'\\".contains(x));
+                content.push_str(x);
 
                 // escape
                 if let Some(x) = cx.escaped() {
@@ -181,11 +379,10 @@ impl<'a> Parser<'a> {
             // close
             cx.pat("'")?;
         } else {
-            while !cx.input.starts_with(['\n', '%']) {
+            while !cx.input.starts_with(['\n', '%']) && !self.input.is_empty() {
                 // text
-                if let Some(x) = cx.until_pred(|x| "%\n\\".contains(x)) {
-                    content.push_str(x);
-                }
+                let x = cx.take_until_pred(|x| "%\n\\".contains(x));
+                content.push_str(x);
 
                 // escape
                 if let Some(x) = cx.escaped() {
@@ -220,10 +417,10 @@ impl<'a> Parser<'a> {
         cx.pat("@")?;
 
         // macro name
-        let name = cx.name()?.to_string();
+        let name = cx.name().to_string();
 
         // arguments
-        cx.pred(char::is_whitespace)?;
+        cx.take_pred(char::is_whitespace);
         let args = cx.args()?;
 
         // advance own state
@@ -236,23 +433,22 @@ impl<'a> Parser<'a> {
         let mut cx = self.clone();
         cx.pat("@begin")?;
 
-        cx.pred(char::is_whitespace)?;
+        cx.take_pred(char::is_whitespace);
 
         // macro name
-        let name = cx.name()?.to_string();
+        let name = cx.name().to_string();
 
         // args
-        cx.pred(char::is_whitespace)?;
+        cx.take_pred(char::is_whitespace);
         let args = cx.args()?;
 
         // read until the @end
         // escape only escapes the @end here
         let mut content = String::new();
-        while !cx.input.ends_with("@end") {
+        while !cx.input.ends_with("@end") && !self.input.is_empty() {
             // up till the escape or @ character
-            if let Some(x) = cx.until_pred(|x| "@\\".contains(x)) {
-                content.push_str(x);
-            }
+            let x = cx.take_until_pred(|x| "@\\".contains(x));
+            content.push_str(x);
 
             // consume an \@end
             if let Some(x) = cx.pat("\\@end") {
@@ -276,10 +472,18 @@ impl<'a> Parser<'a> {
         Some(Ast::Block(name, args, content))
     }
 
+    /// Parse an empty line, up to the next non-whitespace character
+    fn empty_line(&mut self) -> Option<&str> {
+        Some(self.take_pred(char::is_whitespace))
+            // empty line is a newline, followed by whitespace and another newline
+            .filter(|x| x.chars().filter(|x| *x == '\n').count() >= 2)
+    }
+
     /// take until we match a predicate
-    fn until_pred<F: FnMut(char) -> bool>(&mut self, pred: F) -> Option<&'a str> {
+    fn take_until_pred<F: FnMut(char) -> bool>(&mut self, pred: F) -> &'a str {
         // where it is
-        let mid = self.input.find(pred)?;
+        // consume the entire input if we can't find it
+        let mid = self.input.find(pred).unwrap_or(self.input.len());
 
         // split
         let (content, rest) = self.input.split_at(mid);
@@ -292,12 +496,12 @@ impl<'a> Parser<'a> {
             .unwrap_or(self.col + content.width());
         self.row += content.chars().filter(|x| *x == '\n').count();
 
-        Some(content)
+        content
     }
 
     /// Take while we match a predicate
-    fn pred<F: FnMut(char) -> bool>(&mut self, mut pred: F) -> Option<&'a str> {
-        self.until_pred(|x| !pred(x))
+    fn take_pred<F: FnMut(char) -> bool>(&mut self, mut pred: F) -> &'a str {
+        self.take_until_pred(|x| !pred(x))
     }
 
     /// take until we find the specific pattern
