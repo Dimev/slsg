@@ -23,14 +23,17 @@ enum Ast {
     /// Monospaced content <code>
     Mono(Vec<Ast>),
 
+    /// Math block, inline or not
+    Math(String, bool),
+
     /// Heading content <h1>, <h2>, ...
     Heading(u8, String),
 
     /// Call to a macro
-    Macro(String, Vec<Ast>),
+    Macro(String, Vec<Vec<Ast>>),
 
     /// Call to a block macro
-    Block(String, Vec<Ast>, String),
+    Block(String, Vec<Vec<Ast>>, String),
 }
 
 /// Luamark document
@@ -78,7 +81,8 @@ impl Luamark {
                 document.push(x);
             }
 
-            if let Some(x) = cx.paragraph("") {
+            // paragraph, stop on headings as we parse those here
+            if let Some(x) = cx.paragraph("=") {
                 println!("Paragraph! {:?}", x);
                 // TODO: ignore if empty
                 document.push(x);
@@ -133,6 +137,22 @@ impl<'a> Parser<'a> {
         // read until the newline or comment start
         let content = self.take_until_pred(|x| x == '%' || x == '\n');
         Some(Ast::Heading(depth, content.trim().to_string()))
+    }
+
+    /// TODO: math
+
+    /// Parse math
+    fn math(&mut self) -> Option<Ast> {
+        self.pat("$")?;
+        let block = self.pat("$").is_some();
+
+        todo!();
+
+        self.pat("$")?;
+        if block {
+            self.pat("$")?;
+        }
+        Some(Ast::Math(String::new(), false))
     }
 
     /// Parse italic
@@ -241,7 +261,6 @@ impl<'a> Parser<'a> {
         // while we have not hit an empty line, meta, any of the stop characters, or end of input:
         while !self.clone().empty_line().is_some()
             && !self.clone().meta().is_some()
-            && !self.clone().heading().is_some()
             && !also_stop.chars().any(|x| self.input.starts_with(x))
             && !self.input.is_empty()
         {
@@ -251,13 +270,18 @@ impl<'a> Parser<'a> {
             // Parse up to any of the special characters
             // ensure we don't skip any empty lines here
             let mut text = String::new();
-            while !self.input.starts_with(|x| "%_*`@=\\".contains(x)) && !self.input.is_empty() {
+            while !self
+                .input
+                .starts_with(|x| "%_*`@\\$".contains(x) || also_stop.contains(x))
+                && !self.input.is_empty()
+            {
                 // any non-escaped non-newline text
-                let x = self.take_until_pred(|x| "%_*`@=\\\n".contains(x));
+                let x = self.take_until_pred(|x| "%_*`@\\$\n".contains(x) || also_stop.contains(x));
 
                 // add it
                 for word in x.split_whitespace() {
                     // add a whitespace if we don't have one already
+                    // TODO: ensure this works correctly
                     if !text
                         .chars()
                         .rev()
@@ -298,6 +322,11 @@ impl<'a> Parser<'a> {
                 content.push(Ast::Text(x.to_string()));
             }
 
+            // parse math
+            if let Some(x) = self.math() {
+                content.push(x);
+            }
+            
             // parse italic
             if let Some(x) = self.italic() {
                 content.push(x);
@@ -397,18 +426,49 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse macro arguments
-    fn args(&mut self) -> Option<Vec<Ast>> {
+    fn args(&mut self) -> Option<Vec<Vec<Ast>>> {
         let mut cx = self.clone();
+        // TODO: block (and or {) for single argument
         cx.pat("(")?;
 
-        // TODO: paragraph, without the ;
+        // while there's no closing ), parse arguments
+        let mut args = Vec::new();
+        while !cx.input.starts_with(")") && !cx.input.is_empty() {
+            // parse paragraphs and headings
+            let mut content = Vec::new();
+
+            while !cx.input.starts_with(";") && !cx.input.starts_with(")") && !cx.input.is_empty() {
+                // skip comment
+                cx.comment();
+
+                // skip empty
+                cx.take_pred(char::is_whitespace);
+
+                // parse a heading
+                if let Some(x) = cx.heading() {
+                    content.push(x);
+                }
+
+                // paragraph, stop on headings as we parse those here
+                if let Some(x) = cx.paragraph("=;)") {
+                    // TODO: ignore if empty
+                    content.push(x);
+                }
+            }
+
+            // push the argument
+            args.push(content);
+
+            // close
+            cx.pat(";");
+        }
 
         // close
         cx.pat(")")?;
 
         // advance own state
         *self = cx;
-        todo!()
+        Some(args)
     }
 
     /// Parse a macro call

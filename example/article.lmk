@@ -24,3 +24,18 @@ _italic *and* bold `and` monospaced!_
 === More subheaders!
 
 @macro()
+
+@macro(
+	= Head of argument one!
+	Argument one;
+	
+	= Head of argument two!
+	Argument two\;
+	Still argument two
+
+	Now on to _argument 3!_
+)
+
+mogus
+
+$math$
