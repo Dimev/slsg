@@ -114,7 +114,7 @@ fn read_directory(lua: &Lua, path: &Path) -> Result<()> {
                 .context("Failed to read file")?;
 
             // parse
-            let luamark = Luamark::parse(&content)?;
+            //let luamark = Luamark::parse(&content)?;
 
             // This will work by manually calling the stdlib API
             // macros are function calls that are resolved when rendering to html
@@ -128,7 +128,7 @@ fn read_directory(lua: &Lua, path: &Path) -> Result<()> {
                 .context("Failed to read file")?;
 
             // parse
-            let luamark = Luamark::parse(&content)?;
+            //let luamark = Luamark::parse(&content)?;
 
             // This will work by manually calling the stdlib API
             // macros are function calls that are resolved when rendering to html
