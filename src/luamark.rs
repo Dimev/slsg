@@ -7,36 +7,27 @@ use winnow::{
     LocatingSlice, Parser, Result,
 };
 
-/// Ast
-/// Each node refers to the nodes that follow up on it
-#[derive(Clone, Debug)]
-enum Ast {
-    /// Paragraph or block, inside <p> tag
-    Paragraph(Vec<Ast>),
-
-    /// Raw text
+/// Single content item
+pub enum Content {
+    /// standalone text
     Text(String),
 
-    /// Italic content <i>
-    Italic(Vec<Ast>),
+    /// Macro call
+    Call(String, Args),
 
-    /// Bold content <b>
-    Bold(Vec<Ast>),
+    /// Heading
+    Head(u8, Vec<Content>)
 
-    /// Monospaced content <code>
-    Mono(Vec<Ast>),
+    
+}
 
-    /// Math block, inline or not
-    Math(String, bool),
+/// Arguments
+pub struct Args {
+    /// Non-key arguments
+    list: Vec<String>,
 
-    /// Heading content <h1>, <h2>, ...
-    Heading(u8, String),
-
-    /// Call to a macro
-    Macro(String, Vec<Vec<Ast>>),
-
-    /// Call to a block macro
-    Block(String, Vec<Vec<Ast>>, String),
+    /// Keyed arguments
+    keyed: BTreeMap<String, String>
 }
 
 /// Luamark document
@@ -45,17 +36,23 @@ pub struct Luamark {
     meta: BTreeMap<String, String>,
 
     /// Document, aka the AST
-    document: Vec<Ast>,
+    document: Vec<Content>,
 }
 
 // name of a macro @name
 fn name<'s>(input: &mut LocatingSlice<&'s str>) -> Result<&'s str> {
-    preceded("@", take_while(0.., ('a'..='z', 'A'..='Z', '_', '0'..='9'))).parse_next(input)
+    preceded("@", take_while(1.., ('a'..='z', 'A'..='Z', '_', '0'..='9'))).parse_next(input)
 }
 
 // any string, "content" and 'content'
 fn string(input: &mut LocatingSlice<&str>) -> Result<String> {
     // taken from the example
+    todo!()
+}
+
+// content, enclosed by []
+// can contain macros
+fn content(input: &mut LocatingSlice<&str>) -> Result<String> {
     todo!()
 }
 
@@ -65,17 +62,9 @@ fn comment(input: &mut LocatingSlice<&str>) -> Result<()> {
     Ok(())
 }
 
-// @name = 'text'
-fn attr<'s>(input: &mut LocatingSlice<&'s str>) -> Result<(&'s str, String)> {
-    let (name, _, _, _, meta) = (
-        name,
-        take_while(0.., AsChar::is_space),
-        "=",
-        take_while(0.., AsChar::is_space),
-        string,
-    )
-        .parse_next(input)?;
-    Ok((name, meta))
+// arguments { arg1, arg2, arg3 = '' }
+fn args(input: &mut LocatingSlice<&str>) -> Result<()> {
+    todo!()
 }
 
 // @name { arg1, arg2, arg3 = '', arg4 = [] }
@@ -83,14 +72,24 @@ fn call<'s>(input: &mut LocatingSlice<&'s str>) -> Result<(&'s str, String)> {
     todo!()
 }
 
-// arguments { arg1, arg2
-fn args() {
+// meta @? { arg1, arg2, arg3 = '', arg4 = [] }
+fn meta<'s>(input: &mut LocatingSlice<&'s str>) -> Result<(&'s str, String)> {
     todo!()
 }
 
 #[cfg(test)]
 mod tests {
     fn meta() {
+        let meta = r#"
+        @? {
+            'arg 1',
+            "arg 2",
+            [arg 3],
+            arg4 = 'text',
+            arg5 = "text",
+            arg6 = [text],
+        }
+        "#;
         todo!()
     }
     fn paragraph() {

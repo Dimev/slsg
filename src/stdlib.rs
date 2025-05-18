@@ -76,6 +76,8 @@ pub(crate) fn stdlib(lua: &Lua, output: &Table) -> Result<()> {
         .context("Failed to load stdlib")?;
 
     // TODO: set 404
+    // TODO: font subsetting
+    // TODO: image rescaling?
 
     Ok(())
 }
