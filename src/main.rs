@@ -1,6 +1,14 @@
-use std::{fs::{create_dir_all, read_dir, remove_dir_all}, path::PathBuf};
+use std::{
+    fs::{create_dir_all, read_dir, remove_dir_all},
+    path::PathBuf,
+};
 
-use mlua::{Lua, Table};
+use mlua::{Lua, ObjectLike, Table, chunk};
+
+mod conf;
+mod generate;
+mod subset;
+mod serve;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -35,11 +43,28 @@ fn main() {
         println!("SLSG {}", env!("CARGO_PKG_VERSION"));
 
         // luajit version
-        let lua = Lua::new();
-        let globals = lua.globals();
-        let jit: Table = globals.get("jit").expect("Failed to get LuaJIT version");
-        let version: String = jit.get("version").expect("Failed to get LuaJIT version");
+        let lua = unsafe { Lua::unsafe_new() };
+        let version: String = lua
+            .load("jit.version")
+            .eval::<String>()
+            .expect("Failed to get LuaJIT version");
         println!("{}", version);
+
+        // install fennel to get it's version
+        let fennel = include_str!("fennel.lua");
+        let fennel = lua
+            .load(fennel)
+            .into_function()
+            .expect("Failed to load fennel");
+        let version = lua
+            .load(chunk! {
+                package.preload["fennel"] = $fennel
+                return require("fennel").version
+            })
+            .eval::<String>()
+            .expect("failed to install fennel");
+        println!("Fennel {}", version);
+
         return;
     }
 
@@ -179,7 +204,7 @@ fn dev(pargs: &mut pico_args::Arguments) {
     }
 
     // run the development server
-    todo!();//serve(addr);
+    serve::serve();
 }
 
 fn print_docs() {
