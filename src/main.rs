@@ -1,19 +1,6 @@
-use std::{
-    fs::{create_dir_all, read_dir, remove_dir_all},
-    path::PathBuf,
-};
+use std::{fs::{create_dir_all, read_dir, remove_dir_all}, path::PathBuf};
 
-use generate::generate;
-use message::print_error;
 use mlua::{Lua, Table};
-use serve::serve;
-
-mod generate;
-
-mod luamark;
-mod message;
-mod serve;
-mod stdlib;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -22,9 +9,8 @@ Usage:
   slsg dev [path] [--address]   Serve the site in path (default ./)
   slsg build [path] [--output]  Build the site in path (default ./)
   slsg new [path]               Create a new site in path
-  slsg api                      Show the available functions, and some examples
-  slsg stdlib                   Print out the full stdlib that provides `site`
-  slsg meta                     Print the meta file needed by the lua language server
+  slsg docs                     Show the documentation
+  slsg help                     Show this screen
 
 Options:
   -h --help     Show this screen
@@ -33,16 +19,6 @@ Options:
   -a --address  Address and port to use when hosting the dev server (default 127.0.0.1:1111)
   -o --output   Output directory to use when building the site (default path/dist/)
   --            Pass anything after this as arguments to the lua script (the ... table)
-";
-
-const NEW_STYLE: &str = include_str!("../example/style.scss");
-const NEW_LUA: &str = include_str!("../example/main.lua");
-const NEW_ARTICLE: &str = include_str!("../example/article.lmk");
-const NEW_META: &str = include_str!("../example/meta.lua");
-const DEFAULT_OUT_DIR: &str = "dist";
-
-const NEW_GITIGNORE: &str = "\
-dist
 ";
 
 fn main() {
@@ -72,9 +48,7 @@ fn main() {
         Some("dev") => dev(&mut pargs),
         Some("build") => build(&mut pargs),
         Some("new") => new(pargs),
-        // Some("api") => print_docs(),
-        // Some("stdlib") => print_stdlib(),
-        // Some("meta") => print_meta(),
+        Some("docs") => print_docs(),
         _ => println!("{}", HELP),
     }
 }
@@ -97,29 +71,7 @@ fn new(mut pargs: pico_args::Arguments) {
         }
     }
 
-    // directory
-    std::fs::create_dir_all(&path)
-        .unwrap_or_else(|_| panic!("Failed to create directory {:?}", path));
-
-    // style
-    std::fs::write(path.join("style.scss"), NEW_STYLE)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("style.scss")));
-
-    // main file
-    std::fs::write(path.join("main.lua"), NEW_LUA)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("main.lua")));
-
-    // article
-    std::fs::write(path.join("article.lmk"), NEW_ARTICLE)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("article.lmk")));
-
-    // meta file for the language server
-    std::fs::write(path.join("meta.lua"), NEW_META)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join("meta.lua")));
-
-    // gitignore
-    std::fs::write(path.join(".gitignore"), NEW_GITIGNORE)
-        .unwrap_or_else(|_| panic!("Failed to create file {:?}", path.join(".gitignore")));
+    todo!();
 
     // report success
     println!("Created new site in {:?}", path);
@@ -136,6 +88,8 @@ fn build(pargs: &mut pico_args::Arguments) {
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
         .expect("Failed to parse arguments")
         .unwrap_or(PathBuf::from("."));
+
+    todo!("also read config file");
 
     // force clear the directory, only if we are building the current site's ./dist folder
     // or are passed the --force argument
@@ -159,9 +113,9 @@ fn build(pargs: &mut pico_args::Arguments) {
         {
             panic!("Output directory has items in it!");
         }
-    } else if path.join(DEFAULT_OUT_DIR).is_dir() {
+    } else if path.join("dist").is_dir() {
         // remove if it's relative to the input, as we are in our own directory now
-        remove_dir_all(path.join(DEFAULT_OUT_DIR)).unwrap_or_else(|e| {
+        remove_dir_all(path.join("dist")).unwrap_or_else(|e| {
             panic!(
                 "Failed to remove the content of output directory {:?}: {}",
                 output_path, e
@@ -170,13 +124,13 @@ fn build(pargs: &mut pico_args::Arguments) {
     }
 
     // make sure the path exists
-    create_dir_all(&output_path.as_ref().unwrap_or(&path.join(DEFAULT_OUT_DIR)))
+    create_dir_all(&output_path.as_ref().unwrap_or(&path.join("dist")))
         .unwrap_or_else(|e| panic!("Failed to create output directory {:?}: {}", output_path, e));
 
     // make it canonical
     let output_path = output_path
         .as_ref()
-        .unwrap_or(&path.join(DEFAULT_OUT_DIR))
+        .unwrap_or(&path.join("dist"))
         .canonicalize()
         .unwrap_or_else(|e| {
             panic!(
@@ -193,7 +147,7 @@ fn build(pargs: &mut pico_args::Arguments) {
     }
 
     // generate the site,
-    match generate(false) {
+    /*match generate(false) {
         Ok(files) => {
             // write out all files
             for (path, file) in files {
@@ -202,7 +156,7 @@ fn build(pargs: &mut pico_args::Arguments) {
             }
         }
         Err(err) => print_error("Failed to build site", &err),
-    }
+    }*/
 }
 
 /// Serve an existing site with the development server
@@ -225,5 +179,9 @@ fn dev(pargs: &mut pico_args::Arguments) {
     }
 
     // run the development server
-    serve(addr);
+    todo!();//serve(addr);
+}
+
+fn print_docs() {
+    todo!();
 }

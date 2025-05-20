@@ -1,21 +1,21 @@
 [package]
 name = "slsg"
 description = "Scriptable Lua Site Generator"
-version = "0.3.0"
+version = "0.4.0"
 license = "GPL-3.0-only"
 repository = "https://github.com/Dimev/slsg"
 keywords = ["lua", "website", "html", "blog", "markdown"]
 categories = ["web-programming", "template-engine", "command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-crossterm = "0.28.1"
+allsorts = "0.15.1"
+axum = "0.8.4"
+crossterm = "0.29.0"
 latex2mathml = "0.2.3"
-lazy_static = "1.5.0"
 mlua = { version = "0.10.0", features = ["luajit"] }
-notify = { version = "8.0.0", default-features = false, features = ["macos_kqueue"] }
+notify = "8.0.0"
 pico-args = "0.5.0"
-rsass = "0.29.0"
-syntect = "5.2.0"
+syntect = { version = "5.2.0", default-features = false, features = ["default-fancy"]}
 unicode-width = "0.2.0"
-winnow = "0.7.6"
+
