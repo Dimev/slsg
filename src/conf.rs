@@ -22,6 +22,8 @@ pub(crate) struct Config {
 
     /// Whether to enable lua (<?lua ... ?>), true by default
     pub lua: bool,
+
+    // TODO: compression? https? cors?
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -47,7 +49,7 @@ impl Config {
 
         let mut mode = Mode::Global;
 
-        for (num, line) in conf.lines().enumerate() {
+        for (num, line) in conf.lines().enumerate().map(|(n, l)| (n + 1, l)) {
             // split out comment
             let (line, _) = line.split_once('#').unwrap_or((line, ""));
             let line = line.trim();
@@ -64,7 +66,7 @@ impl Config {
             } else if line == "[ignore]" {
                 mode = Mode::Ignore
             } else if line == "[dev]" {
-                mode = Mode::Ignore
+                mode = Mode::Dev
             } else if let Some(mode) = line.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
                 return Err(mlua::Error::external(format!(
                     "site.conf:{num}:1: Unrecognized section `{mode}`"
@@ -89,7 +91,7 @@ impl Config {
                 if key == "dir" {
                     cfg.output_dir = value.into()
                 } else if key == "allow-lua" {
-                    cfg.lua = dbg!(as_bool?)
+                    cfg.lua = as_bool?
                 } else if key == "allow-fennel" {
                     cfg.fennel = as_bool?
                 } else if key == "allow-minimark" {
@@ -114,7 +116,17 @@ impl Config {
                 let key = key.trim();
                 let value = value.trim();
 
-                
+                if key == "not-found" {
+                    cfg.not_found = Some(value.into());
+                } else {
+                    return Err(mlua::Error::external(format!(
+                        "site.conf:{num}:1: Unrecognized key `{key}`"
+                    )));
+                }
+            } else if mode == Mode::Global {
+                return Err(mlua::Error::external(format!(
+                    "site.conf:{num}:1: Unexpected `key = value` pair outside of a section"
+                )));
             }
         }
 
@@ -184,5 +196,45 @@ mod tests {
             vec!["scripts/*".to_string(), "syntax/*".to_string()]
         );
         assert_eq!(cfg.syntaxes, vec!["syntax/".to_string()]);
+    }
+
+    #[test]
+    fn unknown_mode() {
+        let config = "
+            [weird!]            
+        ";
+
+        let err = Config::parse(config).expect_err("this is supposed to fail");
+
+        assert_eq!(
+            err.to_string(),
+            "site.conf:2:1: Unrecognized section `weird!`".to_string()
+        );
+    }
+
+    #[test]
+    fn unknown_key_val() {
+        let config = "
+            global-val = true          
+        ";
+
+        let err = Config::parse(config).expect_err("this is supposed to fail");
+
+        assert_eq!(
+            err.to_string(),
+            "site.conf:2:1: Unexpected `key = value` pair outside of a section".to_string()
+        );
+
+        let config = "
+            [dev]
+            unknown-val = true 
+        ";
+
+        let err = Config::parse(config).expect_err("this is supposed to fail");
+
+        assert_eq!(
+            err.to_string(),
+            "site.conf:3:1: Unrecognized key `unknown-val`".to_string()
+        );
     }
 }

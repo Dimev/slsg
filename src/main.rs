@@ -1,14 +1,16 @@
 use std::{
+    env::current_dir,
+    ffi::OsString,
     fs::{create_dir_all, read_dir, remove_dir_all},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-use mlua::{Lua, ObjectLike, Table, chunk};
+use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, chunk};
 
 mod conf;
 mod generate;
-mod subset;
 mod serve;
+mod subset;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -78,6 +80,26 @@ fn main() {
     }
 }
 
+/// Find the site.conf file
+fn find_working_dir(path: &Path) -> Result<&Path> {
+    if path.file_name() == Some(&OsString::from("site.conf")) {
+        path.parent().ok_or(mlua::Error::external(
+            "site.conf does not have a parent directory",
+        ))
+    } else {
+        for ancestor in path.ancestors() {
+            if ancestor.join("site.conf").exists() {
+                return Ok(ancestor);
+            }
+        }
+
+        Err(mlua::Error::external(format!(
+            "site.conf does not exist in `{}` or any of it's ancestors",
+            path.to_string_lossy()
+        )))
+    }
+}
+
 /// Create a new site
 fn new(mut pargs: pico_args::Arguments) {
     let path = pargs
@@ -109,12 +131,12 @@ fn build(pargs: &mut pico_args::Arguments) {
         .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| Ok(PathBuf::from(x)))
         .expect("Failed to parse arguments");
 
+    let current_dir = current_dir().expect("oop");
+
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
         .expect("Failed to parse arguments")
-        .unwrap_or(PathBuf::from("."));
-
-    todo!("also read config file");
+        .unwrap_or_else(|| find_working_dir(&current_dir).expect("oop").to_path_buf());
 
     // force clear the directory, only if we are building the current site's ./dist folder
     // or are passed the --force argument
@@ -153,6 +175,7 @@ fn build(pargs: &mut pico_args::Arguments) {
         .unwrap_or_else(|e| panic!("Failed to create output directory {:?}: {}", output_path, e));
 
     // make it canonical
+    todo!("read the config for this");
     let output_path = output_path
         .as_ref()
         .unwrap_or(&path.join("dist"))
@@ -191,10 +214,12 @@ fn dev(pargs: &mut pico_args::Arguments) {
         .expect("Failed to parse arguments")
         .unwrap_or(String::from("127.0.0.1:1111"));
 
+    let current_dir = current_dir().expect("oop");
+
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
         .expect("Failed to parse arguments")
-        .unwrap_or(PathBuf::from("."));
+        .unwrap_or_else(|| find_working_dir(&current_dir).expect("oop").to_path_buf());
 
     // move to where the main.lua file is
     if !path.is_dir() {
@@ -204,7 +229,8 @@ fn dev(pargs: &mut pico_args::Arguments) {
     }
 
     // run the development server
-    serve::serve();
+    serve::serve(&addr).unwrap();
+    todo!("result");
 }
 
 fn print_docs() {
