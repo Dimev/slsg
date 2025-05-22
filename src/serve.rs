@@ -1,18 +1,26 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex, RwLock, atomic::AtomicU64},
+    time::{Duration, Instant},
+};
 
 use axum::{
     Router,
     body::Body,
     extract::{Path, State},
     http::{HeaderValue, header::CONTENT_TYPE},
-    response::Response,
+    response::{Response, Sse, sse::Event},
     routing::get,
 };
 use mlua::{ErrorContext, ExternalResult, Result};
+use notify::Watcher;
+use tokio::stream;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, decompression::RequestDecompressionLayer};
 
-use crate::generate::{self, Site};
+use crate::generate::{self, Site, generate};
+
+const NOTIFY_PATH: &str = "/change-notify-path-for-slsg-do-not-use.rs";
 
 /// Serve the website on the given address
 pub(crate) fn serve(addr: &str) -> Result<()> {
@@ -24,14 +32,73 @@ pub(crate) fn serve(addr: &str) -> Result<()> {
         .block_on(serve_async(addr))
 }
 
-async fn serve_async(addr: &str) -> Result<()> {
-    let site = Arc::new(generate::generate()?);
+fn on_change(
+    last_update: &Arc<Mutex<Instant>>,
+    e: std::result::Result<notify::Event, notify::Error>,
+) {
+    // only changes
+    if e.map(|e| e.kind.is_create() || e.kind.is_modify() || e.kind.is_remove())
+        .unwrap_or(false)
+    {
+        // check if the time now is beyond our elapsed time
+        // if so, update the site
+        let now = Instant::now();
+        let mut last = last_update.lock().unwrap();
+        if now.duration_since(*last).as_millis() > 100 {
+            // update
+            *last = now;
 
+            // make site again
+            // TODO: better error messages
+            // TODO: this fails sometimes
+            //*site_ref.write().unwrap() = generate().unwrap();
+
+            // notify the clients it got updated
+            println!("le update");
+        }
+    }
+}
+
+async fn serve_async(addr: &str) -> Result<()> {
+    // generate site at startup
+    let site = Arc::new(RwLock::new(generate()?));
+
+    // last time the site got updated
+    let last_update = Arc::new(Mutex::new(Instant::now()));
+
+    // watch changes
+    let watcher = notify::recommended_watcher(
+        move |e: std::result::Result<notify::Event, notify::Error>| {
+            on_change(&last_update, e);
+        },
+    )
+    .and_then(|mut watcher| {
+        watcher
+            .watch(&PathBuf::from("."), notify::RecursiveMode::Recursive)
+            .map(|_| watcher)
+    });
+
+    // TODO: notify if we fail to watch
+
+    // TODO: poll in the sse thing, then update if there's a version mismatch between the sites
+
+    // actual server
     let app = Router::new()
         .route(
+            NOTIFY_PATH,
+            get(|| async {
+
+                /*let stream = empty()                    .map(Ok)
+                    .throttle(Duration::from_secs(1));
+                Sse::new(stream)*/
+            }),
+        )
+        .route(
             "/",
-            get(|State(site): State<Arc<Site>>| async move {
+            get(|State(site): State<Arc<RwLock<Site>>>| async move {
                 let bytes = site
+                    .read()
+                    .unwrap()
                     .files
                     .get(&PathBuf::from("index.html"))
                     .cloned()
@@ -47,8 +114,10 @@ async fn serve_async(addr: &str) -> Result<()> {
         .route(
             "/{*key}",
             get(
-                |Path(path): Path<String>, State(site): State<Arc<Site>>| async move {
+                |Path(path): Path<String>, State(site): State<Arc<RwLock<Site>>>| async move {
                     let bytes = site
+                        .read()
+                        .unwrap()
                         .files
                         .get(&PathBuf::from(path))
                         .cloned()
@@ -80,7 +149,12 @@ async fn serve_async(addr: &str) -> Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .into_lua_err()
-        .context("Failed to serve")
+        .context("Failed to serve")?;
+
+    // stop watching
+    std::mem::drop(watcher);
+
+    Ok(())
 }
 
 async fn shutdown_signal() {
