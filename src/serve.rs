@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock, atomic::AtomicU64},
     time::{Duration, Instant},
@@ -9,19 +10,34 @@ use axum::{
     body::Body,
     extract::{Path, State},
     http::{HeaderValue, header::CONTENT_TYPE},
-    response::{Response, Sse, sse::Event},
+    response::{
+        Response, Sse,
+        sse::{Event, KeepAlive},
+    },
     routing::get,
 };
 use mlua::{ErrorContext, ExternalResult, Result};
 
 use notify_debouncer_full::{DebounceEventResult, notify::RecursiveMode};
-use tokio::stream;
+use tokio::{
+    stream,
+    sync::{
+        Notify,
+        watch::{Sender, channel},
+    },
+};
+use tokio_stream::{StreamExt, wrappers::WatchStream};
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, decompression::RequestDecompressionLayer};
 
 use crate::generate::{self, Site, generate};
 
 const NOTIFY_PATH: &str = "/change-notify-path-for-slsg-do-not-use.rs";
+const NOTIFY_SCRIPT: &[u8] = b"<script>
+const src = new EventSource('/change-notify-path-for-slsg-do-not-use.rs');
+src.onmessage = msg => msg.data === 'update' && location.reload();
+window.onbeforeunload = () => src.close();
+</script>";
 
 /// Serve the website on the given address
 pub(crate) fn serve(addr: &str) -> Result<()> {
@@ -33,7 +49,69 @@ pub(crate) fn serve(addr: &str) -> Result<()> {
         .block_on(serve_async(addr))
 }
 
-fn on_change(res: DebounceEventResult, site_ref: &Arc<RwLock<Site>>) {
+/// What to serve
+enum Present {
+    /// Successfully made the site
+    Site(Site),
+
+    /// Error
+    Error(String),
+}
+
+impl Present {
+    /// Generate it
+    fn generate() -> Self {
+        // generate the site
+        let site = generate();
+
+        // make ourselves based on the result
+        match site {
+            Ok(site) => Self::Site(site),
+            Err(err) => {
+                // convert to string
+                let err = err.to_string();
+
+                // TODO: prettify in a template
+                Self::Error(err)
+            }
+        }
+    }
+
+    /// Respond to a request
+    fn respond(&self, path: String) -> Response {
+        match self {
+            Self::Error(err) => Response::builder()
+                .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
+                .body(Body::from(
+                    [err.as_bytes(), NOTIFY_SCRIPT]
+                        .into_iter()
+                        .flatten()
+                        .cloned()
+                        .collect::<Vec<u8>>(),
+                )) // TODO: pretty
+                .expect("Failed to make response"),
+            Self::Site(site) => Response::builder()
+                .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
+                .body(Body::from(
+                    [
+                        &site.files[&PathBuf::from("index.lua.html")][..],
+                        NOTIFY_SCRIPT,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<u8>>(), // TODO: path
+                ))
+                .expect("Failed to make response"),
+        }
+    }
+}
+
+/// type alias for later
+type SiteState = Arc<RwLock<Present>>;
+
+/// When a file is changed
+fn on_change(res: DebounceEventResult, notify: &Sender<()>, site_ref: &SiteState) {
     // only changes
     if res
         .map(|x| {
@@ -42,23 +120,24 @@ fn on_change(res: DebounceEventResult, site_ref: &Arc<RwLock<Site>>) {
         })
         .unwrap_or(false)
     {
-        // check if the time now is beyond our elapsed time
-        // if so, update the site
-        // update
-
         // make site again
-        // TODO: better error messages
-        // TODO: this fails sometimes
-        *site_ref.write().unwrap() = generate().unwrap();
+        *site_ref.write().expect("Rwlock poisoned") = Present::generate();
 
         // notify the clients it got updated
+        notify.send(()).expect("Failed to notify");
+
+        // TODO: also notify console we got updated
         println!("le update {:?}", std::time::Instant::now());
     }
 }
 
 async fn serve_async(addr: &str) -> Result<()> {
     // generate site at startup
-    let site = Arc::new(RwLock::new(generate()?));
+    let site = Arc::new(RwLock::new(Present::generate()));
+
+    // notification for when the site is updated
+    let (update_send, update_recv) = channel(());
+    let update_recv = Arc::new(update_recv);
 
     // watch changes
     let site_2 = site.clone();
@@ -66,7 +145,7 @@ async fn serve_async(addr: &str) -> Result<()> {
         Duration::from_millis(100),
         None,
         move |res: DebounceEventResult| {
-            on_change(res, &site_2);
+            on_change(res, &update_send, &site_2);
         },
     )
     .and_then(|mut debouncer| {
@@ -83,48 +162,30 @@ async fn serve_async(addr: &str) -> Result<()> {
     let app = Router::new()
         .route(
             NOTIFY_PATH,
-            get(|| async {
+            get(|| async move {
+                let rx = WatchStream::new((*update_recv).clone());
 
-                /*let stream = empty()                    .map(Ok)
-                    .throttle(Duration::from_secs(1));
-                Sse::new(stream)*/
+                Sse::new(
+                    rx.map(|_| Event::default().data("update"))
+                        .map(Ok::<Event, Infallible>),
+                )
+                .keep_alive(KeepAlive::new().interval(Duration::from_secs(5)))
             }),
         )
         .route(
             "/",
-            get(|State(site): State<Arc<RwLock<Site>>>| async move {
-                let bytes = site
-                    .read()
-                    .unwrap()
-                    .files
-                    .get(&PathBuf::from("index.html"))
-                    .cloned()
-                    .unwrap_or(b"<!doctype html>oop".into());
-
-                Response::builder()
-                    .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
-                    .body(Body::from(bytes))
-                    .unwrap()
+            get(|State(site): State<SiteState>| async move {
+                site.read()
+                    .expect("rwlock poissoned")
+                    .respond("index.html".to_string())
             }),
         )
         .with_state(site.clone())
         .route(
             "/{*key}",
             get(
-                |Path(path): Path<String>, State(site): State<Arc<RwLock<Site>>>| async move {
-                    let bytes = site
-                        .read()
-                        .unwrap()
-                        .files
-                        .get(&PathBuf::from(path))
-                        .cloned()
-                        .unwrap_or(b"<!doctype html>oop".into());
-
-                    // TODO: proper mime type
-                    Response::builder()
-                        .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
-                        .body(Body::from(bytes))
-                        .unwrap()
+                |Path(path): Path<String>, State(site): State<SiteState>| async move {
+                    site.read().expect("rwlock poissoned").respond(path)
                 },
             ),
         )

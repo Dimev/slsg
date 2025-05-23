@@ -124,7 +124,10 @@ pub(crate) fn generate() -> Result<Site> {
 
     for path in process {
         files.insert(
-            path.clone(),
+            path.strip_prefix("./")
+                .into_lua_err()
+                .context("Failed to strip ./, this shouldn't happen")?
+                .to_path_buf(),
             fs::read(path.clone())
                 .into_lua_err()
                 .context(format!("Failed to read `{:?}`", path))?,
@@ -142,5 +145,3 @@ pub(crate) fn generate() -> Result<Site> {
     })
     //todo!()
 }
-
-
