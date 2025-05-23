@@ -13,7 +13,8 @@ use axum::{
     routing::get,
 };
 use mlua::{ErrorContext, ExternalResult, Result};
-use notify::Watcher;
+
+use notify_debouncer_full::{DebounceEventResult, notify::RecursiveMode};
 use tokio::stream;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, decompression::RequestDecompressionLayer};
@@ -32,30 +33,26 @@ pub(crate) fn serve(addr: &str) -> Result<()> {
         .block_on(serve_async(addr))
 }
 
-fn on_change(
-    last_update: &Arc<Mutex<Instant>>,
-    e: std::result::Result<notify::Event, notify::Error>,
-) {
+fn on_change(res: DebounceEventResult, site_ref: &Arc<RwLock<Site>>) {
     // only changes
-    if e.map(|e| e.kind.is_create() || e.kind.is_modify() || e.kind.is_remove())
+    if res
+        .map(|x| {
+            x.iter()
+                .any(|x| x.kind.is_create() || x.kind.is_modify() || x.kind.is_remove())
+        })
         .unwrap_or(false)
     {
         // check if the time now is beyond our elapsed time
         // if so, update the site
-        let now = Instant::now();
-        let mut last = last_update.lock().unwrap();
-        if now.duration_since(*last).as_millis() > 100 {
-            // update
-            *last = now;
+        // update
 
-            // make site again
-            // TODO: better error messages
-            // TODO: this fails sometimes
-            //*site_ref.write().unwrap() = generate().unwrap();
+        // make site again
+        // TODO: better error messages
+        // TODO: this fails sometimes
+        *site_ref.write().unwrap() = generate().unwrap();
 
-            // notify the clients it got updated
-            println!("le update");
-        }
+        // notify the clients it got updated
+        println!("le update {:?}", std::time::Instant::now());
     }
 }
 
@@ -63,19 +60,19 @@ async fn serve_async(addr: &str) -> Result<()> {
     // generate site at startup
     let site = Arc::new(RwLock::new(generate()?));
 
-    // last time the site got updated
-    let last_update = Arc::new(Mutex::new(Instant::now()));
-
     // watch changes
-    let watcher = notify::recommended_watcher(
-        move |e: std::result::Result<notify::Event, notify::Error>| {
-            on_change(&last_update, e);
+    let site_2 = site.clone();
+    let debouncer = notify_debouncer_full::new_debouncer(
+        Duration::from_millis(100),
+        None,
+        move |res: DebounceEventResult| {
+            on_change(res, &site_2);
         },
     )
-    .and_then(|mut watcher| {
-        watcher
-            .watch(&PathBuf::from("."), notify::RecursiveMode::Recursive)
-            .map(|_| watcher)
+    .and_then(|mut debouncer| {
+        debouncer
+            .watch(&PathBuf::from("."), RecursiveMode::Recursive)
+            .map(|_| debouncer)
     });
 
     // TODO: notify if we fail to watch
@@ -152,7 +149,7 @@ async fn serve_async(addr: &str) -> Result<()> {
         .context("Failed to serve")?;
 
     // stop watching
-    std::mem::drop(watcher);
+    std::mem::drop(debouncer);
 
     Ok(())
 }
