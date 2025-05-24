@@ -4,6 +4,8 @@
 ?>
 <h1>Hello</h1>
 <p>Welcome to the SLSG demo site!</p>
-<p><?lua "Hello lua world" ?></p>
+<p><?lua [[Hello lua world]] ?></p>
 <p><?fnl (fn cat [a b c] (.. a " " b " " c)) (cat "hello" "fennel" "world") ?></p>
-<p>We have two lines here!</p>
+<p>We have math!</p>
+<div><?$ \int_0^\infty \sqrt{t^2 + h^2 + 2 \cos t h} dt $?></div>
+<div><?$$ \int_0^\infty \sqrt{t^2 + h^2 + 2 \cos t h} dt $$?></div>
