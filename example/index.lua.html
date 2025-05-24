@@ -1,7 +1,8 @@
 <?lua
-  local templates = require 'scripts/templates'
-  return page { title = 'SLSG Demo' }
+  local templ = require 'scripts/templates'
+  return templ.page { title = 'SLSG Demo' }
 ?>
 <h1>Hello</h1>
 <p>Welcome to the SLSG demo site!</p>
+<p><?lua "Hello lua world" ?></p>
 <p>We have two lines here!</p>

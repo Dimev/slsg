@@ -1,12 +1,12 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     fs,
     path::{Path, PathBuf},
 };
 
-use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
+use mlua::{ErrorContext, ExternalResult, Function, Lua, ObjectLike, Result, chunk};
 
-use crate::conf::Config;
+use crate::{conf::Config, templates::template};
 
 pub(crate) struct Site {
     /// Generated files
@@ -122,20 +122,95 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // final files
     let mut files = BTreeMap::new();
 
+    // files to template with a lua function
+    let mut to_template = VecDeque::new();
+
+    // fonts to subset
+    let mut to_subset = Vec::new();
+
     for path in process {
-        files.insert(
-            path.strip_prefix("./")
-                .into_lua_err()
-                .context("Failed to strip ./, this shouldn't happen")?
-                .to_path_buf(),
-            fs::read(path.clone())
-                .into_lua_err()
-                .context(format!("Failed to read `{:?}`", path))?,
-        );
+        let file_name = path
+            .file_name()
+            .ok_or(mlua::Error::external("File did not have a file name"))?
+            .to_str()
+            .ok_or(mlua::Error::external(format!(
+                "File path `{}` could not be converted to utf8 string",
+                path.file_name().unwrap().to_string_lossy()
+            )))?;
+
+        // file to process?
+        if file_name
+            .rsplit_once(".")
+            .map(|(l, _)| l.ends_with(".lua") || l.ends_with(".fnl"))
+            .unwrap_or(false)
+        {
+            // process it now once
+            let (res, functions) = template(
+                &lua,
+                &fs::read_to_string(path.clone())
+                    .into_lua_err()
+                    .context(format!("Failed to read `{:?}`", path))?,
+                &config,
+            )
+            .context(format!(
+                "Failed to template file `{}`",
+                path.file_name().unwrap().to_string_lossy()
+            ))?;
+
+            // TODO: proper way to write out the file path if it's a htm(l) file
+            to_template.push_back((
+                path.strip_prefix("./")
+                    .into_lua_err()
+                    .context("Failed to strip ./, this shouldn't happen")?
+                    .to_path_buf(),
+                res,
+                functions,
+            ));
+        }
+        // font to subset?
+        else if file_name
+            .rsplit_once(".")
+            .map(|(l, _)| l.ends_with(".subset"))
+            .unwrap_or(false)
+        {
+            to_subset.push(path.clone());
+        }
+        // normal file, push as usual
+        else {
+            files.insert(
+                path.strip_prefix("./")
+                    .into_lua_err()
+                    .context("Failed to strip ./, this shouldn't happen")?
+                    .to_path_buf(),
+                fs::read(path.clone())
+                    .into_lua_err()
+                    .context(format!("Failed to read `{:?}`", path))?,
+            );
+        }
     }
 
     // filter out all paths to ignore
     // with globbing
+    // TODO
+
+    // apply templating
+    while let Some((path, mut res, mut functions)) = to_template.pop_front() {
+        if let Some(fun) = functions.pop_front() {
+            if let Some(fun) = fun.as_function() {
+                res = fun.call(res.clone())?;
+            }
+            if let Some(fun) = fun.as_table() {
+                res = fun.call(res.clone())?;
+            }
+
+            // need to process again
+            to_template.push_back((path, res, functions));
+        } else {
+            files.insert(path.clone(), res.clone().into_bytes());
+        }
+    }
+
+    // do font subsetting
     // TODO
 
     // go over all files, process them if needed
