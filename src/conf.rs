@@ -23,6 +23,11 @@ pub(crate) struct Config {
     /// Whether to enable lua (<?lua ... ?>), true by default
     pub lua: bool,
 
+    /// Whether to subset fonts
+    pub subset: bool,
+
+    /// extra characters to subset
+    pub extra: String,
     // TODO: compression? https? cors?
 }
 
@@ -32,6 +37,7 @@ enum Mode {
     Highlight,
     Build,
     Ignore,
+    Font,
     Dev,
 }
 
@@ -45,6 +51,8 @@ impl Config {
             fennel: true,
             minimark: true,
             lua: true,
+            subset: true,
+            extra: String::new(),
         };
 
         let mut mode = Mode::Global;
@@ -67,6 +75,8 @@ impl Config {
                 mode = Mode::Ignore
             } else if line == "[dev]" {
                 mode = Mode::Dev
+            } else if line == "[font]" {
+                mode = Mode::Font
             } else if let Some(mode) = line.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
                 return Err(mlua::Error::external(format!(
                     "site.conf:{num}:1: Unrecognized section `{mode}`"
@@ -118,6 +128,32 @@ impl Config {
 
                 if key == "not-found" {
                     cfg.not_found = Some(value.into());
+                } else {
+                    return Err(mlua::Error::external(format!(
+                        "site.conf:{num}:1: Unrecognized key `{key}`"
+                    )));
+                }
+            } else if mode == Mode::Font {
+                // try and parse a line
+                let (key, value) = line.split_once('=').ok_or(mlua::Error::external(format!(
+                    "site.conf:{num}:1: Expected a `key = value` pair"
+                )))?;
+
+                // trim again
+                let key = key.trim();
+                let value = value.trim();
+
+                // here we expect key-value pairs
+                let as_bool = Some(value == "true")
+                    .filter(|_| ["true", "false"].contains(&value))
+                    .ok_or(mlua::Error::external(format!(
+                        "site.conf:{num}:1: Expected a `key = value` pair"
+                    )));
+
+                if key == "subset" {
+                    cfg.subset = as_bool?;
+                } else if key == "extra" {
+                    cfg.extra.push_str(value);
                 } else {
                     return Err(mlua::Error::external(format!(
                         "site.conf:{num}:1: Unrecognized key `{key}`"
@@ -181,7 +217,11 @@ mod tests {
 
             [dev]
             not-found = 404.html
-            
+
+            [font]
+            subset = false
+            extra = abc
+            extra = def
         ";
 
         let cfg = Config::parse(config).expect("Failed to parse");
@@ -196,6 +236,8 @@ mod tests {
             vec!["scripts/*".to_string(), "syntax/*".to_string()]
         );
         assert_eq!(cfg.syntaxes, vec!["syntax/".to_string()]);
+        assert_eq!(cfg.subset, false);
+        assert_eq!(cfg.extra, "abcdef".to_string());
     }
 
     #[test]
