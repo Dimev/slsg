@@ -63,9 +63,6 @@ pub(crate) fn print_success<E: Display>(context: &str, error: &E) {
 }
 
 /// Produce an error page for html
-pub(crate) fn html_error(error: &Error) -> String {
-    format!(
-        /*include_str!("error_template.html")*/ "<p>oop: <pre>{}</pre></p>",
-        error
-    )
+pub(crate) fn html_error<E: Display>(error: &E) -> String {
+    format!(include_str!("error_template.html"), error)
 }

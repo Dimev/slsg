@@ -189,7 +189,7 @@ fn respond(
 
         // 404, return the not found page if we can get it
         (file, 404, Some("text/html"))
-    } else {
+    } else if let Some(site) = site.as_ref().ok() {
         // warn that we serve the 404 page
         print_warning(
             &format!("Failed to serve file (404) `{}`", file_path),
@@ -199,13 +199,23 @@ fn respond(
         // 404, return the not found page
         (
             format!(
-                /*include_str!("not_found_template.html")*/ "<p>not found: {}</p>",
-                file_path
+                include_str!("not_found_template.html"),
+                file_path,
+                site.files
+                    .keys()
+                    .map(|x| format!(
+                        "<li><a href=\"{a}\">{a}</a></li>\n",
+                        a = &x.to_string_lossy()
+                    ))
+                    .collect::<String>()
             )
             .into_bytes(),
             404,
             Some("text/html"),
         )
+    } else {
+        let error_page = html_error(&"Failed to serve an error, this is not supposed to happen");
+        (error_page.into_bytes(), 500, Some("text/html"))
     };
 
     // update notify script, allows reloading the page when we send a message

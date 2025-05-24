@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Error!</title>
+  <meta charset="utf-8">
+  <meta content="width=device-width,initial-scale=1" name="viewport">
+  <style>
+    html {{
+      margin: 0;
+      padding: 0;
+
+      width: 100vw;
+      height: 100vh;
+
+      display: grid;
+      place-items: center;
+    }}
+  
+    .center {{
+      border-left: solid #c22 4px;
+      padding: 12px;
+      box-shadow: 4px 4px 16px #aaa;
+    }}
+  
+    .err-title {{
+      font-family: sans-serif;
+      font-size: 1.2em;
+    }}
+
+    .err-msg {{
+      font-family: monospace;
+      font-size: 1em;
+      white-space: pre-wrap;
+    }}
+  </style>
+</head>
+
+<body class="center">
+  <h1 class="err-title">Failed to build site:</h1>
+  <pre class="err-msg">{}</pre>
+</body>
+
+</html>
