@@ -30,7 +30,7 @@ const INDEX_FILES: &[&str] = &[
 
 /// Generate the site
 /// Assumes that the current directory contains the site.conf file
-pub(crate) fn generate() -> Result<Site> {
+pub(crate) fn generate(dev: bool) -> Result<Site> {
     // read the config file
     let config = fs::read_to_string("./site.conf")
         .into_lua_err()

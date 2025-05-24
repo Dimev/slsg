@@ -1,0 +1,7 @@
+<script>
+  const ver = "{version}";
+  const src = new EventSource("/{path}");
+  // reload when the version differs
+  src.onmessage = e => e.data != ver && location.reload();
+  window.onbeforeunload = () => src.close();
+</script>

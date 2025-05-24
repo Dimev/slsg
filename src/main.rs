@@ -5,10 +5,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, chunk};
+use mlua::{Lua, Result, chunk};
 
 mod conf;
 mod generate;
+mod print;
 mod serve;
 mod subset;
 
