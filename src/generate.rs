@@ -117,8 +117,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
     }
 
-    println!("{:?}", process);
-
     // final files
     let mut files = BTreeMap::new();
 

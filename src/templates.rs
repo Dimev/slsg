@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use mlua::{Function, Lua, Result, Value};
+use mlua::{Function, Lua, Result, Value, chunk};
 
 use crate::conf::Config;
 
@@ -11,6 +11,8 @@ enum ParseMode {
     Raw,
     Fennel,
     Lua,
+    TexBlock, // TODO: latex
+    TexInline,
 }
 
 pub(crate) fn template(
@@ -27,7 +29,7 @@ pub(crate) fn template(
         if mode == ParseMode::Raw {
             // open tag and a ?lua? parse lua
             if c == '<' && chars.as_str().starts_with("?lua") {
-                if !conf.fennel {
+                if !conf.lua {
                     return Err(mlua::Error::external(
                         "Found a lua code block, but lua is not enabled in `site.conf`",
                     ));
@@ -64,7 +66,7 @@ pub(crate) fn template(
             }
 
             // exec
-            let result: Value = lua.load(dbg!(code)).eval()?;
+            let result: Value = lua.load(code).eval()?;
 
             if result.is_string() || result.is_number() || result.is_boolean() {
                 out.push_str(&result.to_string()?);
@@ -79,7 +81,28 @@ pub(crate) fn template(
             chars.next();
             mode = ParseMode::Raw;
         } else if mode == ParseMode::Fennel {
-            todo!()
+            // TODO: fix
+            // skip until the closing ?>
+            let mut code = String::new();
+            while !chars.as_str().starts_with("?>") && !chars.as_str().is_empty() {
+                code.push(chars.next().unwrap().1);
+            }
+
+            // exec
+            let result: Value = lua.load(chunk!(require("fennel").eval($code))).eval()?;
+
+            if result.is_string() || result.is_number() || result.is_boolean() {
+                out.push_str(&result.to_string()?);
+            }
+
+            if result.is_function() || result.is_table() {
+                functions.push_back(result.clone());
+            }
+
+            // skip closing ?>
+            chars.next();
+            chars.next();
+            mode = ParseMode::Raw;
         }
     }
 
