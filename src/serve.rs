@@ -29,7 +29,7 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
 
     // we are live
     println!(
-        "Serving on {} - change a file to reload the site",
+        "Serving on `http://{}` - change a file to reload the site",
         listener
             .local_addr()
             .map(|x| x.to_string())
