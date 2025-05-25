@@ -1,12 +1,8 @@
 use std::{fmt::Display, io::stdout};
 
-use mlua::Error;
-
 use crossterm::{
     execute,
-    style::{
-        Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
-    },
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
 };
 
 /// Print an error to the terminal
@@ -51,9 +47,10 @@ pub(crate) fn print_success<E: Display>(context: &str, error: &E) {
     execute!(
         stdout(),
         SetAttribute(Attribute::Bold),
-        SetBackgroundColor(Color::Green),
+        SetForegroundColor(Color::Green),
         Print(context),
         SetAttribute(Attribute::Reset),
+        SetForegroundColor(Color::Green),
         Print(":\n"),
         Print(text),
         Print("\n"),

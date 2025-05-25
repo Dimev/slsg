@@ -1,10 +1,12 @@
 use std::{
     collections::{BTreeMap, VecDeque},
+    ffi::OsStr,
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use mlua::{ErrorContext, ExternalResult, Function, Lua, ObjectLike, Result, chunk};
+use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, chunk};
+use syntect::parsing::SyntaxSet;
 
 use crate::{conf::Config, templates::template};
 
@@ -41,6 +43,10 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // set up lua
     let lua = unsafe { Lua::unsafe_new() };
 
+    // load standard library
+    let globals = lua.globals();
+    globals.set("development", dev)?; // true if we are serving
+
     // if fennel is enabled, add fennel
     if config.fennel {
         let fennel = include_str!("fennel.lua");
@@ -55,6 +61,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         .exec()
         .context("failed to install fennel")?;
     }
+
+    // TODO: consider setup script?
+
+    // load syntax highlighting
+    let mut highlighters = Vec::new();
+    highlighters.push(SyntaxSet::load_defaults_newlines());
 
     // files to process, in that order
     let mut process = Vec::new();
@@ -157,15 +169,62 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 path.file_name().unwrap().to_string_lossy()
             ))?;
 
-            // TODO: proper way to write out the file path if it's a htm(l) file
-            to_template.push_back((
+            // write out to name/index.htm(l)
+            let out_path = if path
+                .extension()
+                .map(|x| x.to_string_lossy() == "html")
+                .unwrap_or(false)
+            {
+                let base = path
+                    .parent()
+                    .ok_or(mlua::Error::external(format!(
+                        "File `{}` does not have a parent directory",
+                        path.to_string_lossy()
+                    )))?
+                    .strip_prefix("./")
+                    .into_lua_err()
+                    .context("Failed to strip ./, this shouldn't happen")?;
+                if path
+                    .file_name()
+                    .map(|x| x.to_string_lossy().starts_with("index."))
+                    .unwrap_or(false)
+                {
+                    base.join("index.html")
+                } else {
+                    // TODO: fix
+                    base.join(path.parent().unwrap().file_name().unwrap())
+                }
+            } else if path
+                .extension()
+                .map(|x| x.to_string_lossy() == "htm")
+                .unwrap_or(false)
+            {
+                let base = path
+                    .parent()
+                    .ok_or(mlua::Error::external(format!(
+                        "File `{}` does not have a parent directory",
+                        path.to_string_lossy()
+                    )))?
+                    .strip_prefix("./")
+                    .into_lua_err()
+                    .context("Failed to strip ./, this shouldn't happen")?;
+                if path
+                    .file_name()
+                    .map(|x| x.to_string_lossy().starts_with("index."))
+                    .unwrap_or(false)
+                {
+                    base.join("index.html")
+                } else {
+                    base.join(path.parent().unwrap().file_name().unwrap())
+                }
+            } else {
                 path.strip_prefix("./")
                     .into_lua_err()
                     .context("Failed to strip ./, this shouldn't happen")?
-                    .to_path_buf(),
-                res,
-                functions,
-            ));
+                    .to_path_buf()
+            };
+
+            to_template.push_back((out_path, res, functions));
         }
         // font to subset?
         else if file_name
@@ -177,11 +236,40 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
         // normal file, push as usual
         else {
-            files.insert(
+            // write out to name/index.htm(l)
+            let out_path = if path
+                .file_name()
+                .map(|x| x.to_string_lossy().starts_with("index."))
+                .unwrap_or(false)
+                && path.ends_with(".html")
+            {
+                path.parent()
+                    .ok_or(mlua::Error::external(format!(
+                        "File `{}` does not have a parent directory",
+                        path.to_string_lossy()
+                    )))?
+                    .join("index.html")
+            } else if path
+                .file_name()
+                .map(|x| x.to_string_lossy().starts_with("index."))
+                .unwrap_or(false)
+                && path.ends_with(".htm")
+            {
+                path.parent()
+                    .ok_or(mlua::Error::external(format!(
+                        "File `{}` does not have a parent directory",
+                        path.to_string_lossy()
+                    )))?
+                    .join("index.htm")
+            } else {
                 path.strip_prefix("./")
                     .into_lua_err()
                     .context("Failed to strip ./, this shouldn't happen")?
-                    .to_path_buf(),
+                    .to_path_buf()
+            };
+
+            files.insert(
+                out_path,
                 fs::read(path.clone())
                     .into_lua_err()
                     .context(format!("Failed to read `{:?}`", path))?,
@@ -198,8 +286,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         if let Some(fun) = functions.pop_front() {
             if let Some(fun) = fun.as_function() {
                 res = fun.call(res.clone())?;
-            }
-            if let Some(fun) = fun.as_table() {
+            } else if let Some(fun) = fun.as_table() {
+                res = fun.call(res.clone())?;
+            } else if let Some(fun) = fun.as_userdata() {
                 res = fun.call(res.clone())?;
             }
 

@@ -15,7 +15,7 @@ use notify::Watcher;
 
 use crate::{
     generate::{Site, generate},
-    print::{html_error, print_error, print_warning},
+    print::{html_error, print_error, print_success, print_warning},
 };
 
 use mlua::{ErrorContext, ExternalResult};
@@ -28,12 +28,15 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
         .unwrap_or_else(|e| panic!("Failed to serve site on {}: {}", addr, e));
 
     // we are live
-    println!(
-        "Serving on `http://{}` - change a file to reload the site",
-        listener
-            .local_addr()
-            .map(|x| x.to_string())
-            .unwrap_or(addr.to_string())
+    print_success(
+        &format!(
+            "serving on `http://{}`",
+            listener
+                .local_addr()
+                .map(|x| x.to_string())
+                .unwrap_or(addr.to_string())
+        ),
+        &"change a file to reload the site",
     );
 
     // start the listening thread

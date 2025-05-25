@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use latex2mathml::{DisplayStyle, latex_to_mathml};
-use mlua::{ErrorContext, ExternalResult, Function, Lua, Result, Value, chunk};
+use mlua::{ErrorContext, ExternalResult, Lua, Result, Value, chunk};
 
 use crate::conf::Config;
 
