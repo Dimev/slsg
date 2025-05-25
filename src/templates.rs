@@ -19,6 +19,7 @@ enum ParseMode {
 pub(crate) fn template(
     lua: &Lua,
     content: &str,
+    name: &str,
     conf: &Config,
 ) -> Result<(String, VecDeque<Value>)> {
     let mut out = String::with_capacity(content.len());
@@ -68,6 +69,7 @@ pub(crate) fn template(
                 out.push(c);
             }
         } else if mode == ParseMode::Lua {
+            // TODO: keep track of number of whitespace so we can push that to the front, in order to set the line number
             let mut code = String::new();
 
             // parse the string
@@ -88,7 +90,7 @@ pub(crate) fn template(
             }
 
             // run code
-            let result: Value = lua.load(code).set_name("mogus").eval()?;
+            let result: Value = lua.load(code).set_name(format!("={name}")).eval()?;
 
             // string, numbers or booleans can be embedded directly
             if result.is_string() || result.is_number() || result.is_boolean() {
@@ -125,7 +127,7 @@ pub(crate) fn template(
             // run code
             let result: Value = lua
                 .load(chunk!(require("fennel").eval($code)))
-                .set_name("mogus")
+                .set_name(format!("={name}"))
                 .eval()?;
 
             // string, numbers or booleans can be embedded directly

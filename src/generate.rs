@@ -46,6 +46,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         let fennel = include_str!("fennel.lua");
         let fennel = lua
             .load(fennel)
+            .set_name("=fennel.lua")
             .into_function()
             .context("Failed to load fennel")?;
         lua.load(chunk! {
@@ -148,6 +149,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 &fs::read_to_string(path.clone())
                     .into_lua_err()
                     .context(format!("Failed to read `{:?}`", path))?,
+                &path.to_string_lossy(),
                 &config,
             )
             .context(format!(
