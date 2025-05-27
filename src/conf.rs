@@ -28,6 +28,11 @@ pub(crate) struct Config {
 
     /// extra characters to subset
     pub extra: String,
+
+    /// Setup script to run first
+    pub setup: Option<String>,
+    // TODO: after build script? finalize? or have it just call whatever the build script returns
+
     // TODO: compression? https? cors?
 }
 
@@ -53,6 +58,7 @@ impl Config {
             lua: true,
             subset: true,
             extra: String::new(),
+            setup: None,
         };
 
         let mut mode = Mode::Global;
@@ -106,6 +112,8 @@ impl Config {
                     cfg.fennel = as_bool?
                 } else if key == "allow-minimark" {
                     cfg.minimark = as_bool?
+                } else if key == "setup" {
+                    cfg.setup = Some(value.into());
                 } else {
                     return Err(mlua::Error::external(format!(
                         "site.conf:{num}:1: Unrecognized key `{key}`"
@@ -206,7 +214,8 @@ mod tests {
             dir = out/
             allow-fennel = false
             allow-lua = false # we don't want lua
-            allow-minimark = false 
+            allow-minimark = false
+            setup = script.lua
 
             [ignore]
             scripts/* # ignore our fennel scripts and templates
@@ -238,6 +247,7 @@ mod tests {
         assert_eq!(cfg.syntaxes, vec!["syntax/".to_string()]);
         assert_eq!(cfg.subset, false);
         assert_eq!(cfg.extra, "abcdef".to_string());
+        assert_eq!(cfg.setup, Some("script.lua".to_string()));
     }
 
     #[test]

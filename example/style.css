@@ -16,3 +16,7 @@ body {
   padding: 12px;
   box-shadow: 4px 4px 16px #aaa;
 }
+
+h1 {
+  font-size: 120%;
+}

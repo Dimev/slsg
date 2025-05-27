@@ -1,13 +1,11 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    ffi::OsStr,
     fs,
-    path::PathBuf,
 };
 
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, chunk};
 use relative_path::{RelativePath, RelativePathBuf};
-use syntect::parsing::SyntaxSet;
+use syntect::parsing::{SyntaxSet, SyntaxSetBuilder};
 
 use crate::{conf::Config, templates::template};
 
@@ -97,7 +95,6 @@ const INDEX_FILES: &[&str] = &[
     "index.fnl.htm",
     "index.lua.html",
     "index.fnl.html",
-    "index.mmk",
     "index.lua.mmk",
     "index.fnl.mmk",
 ];
@@ -137,8 +134,20 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // TODO: consider setup script?
 
     // load syntax highlighting
-    let mut highlighters = Vec::new();
-    highlighters.push(SyntaxSet::load_defaults_newlines());
+    // default one, has a good set of languages already
+    let builtin_highlights = SyntaxSet::load_defaults_newlines();
+    let mut external_highlights = SyntaxSetBuilder::new();
+
+    // load the ones from the config file
+    for path in config.syntaxes.iter() {
+        external_highlights
+            .add_from_folder(path, true)
+            .into_lua_err()
+            .context("Failed to load syntaxes from folder `{path}`")?;
+    }
+
+    // build it
+    let external_highlights = external_highlights.build();
 
     // files to process, in that order
     let mut process = Vec::new();
@@ -204,6 +213,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             // directories first
             stack.extend(dirs.into_iter());
         } else if path.to_path(".").is_file() {
+            // normal file, just process
             process.push(path);
         }
     }
@@ -218,8 +228,18 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut to_subset = Vec::new();
 
     for path in process {
+        // is it a minimark file?
+        if path.extension().map(|x| x == "mmk").unwrap_or(false) {
+            // needs to have the double ext
+            if !path.has_double_ext("fnl") && !path.has_double_ext("lua") {
+                return Err(mlua::Error::external(format!(
+                    "Minimark (.mmk) files need to be templated, and thus end with a `.lua.mmk` or `.fnl.mmk` extension"
+                )).context(format!("Failed to template file `{}`", path)));
+            }
+            todo!("Parse minimark");
+        }
         // .fnl or .lua second ext? template
-        if path.has_double_ext("fnl") || path.has_double_ext("lua") {
+        else if path.has_double_ext("fnl") || path.has_double_ext("lua") {
             // process it now once
             let (res, functions) = template(
                 &lua,
