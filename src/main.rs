@@ -111,10 +111,11 @@ fn find_working_dir(path: &Path) -> Result<&Path> {
 }
 
 /// Create a new site
-fn new(mut pargs: pico_args::Arguments) {
+fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-        .expect("Failed to parse arguments")
+        .into_lua_err()
+        .context("Failed to parse arguments")?
         .unwrap_or(PathBuf::from("."));
 
     // ensure the path does not exist yet
@@ -124,7 +125,7 @@ fn new(mut pargs: pico_args::Arguments) {
                 "Failed to create new site: target directory {:?} is not empty!",
                 path
             );
-            return;
+            //return;
         }
     }
 
@@ -207,8 +208,13 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
         output_path.to_string_lossy()
     ))?;
 
-    // move to where the config file is
-    std::env::set_current_dir(path).unwrap_or_else(|e| panic!("Failed to change path: {}", e));
+    // move to where the main.lua file is
+    std::env::set_current_dir(&path)
+        .into_lua_err()
+        .context(format!(
+            "Failed to change path to `{}`",
+            path.to_string_lossy()
+        ))?;
 
     // generate the site,
     let site = generate(false).context("Failed to generate site")?;
@@ -245,22 +251,33 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
 fn dev(pargs: &mut pico_args::Arguments) -> Result<()> {
     let addr = pargs
         .opt_value_from_str(["-a", "--address"])
-        .expect("Failed to parse arguments")
+        .into_lua_err()
+        .context("Failed to parse arguments")?
         .unwrap_or(String::from("127.0.0.1:1111"));
 
-    let current_dir = current_dir().expect("oop");
+    let current_dir = current_dir()
+        .into_lua_err()
+        .context("could not open current directory")?;
 
-    let path = pargs
+    let path = if let Some(path) = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-        .expect("Failed to parse arguments")
-        .unwrap_or_else(|| find_working_dir(&current_dir).expect("oop").to_path_buf());
+        .into_lua_err()
+        .context("Failed to parse arguments")?
+    {
+        path
+    } else {
+        find_working_dir(&current_dir)
+            .map(|x| x.to_path_buf())
+            .context("Failed to find working directory")?
+    };
 
     // move to where the main.lua file is
-    if !path.is_dir() {
-        panic!("Expected a directory for the path, not a file!");
-    } else {
-        std::env::set_current_dir(path).unwrap_or_else(|e| panic!("Failed to change path: {}", e));
-    }
+    std::env::set_current_dir(&path)
+        .into_lua_err()
+        .context(format!(
+            "Failed to change path to `{}`",
+            path.to_string_lossy()
+        ))?;
 
     // run the development server
     serve::serve(&addr)?;
