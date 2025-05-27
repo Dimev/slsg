@@ -12,6 +12,7 @@ use std::{
 };
 
 use notify::Watcher;
+use relative_path::RelativePathBuf;
 
 use crate::{
     generate::{Site, generate},
@@ -138,16 +139,15 @@ fn respond(
     let (content, status, mime): (Vec<u8>, u16, Option<&str>) = if let Some(file) = site
         .as_ref()
         .ok()
-        .and_then(|x| x.files.get(&PathBuf::from(&file_path)))
+        .and_then(|x| x.files.get(&RelativePathBuf::from(&file_path)))
     {
         (file.clone(), 200, get_mime_type(PathBuf::from(&file_path)))
     }
     // see if it's on index.html
-    else if let Some(file) = site
-        .as_ref()
-        .ok()
-        .and_then(|x| x.files.get(&PathBuf::from(file_path).join("index.html")))
-    {
+    else if let Some(file) = site.as_ref().ok().and_then(|x| {
+        x.files
+            .get(&RelativePathBuf::from(file_path).join("index.html"))
+    }) {
         (file.clone(), 200, Some("text/html"))
     }
     // if it's the update notifier, set the update stream
@@ -206,10 +206,7 @@ fn respond(
                 file_path,
                 site.files
                     .keys()
-                    .map(|x| format!(
-                        "<li><a href=\"{a}\">{a}</a></li>\n",
-                        a = &x.to_string_lossy()
-                    ))
+                    .map(|x| format!("<li><a href=\"{a}\">{a}</a></li>\n", a = &x))
                     .collect::<String>()
             )
             .into_bytes(),

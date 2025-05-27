@@ -155,7 +155,10 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
 
     let config = fs::read_to_string(&path.join("site.conf"))
         .into_lua_err()
-        .context(format!("failed to read `site.conf` in `{}`", &path.to_string_lossy()))?;
+        .context(format!(
+            "failed to read `site.conf` in `{}`",
+            &path.to_string_lossy()
+        ))?;
 
     let config = Config::parse(&config)?;
 
@@ -212,26 +215,26 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
     for (file_path, contents) in site.files.into_iter() {
         // create the directory for it
         create_dir_all(
-            output_path
-                .join(&file_path)
+            &file_path
+                .to_path(&output_path)
                 .parent()
                 .ok_or(mlua::Error::external(format!(
                     "output path `{}` could not be created",
-                    output_path.join(&file_path).to_string_lossy()
+                    file_path.to_path(&output_path).to_string_lossy()
                 )))?,
         )
         .into_lua_err()
         .context(format!(
             "output path `{}` could not be created",
-            output_path.join(&file_path).to_string_lossy()
+            file_path.to_path(&output_path).to_string_lossy()
         ))?;
 
         // write the file
-        fs::write(output_path.join(&file_path), contents)
+        fs::write(file_path.to_path(&output_path), contents)
             .into_lua_err()
             .context(format!(
                 "Failed to write file `{}`",
-                output_path.join(file_path).to_string_lossy()
+                file_path.to_path(&output_path).to_string_lossy()
             ))?;
     }
 

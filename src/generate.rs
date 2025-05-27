@@ -6,13 +6,85 @@ use std::{
 };
 
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, chunk};
+use relative_path::{RelativePath, RelativePathBuf};
 use syntect::parsing::SyntaxSet;
 
 use crate::{conf::Config, templates::template};
 
+trait DoubleFileExt {
+    fn has_double_ext(&self, ext: &str) -> bool;
+    fn without_double_ext(&self) -> Option<RelativePathBuf>;
+}
+
+impl<T: AsRef<RelativePath>> DoubleFileExt for T {
+    fn has_double_ext(&self, ext: &str) -> bool {
+        // no file name, stop
+        if self
+            .as_ref()
+            .file_name()
+            .map(|x| [".", ".."].contains(&x))
+            .unwrap_or(true)
+        {
+            return false;
+        }
+
+        let mut splits = self.as_ref().as_str().rsplit(".");
+        splits.next();
+        let second_ext = splits.next();
+        second_ext.map(|x| x == ext).unwrap_or(false)
+    }
+
+    fn without_double_ext(&self) -> Option<RelativePathBuf> {
+        // no file name, stop
+        if self
+            .as_ref()
+            .file_name()
+            .map(|x| [".", ".."].contains(&x))
+            .unwrap_or(true)
+        {
+            return None;
+        }
+
+        let mut splits = self.as_ref().as_str().rsplitn(3, ".");
+        let first_ext = splits.next()?;
+        let _ = splits.next()?;
+        let root = splits.next()?;
+
+        Some(RelativePathBuf::from(format!("{root}.{first_ext}")))
+    }
+}
+
+trait HtmlToIndex {
+    fn html_to_index(&self) -> Option<RelativePathBuf>;
+}
+
+impl<T: AsRef<RelativePath>> HtmlToIndex for T {
+    fn html_to_index(&self) -> Option<RelativePathBuf> {
+        let ext = self
+            .as_ref()
+            .extension()
+            .filter(|x| ["htm", "html"].contains(x))?;
+        let file_stem = self.as_ref().file_stem()?;
+
+        if file_stem == "index" {
+            // already done, don't do anything
+            None
+        } else {
+            // else, build the new string
+            Some(
+                self.as_ref()
+                    .parent()?
+                    .join(file_stem)
+                    .join("index.htm")
+                    .with_extension(ext),
+            )
+        }
+    }
+}
+
 pub(crate) struct Site {
     /// Generated files
-    pub files: BTreeMap<PathBuf, Vec<u8>>,
+    pub files: BTreeMap<RelativePathBuf, Vec<u8>>,
 
     /// What file to use for 404
     pub not_found: Option<Vec<u8>>,
@@ -34,7 +106,7 @@ const INDEX_FILES: &[&str] = &[
 /// Assumes that the current directory contains the site.conf file
 pub(crate) fn generate(dev: bool) -> Result<Site> {
     // read the config file
-    let config = fs::read_to_string("./site.conf")
+    let config = fs::read_to_string("site.conf")
         .into_lua_err()
         .context("failed to read `site.conf`")?;
 
@@ -72,46 +144,52 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut process = Vec::new();
 
     // depth first traversal of the directories
-    let mut stack = vec![PathBuf::from(".")];
+    let mut stack = vec![RelativePathBuf::new()];
     while let Some(path) = stack.pop() {
-        if path.is_dir() {
+        if path.to_path(".").is_dir() {
             let mut dirs = Vec::new();
             let mut files = Vec::new();
             let mut index = None;
 
             // directory? recurse
-            for path in fs::read_dir(path)
+            for entry in fs::read_dir(path.to_path("."))
                 .into_lua_err()
                 .context("Could not read directory")?
             {
-                let path = path
+                let entry = entry
                     .into_lua_err()
                     .context("Failed to read directory entry")?;
 
+                let file_path = path.join(entry.file_name().into_string().map_err(|x| {
+                    mlua::Error::external(format!(
+                        "Failed to convert path `{}` to a utf8 string",
+                        x.to_string_lossy()
+                    ))
+                })?);
+
                 // take depending on type
-                if path
+                if file_path
                     .file_name()
-                    .to_str()
                     .map(|x| INDEX_FILES.contains(&x))
                     .unwrap_or(false)
                 {
                     if index.is_none() {
-                        index = Some(path.path())
+                        index = Some(file_path)
                     } else {
                         return Err(mlua::Error::external(format!(
-                            "Double index file found in directory `{:?}`",
-                            path
+                            "Double index file found in directory `{}`",
+                            entry.path().to_string_lossy()
                         )));
                     }
-                } else if path
+                } else if entry
                     .file_type()
                     .into_lua_err()
                     .context("Failed to get file type")?
                     .is_file()
                 {
-                    files.push(path.path());
+                    files.push(file_path);
                 } else {
-                    dirs.push(path.path());
+                    dirs.push(file_path);
                 }
             }
 
@@ -125,7 +203,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
             // directories first
             stack.extend(dirs.into_iter());
-        } else if path.is_file() {
+        } else if path.to_path(".").is_file() {
             process.push(path);
         }
     }
@@ -140,139 +218,52 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut to_subset = Vec::new();
 
     for path in process {
-        let file_name = path
-            .file_name()
-            .ok_or(mlua::Error::external("File did not have a file name"))?
-            .to_str()
-            .ok_or(mlua::Error::external(format!(
-                "File path `{}` could not be converted to utf8 string",
-                path.file_name().unwrap().to_string_lossy()
-            )))?;
-
-        // file to process?
-        if file_name
-            .rsplit_once(".")
-            .map(|(l, _)| l.ends_with(".lua") || l.ends_with(".fnl"))
-            .unwrap_or(false)
-        {
+        // .fnl or .lua second ext? template
+        if path.has_double_ext("fnl") || path.has_double_ext("lua") {
             // process it now once
             let (res, functions) = template(
                 &lua,
-                &fs::read_to_string(path.clone())
+                &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
-                    .context(format!("Failed to read `{:?}`", path))?,
-                &path.to_string_lossy(),
+                    .context(format!("Failed to read `{}`", path))?,
+                path.as_str(),
                 &config,
             )
-            .context(format!(
-                "Failed to template file `{}`",
-                path.file_name().unwrap().to_string_lossy()
-            ))?;
+            .context(format!("Failed to template file `{}`", path))?;
 
-            // write out to name/index.htm(l)
-            let out_path = if path
-                .extension()
-                .map(|x| x.to_string_lossy() == "html")
-                .unwrap_or(false)
-            {
-                let base = path
-                    .parent()
-                    .ok_or(mlua::Error::external(format!(
-                        "File `{}` does not have a parent directory",
-                        path.to_string_lossy()
-                    )))?
-                    .strip_prefix("./")
-                    .into_lua_err()
-                    .context("Failed to strip ./, this shouldn't happen")?;
-                if path
-                    .file_name()
-                    .map(|x| x.to_string_lossy().starts_with("index."))
-                    .unwrap_or(false)
-                {
-                    base.join("index.html")
-                } else {
-                    // TODO: fix
-                    base.join(path.parent().unwrap().file_name().unwrap())
-                }
-            } else if path
-                .extension()
-                .map(|x| x.to_string_lossy() == "htm")
-                .unwrap_or(false)
-            {
-                let base = path
-                    .parent()
-                    .ok_or(mlua::Error::external(format!(
-                        "File `{}` does not have a parent directory",
-                        path.to_string_lossy()
-                    )))?
-                    .strip_prefix("./")
-                    .into_lua_err()
-                    .context("Failed to strip ./, this shouldn't happen")?;
-                if path
-                    .file_name()
-                    .map(|x| x.to_string_lossy().starts_with("index."))
-                    .unwrap_or(false)
-                {
-                    base.join("index.html")
-                } else {
-                    base.join(path.parent().unwrap().file_name().unwrap())
-                }
-            } else {
-                path.strip_prefix("./")
-                    .into_lua_err()
-                    .context("Failed to strip ./, this shouldn't happen")?
-                    .to_path_buf()
-            };
+            // make the final path
+            let path = path
+                .without_double_ext()
+                .ok_or(mlua::Error::external(format!(
+                    "Expected path `{}` to have a second `.lua` or `.fnl` extension",
+                    path
+                )))?;
+            let path = path.html_to_index().unwrap_or(path);
 
-            to_template.push_back((out_path, res, functions));
+            // template it
+            to_template.push_back((path, res, functions));
         }
-        // font to subset?
-        else if file_name
-            .rsplit_once(".")
-            .map(|(l, _)| l.ends_with(".subset"))
-            .unwrap_or(false)
-        {
-            to_subset.push(path.clone());
+        // .subset second ext? subset
+        else if path.has_double_ext("subset") {
+            let path = path
+                .without_double_ext()
+                .ok_or(mlua::Error::external(format!(
+                    "Expected path `{}` to have a second `.subset` extension",
+                    path
+                )))?;
+            to_subset.push(path);
         }
-        // normal file, push as usual
+        // else? emit normally
         else {
-            // write out to name/index.htm(l)
-            let out_path = if path
-                .file_name()
-                .map(|x| x.to_string_lossy().starts_with("index."))
-                .unwrap_or(false)
-                && path.ends_with(".html")
-            {
-                path.parent()
-                    .ok_or(mlua::Error::external(format!(
-                        "File `{}` does not have a parent directory",
-                        path.to_string_lossy()
-                    )))?
-                    .join("index.html")
-            } else if path
-                .file_name()
-                .map(|x| x.to_string_lossy().starts_with("index."))
-                .unwrap_or(false)
-                && path.ends_with(".htm")
-            {
-                path.parent()
-                    .ok_or(mlua::Error::external(format!(
-                        "File `{}` does not have a parent directory",
-                        path.to_string_lossy()
-                    )))?
-                    .join("index.htm")
-            } else {
-                path.strip_prefix("./")
-                    .into_lua_err()
-                    .context("Failed to strip ./, this shouldn't happen")?
-                    .to_path_buf()
-            };
+            // make the final path
+            let path = path.html_to_index().unwrap_or(path);
 
+            // insert it into the files
             files.insert(
-                out_path,
-                fs::read(path.clone())
+                path.clone(),
+                fs::read(path.to_path("."))
                     .into_lua_err()
-                    .context(format!("Failed to read `{:?}`", path))?,
+                    .context(format!("Failed to read file `{}`", path))?,
             );
         }
     }
@@ -307,5 +298,4 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         files,
         not_found: None,
     })
-    //todo!()
 }
