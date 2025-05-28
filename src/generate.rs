@@ -131,6 +131,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         .context("failed to install fennel")?;
     }
 
+    // output directory, as we want to ignore this one
+    let out_dir = RelativePathBuf::from(&config.output_dir);
+
     // TODO: consider setup script?
 
     // load syntax highlighting
@@ -155,7 +158,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // depth first traversal of the directories
     let mut stack = vec![RelativePathBuf::new()];
     while let Some(path) = stack.pop() {
-        if path.to_path(".").is_dir() {
+        // skip if this path is in the skippable list
+        if path.starts_with(&out_dir) || path == "site.conf" {
+            continue;
+        // if it's a directory, read all directories
+        } else if path.to_path(".").is_dir() {
             let mut dirs = Vec::new();
             let mut files = Vec::new();
             let mut index = None;

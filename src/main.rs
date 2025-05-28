@@ -79,7 +79,7 @@ fn main() {
     let err = match sub.as_deref() {
         Some("dev") => dev(&mut pargs),
         Some("build") => build(&mut pargs),
-        Some("new") => Ok(new(pargs)),
+        Some("new") => new(pargs),
         Some("docs") => print_docs(),
         _ => Ok(println!("{}", HELP)),
     };
