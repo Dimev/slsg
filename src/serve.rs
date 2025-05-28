@@ -206,7 +206,7 @@ fn respond(
                 file_path,
                 site.files
                     .keys()
-                    .map(|x| format!("<li><a href=\"{a}\">{a}</a></li>\n", a = &x))
+                    .map(|x| format!("<li><a href=\"/{a}\">{a}</a></li>\n", a = &x))
                     .collect::<String>()
             )
             .into_bytes(),
