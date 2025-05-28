@@ -142,6 +142,16 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .context("could not open current directory")?;
 
+    // parse these first to not get confused with the positional arg
+    let output_path = pargs
+        .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| Ok(PathBuf::from(x)))
+        .into_lua_err()
+        .context("Failed to parse arguments")?;
+
+    // force clear the directory, only if we are building the current site's ./dist folder
+    // or are passed the --force argument
+    let force_clear = pargs.contains(["-f", "--force"]);
+
     let path = if let Some(path) = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
         .into_lua_err()
@@ -163,15 +173,7 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
 
     let config = Config::parse(&config)?;
 
-    let output_path = pargs
-        .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| Ok(PathBuf::from(x)))
-        .into_lua_err()
-        .context("Failed to parse arguments")?
-        .unwrap_or(path.join(&config.output_dir));
-
-    // force clear the directory, only if we are building the current site's ./dist folder
-    // or are passed the --force argument
-    let force_clear = pargs.contains(["-f", "--force"]);
+    let output_path = output_path.unwrap_or(path.join(&config.output_dir));
 
     // clear the output
     // only clear if it's allowed, or it's the output path
