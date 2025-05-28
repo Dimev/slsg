@@ -1,11 +1,17 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     fs,
+    sync::Arc,
 };
 
-use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, chunk};
+use glob::Pattern;
+use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
 use relative_path::{RelativePath, RelativePathBuf};
-use syntect::parsing::{SyntaxSet, SyntaxSetBuilder};
+use syntect::{
+    html::{ClassStyle, ClassedHTMLGenerator},
+    parsing::{SyntaxSet, SyntaxSetBuilder},
+    util::LinesWithEndings,
+};
 
 use crate::{conf::Config, templates::template};
 
@@ -99,6 +105,22 @@ const INDEX_FILES: &[&str] = &[
     "index.fnl.mmk",
 ];
 
+/// Escape html
+fn escape_html(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    for c in html.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Generate the site
 /// Assumes that the current directory contains the site.conf file
 pub(crate) fn generate(dev: bool) -> Result<Site> {
@@ -112,9 +134,170 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // set up lua
     let lua = unsafe { Lua::unsafe_new() };
 
+    // load syntax highlighting
+    // default one, has a good set of languages already
+    let builtin_highlights = Arc::new(SyntaxSet::load_defaults_newlines());
+    let mut external_highlights = SyntaxSetBuilder::new();
+
+    // load the ones from the config file
+    for path in config.syntaxes.iter() {
+        external_highlights
+            .add_from_folder(path, true)
+            .into_lua_err()
+            .context("Failed to load syntaxes from folder `{path}`")?;
+    }
+
+    // build it
+    let external_highlights = Arc::new(external_highlights.build());
+
     // load standard library
     let globals = lua.globals();
     globals.set("development", dev)?; // true if we are serving
+
+    // highlight code
+    let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
+    globals.set(
+        "highlight",
+        lua.create_function(
+            move |_, (language, code, prefix): (String, String, Option<String>)| {
+                // TODO: way to select between highlight modes (classed, classed prefix, or theme)
+                let (syn, set) = if let Some(syn) = hl.find_syntax_by_name(&language) {
+                    (syn, &hl)
+                } else if let Some(syn) = ext.find_syntax_by_name(&language) {
+                    (syn, &ext)
+                } else if let Some(syn) = hl.find_syntax_by_extension(&language) {
+                    (syn, &hl)
+                } else if let Some(syn) = ext.find_syntax_by_extension(&language) {
+                    (syn, &ext)
+                } else {
+                    return Err(mlua::Error::external(format!(
+                        "No syntax found for `{language}`"
+                    )));
+                };
+                let mut generator = ClassedHTMLGenerator::new_with_class_style(
+                    syn,
+                    set,
+                    if let Some(prefix) = prefix {
+                        ClassStyle::SpacedPrefixed {
+                            // yes this leaks memory, but it should not be much
+                            prefix: prefix.leak(),
+                        }
+                    } else {
+                        ClassStyle::Spaced
+                    },
+                );
+                for line in LinesWithEndings::from(&code) {
+                    generator
+                        .parse_html_for_line_which_includes_newline(line)
+                        .into_lua_err()
+                        .context("Failed to parse line")?;
+                }
+                Ok(generator.finalize())
+            },
+        )?,
+    )?;
+
+    // read a file
+    globals.set(
+        "readfile",
+        lua.create_function(|lua, path: String| {
+            let path = RelativePathBuf::from(path);
+            let data = fs::read(path.to_path("."))
+                .into_lua_err()
+                .context(format!("Could not read file `{}`", path))?;
+
+            // this is a string, but lua strings can represent any type of data
+            lua.create_string(data)
+        })?,
+    )?;
+
+    // escape html
+    globals.set(
+        "escapehtml",
+        lua.create_function(|_, html: String| Ok(escape_html(&html)))?,
+    )?;
+
+    // emit a file TODO
+
+    // list files in a directory TODO
+    globals.set(
+        "listfiles",
+        lua.create_function(|lua, path: String| {
+            let path = RelativePathBuf::from(path);
+            let res = lua.create_table()?;
+            for entry in path
+                .to_path(".")
+                .read_dir()
+                .into_lua_err()
+                .context(format!("Failed to list files in `{}`", path))?
+            {
+                let entry = entry
+                    .into_lua_err()
+                    .context(format!("Failed to list files in `{}`", path))?;
+
+                // if it's a file, add
+                if entry
+                    .file_type()
+                    .into_lua_err()
+                    .context(format!("Failed to list files in `{}`", path))?
+                    .is_file()
+                {
+                    res.push(entry.file_name().into_string().map_err(|x| {
+                        mlua::Error::external(format!(
+                            "Could not convert filename `{}` to a utf8 string",
+                            x.to_string_lossy()
+                        ))
+                    })?)?;
+                }
+            }
+            Ok(res)
+        })?,
+    )?;
+
+    // list directories in a directory TODO
+    globals.set(
+        "listdirs",
+        lua.create_function(|lua, path: String| {
+            let path = RelativePathBuf::from(path);
+            let res = lua.create_table()?;
+            for entry in path
+                .to_path(".")
+                .read_dir()
+                .into_lua_err()
+                .context(format!("Failed to list directories in `{}`", path))?
+            {
+                let entry = entry
+                    .into_lua_err()
+                    .context(format!("Failed to list directories in `{}`", path))?;
+
+                // if it's a file, add
+                if entry
+                    .file_type()
+                    .into_lua_err()
+                    .context(format!("Failed to list directories in `{}`", path))?
+                    .is_dir()
+                {
+                    res.push(entry.file_name().into_string().map_err(|x| {
+                        mlua::Error::external(format!(
+                            "Could not convert filename `{}` to a utf8 string",
+                            x.to_string_lossy()
+                        ))
+                    })?)?;
+                }
+            }
+            Ok(res)
+        })?,
+    )?;
+
+    // subset a font TODO
+
+    // template a file TODO
+
+    // template a minimark file TODO
+
+    // highlight code TODO
+
+    // compile mathml TODO
 
     // if fennel is enabled, add fennel
     if config.fennel {
@@ -134,23 +317,47 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // output directory, as we want to ignore this one
     let out_dir = RelativePathBuf::from(&config.output_dir);
 
-    // TODO: consider setup script?
+    // pattterns to ignore
+    let to_ignore = config
+        .ignore
+        .iter()
+        .map(|x| {
+            Pattern::new(x)
+                .into_lua_err()
+                .context(format!("Failed to make glob pattern `{}`", x))
+        })
+        // stable try_collect
+        .try_fold(Vec::new(), |mut v, p| {
+            v.push(p?);
+            Ok::<Vec<_>, mlua::Error>(v)
+        })?;
 
-    // load syntax highlighting
-    // default one, has a good set of languages already
-    let builtin_highlights = SyntaxSet::load_defaults_newlines();
-    let mut external_highlights = SyntaxSetBuilder::new();
-
-    // load the ones from the config file
-    for path in config.syntaxes.iter() {
-        external_highlights
-            .add_from_folder(path, true)
-            .into_lua_err()
-            .context("Failed to load syntaxes from folder `{path}`")?;
-    }
-
-    // build it
-    let external_highlights = external_highlights.build();
+    // setup script
+    let post_process = if let Some(setup) = &config.setup {
+        let path = RelativePathBuf::from(setup);
+        let continuation: Value = match path.extension() {
+            Some("lua") => lua.load(path.to_path(".")).eval()?,
+            Some("fnl") => {
+                let code = fs::read_to_string(path.to_path("."))
+                    .into_lua_err()
+                    .context(format!("Could not load fennel file `{}`", path))?;
+                let name = path.as_str();
+                lua.load(
+                    chunk! { require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })},
+                )
+                .eval()?
+            }
+            Some(_) | None => {
+                return Err(mlua::Error::external(format!(
+                    "File `{}` is not a lua or fennel file, and can't be run as setup script",
+                    path
+                )));
+            }
+        };
+        Some(continuation)
+    } else {
+        None
+    };
 
     // files to process, in that order
     let mut process = Vec::new();
@@ -159,7 +366,15 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut stack = vec![RelativePathBuf::new()];
     while let Some(path) = stack.pop() {
         // skip if this path is in the skippable list
-        if path.starts_with(&out_dir) || path == "site.conf" {
+        if path.starts_with(&out_dir)
+            || path == "site.conf"
+            || config
+                .setup
+                .as_ref()
+                .map(|x| x.as_str() == path)
+                .unwrap_or(false)
+            || to_ignore.iter().any(|x| x.matches(path.as_str()))
+        {
             continue;
         // if it's a directory, read all directories
         } else if path.to_path(".").is_dir() {
@@ -316,6 +531,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             files.insert(path.clone(), res.clone().into_bytes());
         }
     }
+
+    // TODO: complete post-processing?
+    // TODO: see how to handle emitted files, I assume only deal with subsetted fonts?
 
     // do font subsetting
     // TODO

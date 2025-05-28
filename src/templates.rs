@@ -1,7 +1,8 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, iter::repeat};
 
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, Result, Value, chunk};
+use unicode_width::UnicodeWidthStr;
 
 use crate::conf::Config;
 
@@ -69,8 +70,16 @@ pub(crate) fn template(
                 out.push(c);
             }
         } else if mode == ParseMode::Lua {
-            // TODO: keep track of number of whitespace so we can push that to the front, in order to set the line number
-            let mut code = String::new();
+            // add extra whitespace to the start to have the line numbers match up
+            let position = chars.offset();
+            let lines = content[..position].chars().filter(|x| *x == '\n').count();
+            let width = content[..position]
+                .split_once('\n')
+                .map(|x| x.1)
+                .unwrap_or(&content[..position])
+                .width();
+            let mut code =
+                String::from_iter(repeat('\n').take(lines).chain(repeat(' ').take(width)));
 
             // parse the string
             while let Some((_, c)) = chars.next() {
@@ -105,7 +114,16 @@ pub(crate) fn template(
             // return to normal parsing
             mode = ParseMode::Raw;
         } else if mode == ParseMode::Fennel {
-            let mut code = String::new();
+            // add extra whitespace to the start to have the line numbers match up
+            let position = chars.offset();
+            let lines = content[..position].chars().filter(|x| *x == '\n').count();
+            let width = content[..position]
+                .split_once('\n')
+                .map(|x| x.1)
+                .unwrap_or(&content[..position])
+                .width();
+            let mut code =
+                String::from_iter(repeat('\n').take(lines).chain(repeat(' ').take(width)));
 
             // parse the string
             while let Some((_, c)) = chars.next() {
@@ -126,7 +144,7 @@ pub(crate) fn template(
 
             // run code
             let result: Value = lua
-                .load(chunk!(require("fennel").eval($code)))
+                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
                 .set_name(format!("={name}"))
                 .eval()?;
 

@@ -86,27 +86,7 @@ fn main() {
 
     // report error
     if let Err(e) = err {
-        print_error("Failed!", &e);
-    }
-}
-
-/// Find the site.conf file
-fn find_working_dir(path: &Path) -> Result<&Path> {
-    if path.file_name() == Some(&OsString::from("site.conf")) {
-        path.parent().ok_or(mlua::Error::external(
-            "site.conf does not have a parent directory",
-        ))
-    } else {
-        for ancestor in path.ancestors() {
-            if ancestor.join("site.conf").exists() {
-                return Ok(ancestor);
-            }
-        }
-
-        Err(mlua::Error::external(format!(
-            "site.conf does not exist in `{}` or any of it's ancestors",
-            path.to_string_lossy()
-        )))
+        print_error("Failed", &e);
     }
 }
 
@@ -134,6 +114,26 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // report success
     println!("Created new site in {:?}", path);
     println!("Run `slsg dev` in the directory to start making your site!");
+}
+
+/// Find the site.conf file
+fn find_working_dir(path: &Path) -> Result<&Path> {
+    if path.file_name() == Some(&OsString::from("site.conf")) {
+        path.parent().ok_or(mlua::Error::external(
+            "site.conf does not have a parent directory",
+        ))
+    } else {
+        for ancestor in path.ancestors() {
+            if ancestor.join("site.conf").exists() {
+                return Ok(ancestor);
+            }
+        }
+
+        Err(mlua::Error::external(format!(
+            "site.conf does not exist in `{}` or any of it's ancestors",
+            path.to_string_lossy()
+        )))
+    }
 }
 
 /// Build an existing site
@@ -177,7 +177,9 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
 
     // clear the output
     // only clear if it's allowed, or it's the output path
-    if force_clear && output_path.is_dir() || output_path == path.join(&config.output_dir) {
+    if force_clear && output_path.is_dir()
+        || output_path.is_dir() && output_path == path.join(&config.output_dir)
+    {
         remove_dir_all(&output_path)
             .into_lua_err()
             .context(format!(
@@ -191,7 +193,7 @@ fn build(pargs: &mut pico_args::Arguments) -> Result<()> {
         .unwrap_or(false)
     {
         return Err(mlua::Error::external(format!(
-            "Output directory `{}` is not empty",
+            "Output directory `{}` is not empty, use --force to overwrite",
             output_path.to_string_lossy()
         )));
     }
