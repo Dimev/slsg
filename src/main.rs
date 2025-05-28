@@ -310,7 +310,7 @@ fn theme(mut pargs: pico_args::Arguments) -> Result<()> {
     let name: String = pargs
         .free_from_str()
         .into_lua_err()
-        .context("Failed to get theme name from arguments")?;
+        .context("Failed to get theme name from arguments\nRun with an arbitrary name to see all available themes")?;
 
     let directory: Option<String> = pargs
         .opt_free_from_str()
