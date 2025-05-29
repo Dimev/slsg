@@ -229,7 +229,7 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         ))?;
 
     // generate the site,
-    let site = generate(false).context("Failed to generate site")?;
+    let site = generate(false)?;//.context("Failed to generate site")?;
     for (file_path, contents) in site.files.into_iter() {
         // create the directory for it
         create_dir_all(

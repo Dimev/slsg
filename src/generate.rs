@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     sync::Arc,
 };
@@ -13,7 +13,7 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-use crate::{conf::Config, templates::template};
+use crate::{conf::Config, subset::subset_font, templates::template};
 
 trait DoubleFileExt {
     fn has_double_ext(&self, ext: &str) -> bool;
@@ -160,7 +160,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         "highlight",
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
-                // TODO: way to select between highlight modes (classed, classed prefix, or theme)
                 let (syn, set) = if let Some(syn) = hl.find_syntax_by_name(&language) {
                     (syn, &hl)
                 } else if let Some(syn) = ext.find_syntax_by_name(&language) {
@@ -288,16 +287,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             Ok(res)
         })?,
     )?;
-
-    // subset a font TODO
-
-    // template a file TODO
-
-    // template a minimark file TODO
-
-    // highlight code TODO
-
-    // compile mathml TODO
 
     // if fennel is enabled, add fennel
     if config.fennel {
@@ -487,12 +476,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
         // .subset second ext? subset
         else if path.has_double_ext("subset") {
-            let path = path
-                .without_double_ext()
-                .ok_or(mlua::Error::external(format!(
-                    "Expected path `{}` to have a second `.subset` extension",
-                    path
-                )))?;
             to_subset.push(path);
         }
         // else? emit normally
@@ -532,11 +515,53 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
     }
 
-    // TODO: complete post-processing?
-    // TODO: see how to handle emitted files, I assume only deal with subsetted fonts?
+    // complete post-processing
+    if let Some(fun) = post_process {
+        if let Some(fun) = fun.as_function() {
+            fun.call::<()>(())?;
+        } else if let Some(fun) = fun.as_table() {
+            fun.call::<()>(())?;
+        } else if let Some(fun) = fun.as_userdata() {
+            fun.call::<()>(())?;
+        }
+    }
 
     // do font subsetting
-    // TODO
+    // find what characters we have
+    let mut charset = BTreeSet::new();
+    for (path, file) in files.iter() {
+        // only work on html files
+        if path.extension() == Some("htm") || path.extension() == Some("html") {
+            // interpret as utf8
+            let string = str::from_utf8(&file).into_lua_err().context(format!(
+                "Failed to get utf8 characters from file `{}`",
+                path
+            ))?;
+
+            for c in string.chars() {
+                charset.insert(c);
+            }
+        }
+    }
+
+    // subset fonts
+    for path in to_subset {
+        let font = fs::read(path.to_path("."))
+            .into_lua_err()
+            .context(format!("Failed to read file `{}`", path))?;
+        let subsetted = if config.subset {
+            subset_font(&font, &charset).context(format!("Failed to subset font `{}`", path))?
+        } else {
+            font
+        };
+        let path = path
+            .without_double_ext()
+            .ok_or(mlua::Error::external(format!(
+                "Expected path `{}` to have a second `.subset` extension",
+                path
+            )))?;
+        files.insert(path, subsetted);
+    }
 
     // go over all files, process them if needed
     Ok(Site {

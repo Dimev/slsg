@@ -13,7 +13,7 @@ use allsorts::{
 use mlua::{ErrorContext, ExternalResult, Result};
 
 /// Subset a font
-pub(crate) fn subset_font(file: &[u8], chars: BTreeSet<char>) -> Result<Vec<u8>> {
+pub(crate) fn subset_font(file: &[u8], chars: &BTreeSet<char>) -> Result<Vec<u8>> {
     // from https://github.com/yeslogic/allsorts-tools/blob/master/src/subset.rs
     let font_file = ReadScope::new(file).read::<FontData>().into_lua_err()?;
     let font_provider = font_file.table_provider(0).into_lua_err()?;
