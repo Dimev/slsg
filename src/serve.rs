@@ -8,7 +8,7 @@ use std::{
         mpsc::channel,
     },
     thread::spawn,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use notify::Watcher;
@@ -54,7 +54,13 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
     // detect changes, we only care when it's changed, and what version it was changed to
     // version allows the other side to detect what version we are on since serving started
     // this means it can reload if the server stops and then starts again, for whatever reason
-    let version = Arc::new(AtomicUsize::new(0));
+    // also, use a "random" number for this
+    let version = Arc::new(AtomicUsize::new(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|x| x.duration())
+            .as_secs() as usize,
+    ));
     let changed = Arc::new(AtomicBool::new(false));
     let changed_clone = changed.clone();
     let version_clone = version.clone();
