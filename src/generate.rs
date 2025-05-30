@@ -529,6 +529,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // do font subsetting
     // find what characters we have
     let mut charset = BTreeSet::new();
+    // load from extra
+    for c in config.extra.chars() {
+        charset.insert(c);
+    }
+
+    // load from files
     for (path, file) in files.iter() {
         // only work on html files
         if path.extension() == Some("htm") || path.extension() == Some("html") {

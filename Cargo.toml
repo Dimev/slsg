@@ -9,10 +9,10 @@ categories = ["web-programming", "template-engine", "command-line-utilities"]
 edition = "2024"
 
 [dependencies]
-allsorts = "0.15.1"
 crossterm = "0.29.0"
 ctrlc = "3.4.7"
 glob = "0.3.2"
+hb-subset = "0.3.0"
 latex2mathml = "0.2.3"
 mlua = { version = "0.10.0", features = ["luajit", "macros"] }
 notify = "8.0.0"
