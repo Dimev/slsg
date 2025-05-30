@@ -20,6 +20,7 @@ mod print;
 mod serve;
 mod subset;
 mod templates;
+mod minimark;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
