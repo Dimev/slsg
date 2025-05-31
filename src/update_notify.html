@@ -1,5 +1,5 @@
-<!-- Update notify script, inserteb by SLSG, won't be added in the final build -->
 <script>
+  // SLSG update notify script, not included in final build
   const ver = "{version}";
   const src = new EventSource("/{path}");
   // reload when the version differs, or notify when the connection closes
@@ -12,6 +12,7 @@
   position: absolute; bottom: 32px; right: 32px;
   font-family: sans-serif; border-left: solid #c22 4px; padding: 12px;
   box-shadow: 4px 4px 16px #aaa">
+  <!-- SLSG update notify error, not included in final build -->
   <h1 style="font-size: 1.2em">Update notification failed!</h1>
   <p>Did the server stop?</p>
 </div>

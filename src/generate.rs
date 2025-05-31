@@ -13,7 +13,7 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-use crate::{conf::Config, subset::subset_font, templates::template};
+use crate::{conf::Config, minimark::minimark, subset::subset_font, templates::template};
 
 trait DoubleFileExt {
     fn has_double_ext(&self, ext: &str) -> bool;
@@ -144,7 +144,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         external_highlights
             .add_from_folder(path, true)
             .into_lua_err()
-            .context("Failed to load syntaxes from folder `{path}`")?;
+            .with_context(|_| format!("Failed to load syntaxes from folder `{path}`"))?;
     }
 
     // build it
@@ -203,7 +203,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             let path = RelativePathBuf::from(path);
             let data = fs::read(path.to_path("."))
                 .into_lua_err()
-                .context(format!("Could not read file `{}`", path))?;
+                .with_context(|_| format!("Could not read file `{path}`"))?;
 
             // this is a string, but lua strings can represent any type of data
             lua.create_string(data)
@@ -218,7 +218,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
     // emit a file TODO
 
-    // list files in a directory TODO
     globals.set(
         "listfiles",
         lua.create_function(|lua, path: String| {
@@ -228,17 +227,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 .to_path(".")
                 .read_dir()
                 .into_lua_err()
-                .context(format!("Failed to list files in `{}`", path))?
+                .with_context(|_| format!("Failed to list files in `{path}`"))?
             {
                 let entry = entry
                     .into_lua_err()
-                    .context(format!("Failed to list files in `{}`", path))?;
+                    .with_context(|_| format!("Failed to list files in `{path}`"))?;
 
                 // if it's a file, add
                 if entry
                     .file_type()
                     .into_lua_err()
-                    .context(format!("Failed to list files in `{}`", path))?
+                    .with_context(|_| format!("Failed to list files in `{path}`"))?
                     .is_file()
                 {
                     res.push(entry.file_name().into_string().map_err(|x| {
@@ -253,7 +252,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?,
     )?;
 
-    // list directories in a directory TODO
     globals.set(
         "listdirs",
         lua.create_function(|lua, path: String| {
@@ -263,17 +261,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 .to_path(".")
                 .read_dir()
                 .into_lua_err()
-                .context(format!("Failed to list directories in `{}`", path))?
+                .with_context(|_| format!("Failed to list directories in `{path}`"))?
             {
                 let entry = entry
                     .into_lua_err()
-                    .context(format!("Failed to list directories in `{}`", path))?;
+                    .with_context(|_| format!("Failed to list directories in `{path}`"))?;
 
                 // if it's a file, add
                 if entry
                     .file_type()
                     .into_lua_err()
-                    .context(format!("Failed to list directories in `{}`", path))?
+                    .with_context(|_| format!("Failed to list directories in `{path}`"))?
                     .is_dir()
                 {
                     res.push(entry.file_name().into_string().map_err(|x| {
@@ -313,7 +311,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         .map(|x| {
             Pattern::new(x)
                 .into_lua_err()
-                .context(format!("Failed to make glob pattern `{}`", x))
+                .with_context(|_| format!("Failed to make glob pattern `{x}`"))
         })
         // stable try_collect
         .try_fold(Vec::new(), |mut v, p| {
@@ -329,7 +327,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             Some("fnl") => {
                 let code = fs::read_to_string(path.to_path("."))
                     .into_lua_err()
-                    .context(format!("Could not load fennel file `{}`", path))?;
+                    .with_context(|_| format!("Could not load fennel file `{path}`"))?;
                 let name = path.as_str();
                 lua.load(
                     chunk! { require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })},
@@ -374,7 +372,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             // directory? recurse
             for entry in fs::read_dir(path.to_path("."))
                 .into_lua_err()
-                .context("Could not read directory")?
+                .with_context(|_| format!("Could not read directory `{path}`"))?
             {
                 let entry = entry
                     .into_lua_err()
@@ -445,9 +443,29 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             if !path.has_double_ext("fnl") && !path.has_double_ext("lua") {
                 return Err(mlua::Error::external(format!(
                     "Minimark (.mmk) files need to be templated, and thus end with a `.lua.mmk` or `.fnl.mmk` extension"
-                )).context(format!("Failed to template file `{}`", path)));
+                )).with_context(|_| format!("Failed to template file `{path}`")));
             }
-            todo!("Parse minimark");
+            let (res, functions) = minimark(
+                &lua,
+                &fs::read_to_string(path.to_path("."))
+                    .into_lua_err()
+                    .with_context(|_| format!("Failed to read `{path}`"))?,
+                path.as_str(),
+                &config,
+            )
+            .with_context(|_| format!("Failed to template file `{path}`"))?;
+
+            // make the final path
+            let path =
+                path.with_extension("html")
+                    .without_double_ext()
+                    .ok_or(mlua::Error::external(format!(
+                        "Expected path `{path}` to have a second `.lua` or `.fnl` extension"
+                    )))?;
+            let path = path.html_to_index().unwrap_or(path);
+
+            // template it
+            to_template.push_back((path, res, functions));
         }
         // .fnl or .lua second ext? template
         else if path.has_double_ext("fnl") || path.has_double_ext("lua") {
@@ -456,11 +474,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 &lua,
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
-                    .context(format!("Failed to read `{}`", path))?,
+                    .with_context(|_| format!("Failed to read `{path}`"))?,
                 path.as_str(),
                 &config,
             )
-            .context(format!("Failed to template file `{}`", path))?;
+            .with_context(|_| format!("Failed to template file `{path}`"))?;
 
             // make the final path
             let path = path
@@ -476,7 +494,13 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
         // .subset second ext? subset
         else if path.has_double_ext("subset") {
-            to_subset.push(path);
+            if path.extension() != Some("ttf") || path.extension() != Some("otf") {
+                return Err(mlua::Error::external(format!(
+                    "Could not subset font `{path}`, as it is not an otf or ttf font",
+                )));
+            } else {
+                to_subset.push(path);
+            }
         }
         // else? emit normally
         else {
@@ -488,14 +512,10 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 path.clone(),
                 fs::read(path.to_path("."))
                     .into_lua_err()
-                    .context(format!("Failed to read file `{}`", path))?,
+                    .with_context(|_| format!("Failed to read file `{path}`"))?,
             );
         }
     }
-
-    // filter out all paths to ignore
-    // with globbing
-    // TODO
 
     // apply templating
     while let Some((path, mut res, mut functions)) = to_template.pop_front() {
@@ -539,10 +559,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         // only work on html files
         if path.extension() == Some("htm") || path.extension() == Some("html") {
             // interpret as utf8
-            let string = str::from_utf8(&file).into_lua_err().context(format!(
-                "Failed to get utf8 characters from file `{}`",
-                path
-            ))?;
+            let string = str::from_utf8(&file)
+                .into_lua_err()
+                .with_context(|_| format!("Failed to get utf8 characters from file `{path}`",))?;
 
             for c in string.chars() {
                 charset.insert(c);
@@ -554,17 +573,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     for path in to_subset {
         let font = fs::read(path.to_path("."))
             .into_lua_err()
-            .context(format!("Failed to read file `{}`", path))?;
+            .with_context(|_| format!("Failed to read file `{path}`"))?;
         let subsetted = if config.subset {
-            subset_font(&font, &charset).context(format!("Failed to subset font `{}`", path))?
+            subset_font(&font, &charset)
+                .with_context(|_| format!("Failed to subset font `{path}`"))?
         } else {
             font
         };
         let path = path
             .without_double_ext()
             .ok_or(mlua::Error::external(format!(
-                "Expected path `{}` to have a second `.subset` extension",
-                path
+                "Expected path `{path}` to have a second `.subset` extension",
             )))?;
         files.insert(path, subsetted);
     }

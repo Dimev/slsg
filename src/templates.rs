@@ -6,17 +6,6 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::conf::Config;
 
-// mode to parse next
-// Fennel does not support '' and [[]] strings
-#[derive(PartialEq, Eq)]
-enum ParseMode {
-    Raw,
-    Fennel,
-    Lua,
-    InlineMath,
-    BlockMath,
-}
-
 pub(crate) fn template(
     lua: &Lua,
     content: &str,
@@ -25,51 +14,21 @@ pub(crate) fn template(
 ) -> Result<(String, VecDeque<Value>)> {
     let mut out = String::with_capacity(content.len());
     let mut functions = VecDeque::new();
-
     let mut chars = content.char_indices();
-    let mut mode = ParseMode::Raw;
+
     while let Some((_, c)) = chars.next() {
-        if mode == ParseMode::Raw {
-            // open tag and a ?lua? parse lua
-            if c == '<' && chars.as_str().starts_with("?lua") {
-                if !conf.lua {
-                    return Err(mlua::Error::external(
-                        "Found a lua code block, but lua is not enabled in `site.conf`",
-                    ));
-                }
-                mode = ParseMode::Lua;
-                chars.next();
-                chars.next();
-                chars.next();
+        // open tag and a ?lua? parse lua
+        if c == '<' && chars.as_str().starts_with("?lua") {
+            if !conf.lua {
+                return Err(mlua::Error::external(
+                    "Found a lua code block, but lua is not enabled in `site.conf`",
+                ));
             }
-            // open tag and a ?fnl? parse fennel
-            else if c == '<' && chars.as_str().starts_with("?fnl") {
-                if !conf.fennel {
-                    return Err(mlua::Error::external(
-                        "Found a fennel code block, but fennel is not enabled in `site.conf`",
-                    ));
-                }
-                mode = ParseMode::Fennel;
-                chars.next();
-                chars.next();
-                chars.next();
-            }
-            // block math
-            else if c == '<' && chars.as_str().starts_with("?$$") {
-                mode = ParseMode::BlockMath;
-                chars.next();
-                chars.next();
-            } else if c == '<' && chars.as_str().starts_with("?$") {
-                mode = ParseMode::InlineMath;
-                chars.next();
-                chars.next();
-            }
-            // inline math
-            // else, simply push the character
-            else {
-                out.push(c);
-            }
-        } else if mode == ParseMode::Lua {
+            chars.next();
+            chars.next();
+            chars.next();
+            chars.next();
+
             // add extra whitespace to the start to have the line numbers match up
             let position = chars.offset();
             let lines = content[..position].chars().filter(|x| *x == '\n').count();
@@ -110,10 +69,19 @@ pub(crate) fn template(
             if result.is_function() || result.is_table() {
                 functions.push_back(result.clone());
             }
+        }
+        // open tag and a ?fnl? parse fennel
+        else if c == '<' && chars.as_str().starts_with("?fnl") {
+            if !conf.fennel {
+                return Err(mlua::Error::external(
+                    "Found a fennel code block, but fennel is not enabled in `site.conf`",
+                ));
+            }
+            chars.next();
+            chars.next();
+            chars.next();
+            chars.next();
 
-            // return to normal parsing
-            mode = ParseMode::Raw;
-        } else if mode == ParseMode::Fennel {
             // add extra whitespace to the start to have the line numbers match up
             let position = chars.offset();
             let lines = content[..position].chars().filter(|x| *x == '\n').count();
@@ -157,32 +125,11 @@ pub(crate) fn template(
             if result.is_function() || result.is_table() {
                 functions.push_back(result.clone());
             }
-
-            // return to normal parsing
-            mode = ParseMode::Raw;
-        } else if mode == ParseMode::InlineMath {
-            let mut math = String::new();
-
-            // parse the string
-            while let Some((_, c)) = chars.next() {
-                // closing ?>, stop
-                if c == '$' && chars.as_str().starts_with("?>") {
-                    chars.next();
-                    chars.next();
-                    break;
-                } else {
-                    math.push(c);
-                }
-            }
-
-            let mathml = latex_to_mathml(&math, DisplayStyle::Inline)
-                .into_lua_err()
-                .context("Failed to compile math")?;
-            out.push_str(&mathml);
-
-            // return to normal parsing
-            mode = ParseMode::Raw;
-        } else if mode == ParseMode::BlockMath {
+        }
+        // block math
+        else if c == '<' && chars.as_str().starts_with("?$$") {
+            chars.next();
+            chars.next();
             let mut math = String::new();
 
             // parse the string
@@ -202,9 +149,33 @@ pub(crate) fn template(
                 .into_lua_err()
                 .context("Failed to compile math")?;
             out.push_str(&mathml);
+        }
+        // inline math
+        else if c == '<' && chars.as_str().starts_with("?$") {
+            chars.next();
+            chars.next();
+            let mut math = String::new();
 
-            // return to normal parsing
-            mode = ParseMode::Raw;
+            // parse the string
+            while let Some((_, c)) = chars.next() {
+                // closing ?>, stop
+                if c == '$' && chars.as_str().starts_with("?>") {
+                    chars.next();
+                    chars.next();
+                    break;
+                } else {
+                    math.push(c);
+                }
+            }
+
+            let mathml = latex_to_mathml(&math, DisplayStyle::Inline)
+                .into_lua_err()
+                .context("Failed to compile math")?;
+            out.push_str(&mathml);
+        }
+        // else, simply push the character
+        else {
+            out.push(c);
         }
     }
 

@@ -5,7 +5,6 @@ use mlua::{ErrorContext, ExternalResult, Result};
 
 /// Subset a font
 pub(crate) fn subset_font(file: &[u8], chars: &BTreeSet<char>) -> Result<Vec<u8>> {
-    // TODO: error out on a woff font?
     let font = Blob::from_bytes(file)
         .into_lua_err()
         .context("Failed to read font bytes")?;

@@ -16,11 +16,11 @@ use syntect::{
 
 mod conf;
 mod generate;
+mod minimark;
 mod print;
 mod serve;
 mod subset;
 mod templates;
-mod minimark;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -175,10 +175,12 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
 
     let config = fs::read_to_string(&path.join("site.conf"))
         .into_lua_err()
-        .context(format!(
-            "failed to read `site.conf` in `{}`",
-            &path.to_string_lossy()
-        ))?;
+        .with_context(|_| {
+            format!(
+                "failed to read `site.conf` in `{}`",
+                &path.to_string_lossy()
+            )
+        })?;
 
     let config = Config::parse(&config)?;
 
@@ -191,10 +193,12 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
     {
         remove_dir_all(&output_path)
             .into_lua_err()
-            .context(format!(
-                "Failed to remove content of output directory `{}`",
-                output_path.to_string_lossy()
-            ))?;
+            .with_context(|_| {
+                format!(
+                    "Failed to remove content of output directory `{}`",
+                    output_path.to_string_lossy()
+                )
+            })?;
 
     // else, crash if it's not empty
     } else if read_dir(&output_path)
@@ -210,27 +214,31 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
     // make sure the path exists
     create_dir_all(&output_path)
         .into_lua_err()
-        .context(format!(
-            "Failed to create output directory `{}`",
-            output_path.to_string_lossy()
-        ))?;
+        .with_context(|_| {
+            format!(
+                "Failed to create output directory `{}`",
+                output_path.to_string_lossy()
+            )
+        })?;
 
     // make it canonical
-    let output_path = output_path.canonicalize().into_lua_err().context(format!(
-        "Failed to canonicalize output directory path `{}`",
-        output_path.to_string_lossy()
-    ))?;
+    let output_path = output_path
+        .canonicalize()
+        .into_lua_err()
+        .with_context(|_| {
+            format!(
+                "Failed to canonicalize output directory path `{}`",
+                output_path.to_string_lossy()
+            )
+        })?;
 
     // move to where the main.lua file is
     std::env::set_current_dir(&path)
         .into_lua_err()
-        .context(format!(
-            "Failed to change path to `{}`",
-            path.to_string_lossy()
-        ))?;
+        .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // generate the site,
-    let site = generate(false)?;//.context("Failed to generate site")?;
+    let site = generate(false)?; //.context("Failed to generate site")?;
     for (file_path, contents) in site.files.into_iter() {
         // create the directory for it
         create_dir_all(
@@ -243,18 +251,22 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
                 )))?,
         )
         .into_lua_err()
-        .context(format!(
-            "output path `{}` could not be created",
-            file_path.to_path(&output_path).to_string_lossy()
-        ))?;
+        .with_context(|_| {
+            format!(
+                "output path `{}` could not be created",
+                file_path.to_path(&output_path).to_string_lossy()
+            )
+        })?;
 
         // write the file
         fs::write(file_path.to_path(&output_path), contents)
             .into_lua_err()
-            .context(format!(
-                "Failed to write file `{}`",
-                file_path.to_path(&output_path).to_string_lossy()
-            ))?;
+            .with_context(|_| {
+                format!(
+                    "Failed to write file `{}`",
+                    file_path.to_path(&output_path).to_string_lossy()
+                )
+            })?;
     }
 
     Ok(())
@@ -287,10 +299,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
     // move to where the main.lua file is
     std::env::set_current_dir(&path)
         .into_lua_err()
-        .context(format!(
-            "Failed to change path to `{}`",
-            path.to_string_lossy()
-        ))?;
+        .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // run the development server
     serve::serve(&addr)?;
