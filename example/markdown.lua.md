@@ -21,6 +21,10 @@ local function hello()
 end
 ```
 
+And math!: $1 + 1$
+Block math too!
+$$ 1 + 1 $$
+
 <ul>
 	<li> sus amogus</li>
 	<li> sus amogus</li>

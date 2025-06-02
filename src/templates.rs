@@ -42,14 +42,8 @@ pub(crate) fn template(
 
             // parse the string
             while let Some((_, c)) = chars.next() {
-                // escaped ??>, emit it
-                if c == '?' && chars.as_str().starts_with("?>") {
-                    chars.next();
-                    chars.next();
-                    code.push_str("?>");
-                }
                 // closing ?>, stop
-                else if c == '?' && chars.as_str().starts_with(">") {
+                if c == '?' && chars.as_str().starts_with(">") {
                     chars.next();
                     break;
                 } else {
@@ -95,14 +89,8 @@ pub(crate) fn template(
 
             // parse the string
             while let Some((_, c)) = chars.next() {
-                // escaped ??>, emit it
-                if c == '?' && chars.as_str().starts_with("?>") {
-                    chars.next();
-                    chars.next();
-                    code.push_str("?>");
-                }
                 // closing ?>, stop
-                else if c == '?' && chars.as_str().starts_with(">") {
+                if c == '?' && chars.as_str().starts_with(">") {
                     chars.next();
                     break;
                 } else {
@@ -125,53 +113,6 @@ pub(crate) fn template(
             if result.is_function() || result.is_table() {
                 functions.push_back(result.clone());
             }
-        }
-        // block math
-        else if c == '<' && chars.as_str().starts_with("?$$") {
-            chars.next();
-            chars.next();
-            let mut math = String::new();
-
-            // parse the string
-            while let Some((_, c)) = chars.next() {
-                // closing ?>, stop
-                if c == '$' && chars.as_str().starts_with("$?>") {
-                    chars.next();
-                    chars.next();
-                    chars.next();
-                    break;
-                } else {
-                    math.push(c);
-                }
-            }
-
-            let mathml = latex_to_mathml(&math, DisplayStyle::Block)
-                .into_lua_err()
-                .context("Failed to compile math")?;
-            out.push_str(&mathml);
-        }
-        // inline math
-        else if c == '<' && chars.as_str().starts_with("?$") {
-            chars.next();
-            chars.next();
-            let mut math = String::new();
-
-            // parse the string
-            while let Some((_, c)) = chars.next() {
-                // closing ?>, stop
-                if c == '$' && chars.as_str().starts_with("?>") {
-                    chars.next();
-                    chars.next();
-                    break;
-                } else {
-                    math.push(c);
-                }
-            }
-
-            let mathml = latex_to_mathml(&math, DisplayStyle::Inline)
-                .into_lua_err()
-                .context("Failed to compile math")?;
-            out.push_str(&mathml);
         }
         // else, simply push the character
         else {

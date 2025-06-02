@@ -155,6 +155,8 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let globals = lua.globals();
     globals.set("development", dev)?; // true if we are serving
 
+    // TODO: math
+
     // highlight code
     let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
     globals.set(
