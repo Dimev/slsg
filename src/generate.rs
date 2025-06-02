@@ -13,7 +13,7 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-use crate::{conf::Config, minimark::minimark, subset::subset_font, templates::template};
+use crate::{conf::Config, markdown::markdown, subset::subset_font, templates::template};
 
 trait DoubleFileExt {
     fn has_double_ext(&self, ext: &str) -> bool;
@@ -101,8 +101,9 @@ const INDEX_FILES: &[&str] = &[
     "index.fnl.htm",
     "index.lua.html",
     "index.fnl.html",
-    "index.lua.mmk",
-    "index.fnl.mmk",
+    "index.md",
+    "index.lua.md",
+    "index.fnl.md",
 ];
 
 /// Escape html
@@ -438,20 +439,16 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
     for path in process {
         // is it a minimark file?
-        if path.extension().map(|x| x == "mmk").unwrap_or(false) {
-            // needs to have the double ext
-            if !path.has_double_ext("fnl") && !path.has_double_ext("lua") {
-                return Err(mlua::Error::external(format!(
-                    "Minimark (.mmk) files need to be templated, and thus end with a `.lua.mmk` or `.fnl.mmk` extension"
-                )).with_context(|_| format!("Failed to template file `{path}`")));
-            }
-            let (res, functions) = minimark(
+        if path.extension().map(|x| x == "md").unwrap_or(false) {
+            // parse
+            let (res, functions) = markdown(
                 &lua,
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read `{path}`"))?,
                 path.as_str(),
                 &config,
+                path.has_double_ext("lua") || path.has_double_ext("fnl"),
             )
             .with_context(|_| format!("Failed to template file `{path}`"))?;
 

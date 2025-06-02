@@ -16,7 +16,7 @@ use syntect::{
 
 mod conf;
 mod generate;
-mod minimark;
+mod markdown;
 mod print;
 mod serve;
 mod subset;

@@ -1,19 +1,18 @@
 <?lua
 	local templ = require 'scripts/templates'
-	return templ.page { title = 'Minimark' }
+	return templ.page { title = 'Markdown' }
 ?> 
 
-% This is a comment!
-= This is a paragraph!
+# This is a paragraph!
 Hello world
 We have text!
 
 Next paragraph!
-We have <? <emph>Inline html!</emph> ?>
+We have <emph>Inline html</emph>
 And <?lua "Lua!" ?> and <?fnl "Fennel" ?>
 
 We also have highlights!
-`Mono`, *Bold*, _italic_, and *_combined_*
+`Mono`, **Bold**, *italic*, and ***combined***
 
 And syntax highlights!
 ```lua pre-
@@ -21,3 +20,8 @@ local function hello()
 	print "Hello"
 end
 ```
+
+<ul>
+	<li> sus amogus</li>
+	<li> sus amogus</li>
+</ul>
