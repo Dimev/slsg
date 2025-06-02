@@ -163,6 +163,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         "highlight",
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
+                // finding by name doesn't seem to work?
                 let (syn, set) = if let Some(syn) = hl.find_syntax_by_name(&language) {
                     (syn, &hl)
                 } else if let Some(syn) = ext.find_syntax_by_name(&language) {

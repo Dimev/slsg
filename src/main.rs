@@ -216,6 +216,8 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .with_context(|_| {
             format!(
+                // TODO FAILS! when the thing already exists
+                // TODO yes even with --force
                 "Failed to create output directory `{}`",
                 output_path.to_string_lossy()
             )

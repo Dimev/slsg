@@ -15,10 +15,16 @@ We also have highlights!
 `Mono`, **Bold**, *italic*, and ***combined***
 
 And syntax highlights!
-```lua pre-
+```lua
 local function hello()
 	print "Hello"
 end
+```
+
+```rs
+fn main() {
+	println!("Hello world!");
+}
 ```
 
 And math!: $1 + 1$
@@ -29,3 +35,6 @@ $$ 1 + 1 $$
 	<li> sus amogus</li>
 	<li> sus amogus</li>
 </ul>
+
+More fennel!:
+<?fnl (.. "Hello " " from " " fennel!") ?>
