@@ -5,6 +5,7 @@ use std::{
 };
 
 use glob::Pattern;
+use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
 use relative_path::{RelativePath, RelativePathBuf};
 use syntect::{
@@ -155,7 +156,22 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let globals = lua.globals();
     globals.set("development", dev)?; // true if we are serving
 
-    // TODO: math
+    // math
+    globals.set(
+        "mathml",
+        lua.create_function(move |_, (mathml, inline): (String, Option<bool>)| {
+            latex_to_mathml(
+                &mathml,
+                if inline.unwrap_or(false) {
+                    DisplayStyle::Inline
+                } else {
+                    DisplayStyle::Block
+                },
+            )
+            .into_lua_err()
+            .with_context(|_| format!("Failed to compile math"))
+        })?,
+    )?;
 
     // highlight code
     let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
@@ -164,14 +180,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
                 // finding by name doesn't seem to work?
-                let (syn, set) = if let Some(syn) = hl.find_syntax_by_name(&language) {
+                let (syn, set) = if let Some(syn) = hl.find_syntax_by_token(&language) {
                     (syn, &hl)
-                } else if let Some(syn) = ext.find_syntax_by_name(&language) {
+                } else if let Some(syn) = ext.find_syntax_by_token(&language) {
                     (syn, &ext)
-                } else if let Some(syn) = hl.find_syntax_by_extension(&language) {
-                    (syn, &hl)
-                } else if let Some(syn) = ext.find_syntax_by_extension(&language) {
-                    (syn, &ext)
+                } else if language == "" {
+                    (hl.find_syntax_plain_text(), &hl)
                 } else {
                     return Err(mlua::Error::external(format!(
                         "No syntax found for `{language}`"
@@ -182,7 +196,8 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                     set,
                     if let Some(prefix) = prefix {
                         ClassStyle::SpacedPrefixed {
-                            // yes this leaks memory, but it should not be much
+                            // TODO: prevent leaking memory here
+                            // probably cache this so it wont leak if there's no new ones?
                             prefix: prefix.leak(),
                         }
                     } else {
@@ -222,6 +237,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
     // emit a file TODO
 
+    // list files in directory
     globals.set(
         "listfiles",
         lua.create_function(|lua, path: String| {
@@ -256,6 +272,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?,
     )?;
 
+    // list directories in directory
     globals.set(
         "listdirs",
         lua.create_function(|lua, path: String| {
@@ -551,6 +568,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut charset = BTreeSet::new();
     // load from extra
     for c in config.extra.chars() {
+        // TODO: find the actual proper characters
         charset.insert(c);
     }
 

@@ -21,7 +21,7 @@ local function hello()
 end
 ```
 
-```rs
+```rust
 fn main() {
 	println!("Hello world!");
 }

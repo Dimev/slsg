@@ -346,7 +346,7 @@ fn theme(mut pargs: pico_args::Arguments) -> Result<()> {
             theme,
             if let Some(prefix) = prefix {
                 ClassStyle::SpacedPrefixed {
-                    // yes this leaks memory, but it should not be much
+                    // yes this leaks memory, but it cleans up later because the program stops
                     prefix: prefix.leak(),
                 }
             } else {

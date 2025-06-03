@@ -104,7 +104,7 @@ impl Config {
                         "site.conf:{num}:1: Expected a `key = value` pair"
                     )));
 
-                if key == "dir" {
+                if key == "output" {
                     cfg.output_dir = value.into()
                 } else if key == "allow-lua" {
                     cfg.lua = as_bool?
@@ -211,7 +211,7 @@ mod tests {
     fn parse_config_all() {
         let config = "
             [build]
-            dir = out/
+            output = out/
             allow-fennel = false
             allow-lua = false # we don't want lua
             allow-minimark = false
