@@ -8,7 +8,7 @@ html {
   display: grid;
   place-items: center;
 
-  font-family: sans-serif;
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
 body {
@@ -21,4 +21,31 @@ body {
 
 h1 {
   font-size: 120%;
+}
+
+pre {
+  padding: 1ch;
+  background: #f2f2f2;
+  tab-size: 4;
+}
+
+code {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.comment {
+  color: #999;
+}
+
+.keyword,
+.type {
+  color: #c22;
+}
+
+.name {
+  color: #56c;
+}
+
+.string {
+  color: #181;
 }

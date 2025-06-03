@@ -27,9 +27,9 @@ fn main() {
 }
 ```
 
-And math!: $1 + 1$
+And math!: $T = \int_0^\infty \sqrt{t^2 + h^2 + 2 \cos t h} \; dt$
 Block math too!
-$$ 1 + 1 $$
+$$ T = \int_0^\infty \sqrt{t^2 + h^2 + 2 \cos t h} \; dt $$
 
 <ul>
 	<li> sus amogus</li>

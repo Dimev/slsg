@@ -4,15 +4,15 @@
   const src = new EventSource("/{path}");
   // reload when the version differs, or notify when the connection closes
   src.onmessage = e => e.data != ver && location.reload();
-  src.onerror = e => document.getElementById("very-long-id-for-the-error-div").hidden = false;
+  src.onerror = e => document.getElementById("{path}").hidden = false;
   // cleanup
   window.onbeforeunload = () => src.close();
 </script>
-<div hidden id="very-long-id-for-the-error-div" style="
+<div hidden id="{path}" style="
   position: absolute; bottom: 32px; right: 32px;
   font-family: sans-serif; border-left: solid #c22 4px; padding: 12px;
   background: #fff; box-shadow: 4px 4px 16px #aaa">
   <!-- SLSG update notify error, not included in final build -->
-  <h1 style="font-size: 1.2em">Update notification failed!</h1>
-  <p>Did the server stop?</p>
+  <h1 style="font-size: 1.2rem">Update notification failed!</h1>
+  <p style="font-size: 1rem">Did the server stop?</p>
 </div>
