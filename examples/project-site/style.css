@@ -1,3 +1,21 @@
+/* fonts */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/inter-variable.ttf");
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/inter-variable-italic.ttf");
+}
+
+/* style */
 html {
   margin: 0;
   padding: 0;
@@ -8,7 +26,7 @@ html {
   display: grid;
   place-items: center;
 
-  font-family: Verdana, Geneva, Tahoma, sans-serif;
+  font-family: Inter, sans-serif;
 }
 
 body {
@@ -33,6 +51,7 @@ code {
   font-family: 'Courier New', Courier, monospace;
 }
 
+/* syntax highlighting */
 .comment {
   color: #999;
 }

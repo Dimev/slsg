@@ -30,10 +30,8 @@ pub(crate) fn markdown(
     let mut functions = VecDeque::new();
 
     // parse
-    // TODO: only do lua if apply templating is enabled
     for (event, offset) in Parser::new_ext(content, Options::ENABLE_MATH).into_offset_iter() {
         match event {
-            // inline html, parse and run TODO check if we need to run it
             Event::InlineHtml(html) if html.starts_with("<?lua") && apply_template => {
                 if !conf.lua {
                     return Err(mlua::Error::external(

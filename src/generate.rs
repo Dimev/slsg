@@ -14,7 +14,12 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-use crate::{conf::Config, markdown::markdown, subset::subset_font, templates::template};
+use crate::{
+    conf::Config,
+    font::{chars_from_html, subset_font},
+    markdown::markdown,
+    templates::template,
+};
 
 trait DoubleFileExt {
     fn has_double_ext(&self, ext: &str) -> bool;
@@ -511,7 +516,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
         // .subset second ext? subset
         else if path.has_double_ext("subset") {
-            if path.extension() != Some("ttf") || path.extension() != Some("otf") {
+            if path.extension() != Some("ttf") && path.extension() != Some("otf") {
                 return Err(mlua::Error::external(format!(
                     "Could not subset font `{path}`, as it is not an otf or ttf font",
                 )));
@@ -566,11 +571,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // do font subsetting
     // find what characters we have
     let mut charset = BTreeSet::new();
+
     // load from extra
-    for c in config.extra.chars() {
-        // TODO: find the actual proper characters
-        charset.insert(c);
-    }
+    charset.extend(config.extra.chars());
 
     // load from files
     for (path, file) in files.iter() {
@@ -581,9 +584,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 .into_lua_err()
                 .with_context(|_| format!("Failed to get utf8 characters from file `{path}`",))?;
 
-            for c in string.chars() {
-                charset.insert(c);
-            }
+            // parse the html into chars
+            let chars = chars_from_html(&string)?;
+
+            // and extend
+            charset.extend(chars);
         }
     }
 
@@ -606,9 +611,18 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         files.insert(path, subsetted);
     }
 
-    // go over all files, process them if needed
-    Ok(Site {
-        files,
-        not_found: None,
-    })
+    // set the not found file
+    let not_found = if let Some(path) = config.not_found {
+        Some(
+            files
+                .get(&RelativePathBuf::from(&path))
+                .ok_or_else(|| mlua::Error::external(format!("404 page `{path}` not found")))?
+                .clone(),
+        )
+    } else {
+        None
+    };
+
+    // done
+    Ok(Site { files, not_found })
 }

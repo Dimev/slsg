@@ -15,11 +15,11 @@ use syntect::{
 };
 
 mod conf;
+mod font;
 mod generate;
 mod markdown;
 mod print;
 mod serve;
-mod subset;
 mod templates;
 
 const HELP: &str = "\
@@ -216,8 +216,6 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .with_context(|_| {
             format!(
-                // TODO FAILS! when the thing already exists
-                // TODO yes even with --force
                 "Failed to create output directory `{}`",
                 output_path.to_string_lossy()
             )

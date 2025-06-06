@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
     sync::{
@@ -11,6 +11,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use flate2::{Compression, read::GzEncoder};
 use notify::Watcher;
 use relative_path::RelativePathBuf;
 
@@ -122,14 +123,19 @@ fn respond(
 ) {
     // read the url
     let reader = BufReader::new(&mut stream);
+
+    // entire request
     let request = reader
         .lines()
-        .next()
         .map(|x| x.unwrap_or(String::new()))
-        .unwrap_or(String::new());
+        .take_while(|x| !x.is_empty())
+        .collect::<Vec<_>>();
+
+    // first line, we have the addr here
+    let addr = request.get(0).map(String::as_str).unwrap_or("");
 
     // get the url
-    let file_path = request
+    let file_path = addr
         .trim_start_matches(char::is_alphabetic) // trim GET/POST or similar
         .trim() // trim the space
         .trim_end_matches(|x: char| x.is_numeric() || x == '.') // trim any of the numbers indicating the http version
@@ -142,12 +148,16 @@ fn respond(
     let file_path = file_path.split_once('#').map(|x| x.0).unwrap_or(file_path);
 
     // get the file
-    let (content, status, mime): (Vec<u8>, u16, Option<&str>) = if let Some(file) = site
+    let (mut content, status, mime): (Vec<u8>, u16, Option<&str>) = if let Some(file) = site
         .as_ref()
         .ok()
         .and_then(|x| x.files.get(&RelativePathBuf::from(&file_path)))
     {
-        (file.clone(), 200, get_mime_type(PathBuf::from(&file_path)))
+        (
+            file.clone(),
+            200,
+            get_mime_type(&RelativePathBuf::from(&file_path)),
+        )
     }
     // see if it's on index.html
     else if let Some(file) = site.as_ref().ok().and_then(|x| {
@@ -235,15 +245,37 @@ fn respond(
         String::new()
     };
 
+    // check for compression
+    let compress = can_be_compressed(&RelativePathBuf::from(file_path));
+
     // send the page back
     let response = format!(
-        "HTTP/1.1 {status}\r\nCache-Control: no-store, max-age=0\r\nClear-Site-Data: \"cache\"\r\n{}\r\n",
+        "HTTP/1.1 {status}\r\nCache-Control: no-store, max-age=0\r\nClear-Site-Data: \"cache\"\r\n{}{}\r\n",
         if let Some(mime) = mime {
             format!("Content-Type: {mime}\r\n")
         } else {
             String::new()
+        },
+        if compress {
+            "Content-Encoding: gzip\r\n"
+        } else {
+            ""
         }
     );
+
+    // build the response body
+    // update notify script
+    content.extend_from_slice(update_notify.as_bytes());
+
+    // compression
+    if compress {
+        let stream = content;
+        let mut gz = GzEncoder::new(&stream[..], Compression::best());
+        content = Vec::new();
+        gz.read_to_end(&mut content)
+            .map(|_| ())
+            .unwrap_or_else(|e| print_warning("Failed to compress", &e));
+    }
 
     // write the page back
     stream
@@ -297,10 +329,23 @@ fn reload(
     }
 }
 
+/// should the file be compressed?
+fn can_be_compressed(path: &RelativePathBuf) -> bool {
+    let Some(ext) = path.extension() else {
+        return false;
+    };
+
+    [
+        "htm", "html", "css", "js", "mjs", "svg", "json", "xml", // common text formats
+        "otf", "ttf", // fonts
+    ]
+    .contains(&ext)
+}
+
 /// Get a mime type from a file path
-fn get_mime_type(path: PathBuf) -> Option<&'static str> {
+fn get_mime_type(path: &RelativePathBuf) -> Option<&'static str> {
     // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
-    match path.extension()?.to_str()? {
+    match path.extension()? {
         "aac" => Some("audio/aac"),
         "abw" => Some("application/x-abiword"),
         "apng" => Some("image/apng"),

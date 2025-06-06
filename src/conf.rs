@@ -17,9 +17,6 @@ pub(crate) struct Config {
     /// Whether to enable fennel (<?fnl ... ?>), true by default
     pub fennel: bool,
 
-    /// Whether to enable minimark (.mmk files, and <?mmk ?>), true by default
-    pub minimark: bool,
-
     /// Whether to enable lua (<?lua ... ?>), true by default
     pub lua: bool,
 
@@ -31,9 +28,6 @@ pub(crate) struct Config {
 
     /// Setup script to run first
     pub setup: Option<String>,
-    // TODO: after build script? finalize? or have it just call whatever the build script returns
-
-    // TODO: compression? https? cors?
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -54,7 +48,6 @@ impl Config {
             output_dir: "dist/".into(),
             not_found: None,
             fennel: true,
-            minimark: true,
             lua: true,
             subset: true,
             extra: String::new(),
@@ -110,8 +103,6 @@ impl Config {
                     cfg.lua = as_bool?
                 } else if key == "allow-fennel" {
                     cfg.fennel = as_bool?
-                } else if key == "allow-minimark" {
-                    cfg.minimark = as_bool?
                 } else if key == "setup" {
                     cfg.setup = Some(value.into());
                 } else {
@@ -214,7 +205,6 @@ mod tests {
             output = out/
             allow-fennel = false
             allow-lua = false # we don't want lua
-            allow-minimark = false
             setup = script.lua
 
             [ignore]
@@ -237,7 +227,6 @@ mod tests {
 
         assert_eq!(cfg.fennel, false);
         assert_eq!(cfg.lua, false);
-        assert_eq!(cfg.minimark, false);
         assert_eq!(cfg.output_dir, "out/".to_string());
         assert_eq!(cfg.not_found, Some("404.html".to_string()));
         assert_eq!(

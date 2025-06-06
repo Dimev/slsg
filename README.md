@@ -1,96 +1,71 @@
 # SLSG
 Scriptable Lua Site Generator
 
-## How it works (Soon:tm:):
-Generated site is output to `dist/`.
-The project root is scanned for luamark (`*.lmk`) files.
-`name.lmk` and `name/index.lmk` are treated the same.
-`main.lua` is then run using the meta information from the files found.
-`main.lua` is expected to output the table of templates to use. A template is
-a function that has `self` as state, and must return html.
+## Instead of templating, there is lua (or fennel)
+Write your files in normal markdown or html. When a file has a \*.lua.\* in it's
+extension, it will be processed. In this casy, any `<?lua ... ?>` is interpreted
+as lua, and any `<?fnl ... ?>` is interpreted as Fennel. In markdown files, this
+is done by replacing any inline and block html that forms a processing instruction.
 
-## Templates:
-Templates are methods called on a page when used. The page has the following properties:
-- `meta`: the meta information given in the page.
-- `path`: path of the current page, without index.lmk
-- `context`: An empty table that is reused within the page.
-- `adjacent`: Table of (path, { meta, posts }) for adjacent pages.
-- `root`: Table of (path, { meta, posts }) for the root page.
+Any number or string that is returned from `<?lua ... ?>` and `<?fnl ... ?>`
+expressions are added into the resulting file.
 
-## Api:
-Other API functions are provided
-- `load_highlighters(path)`: load syntect highlighters in the given path
-- `highlight(lang, theme, code)`: highlight the given code with the language and theme
-- `compile_tex(tex, inline)`: compile tex to MathML, block (default) or inline if inline is true
-- `compile_sass(path)`: compile the sass file at the given path
-- `use(path)`: use the file at the given path.
-- `usehtml(name, html)`: use the given html element under the given name
-- `useraw(name, content)`: use the given content raw
-- `read(path)`: read the given file to a string
+If a function or table is returned, this function is called after templating is
+done, with the entire text in the file. The resulting string from the function is
+then used as the new file content, or is called again if it is a function or table.
 
-## Example:
-src/index.lmk:
+## TeX Math
+Any `$...$` and `$$...$$` in markdown files are interpreted as TeX math, and converted
+to mathml.
+
+## Syntax highlighting
+Any code block in markdown is highlighted using syntect. Other languages can be loaded
+via the config file.
+
+## File renaming
+Any `[name].htm` and `[name].html` files are automatically renamed to
+`[name]/index.htm` and `[name]/index.html`
+
+## Also, font subsetting!
+Any `*.ttf` or `*.otf` font can be subset, by changing the extension to `*.subset.ttf`
+or `*.subset.otf`
+
+## Available functions
+The following functions and variables are available from lua and fennel:
+- ```lua
+  dev = true
+  ```
+  Set to true if run with the development server, set to false otherwise
+- ```lua
+  function mathml(tex, inline) end
+  ```
+  Compile the given tex to mathml. If inline is true, the resulting mathml is
+  inline instead of block.
+- ```lua
+  function highlight(language, code, prefix) end
+  ```
+  Highlight the given code
+
+## Config file
+This can all be controlled with the `site.conf` config file, which has the following
+defaults:
+```ini
+[build]
+output = dist/
+allow-fennel = true # allow lua, set to false to crash if <?lua ... ?> is found
+allow-lua = true # same for fennel
+# setup = script.lua # setup script, run before processing
+
+[ignore]
+# scripts/* # files to ignore when building the site
+
+[highlight]
+# syntax/ # where to find *.tmLanuguage files for highlighting
+
+[dev]
+# not-found = 404.html # page to use as 404 when developing
+
+[font]
+subset = true # whether to subset fonts
+# extra = abc # add these characters as extra to subset
 ```
-% Use a template function called `default`
-% This is the same as not specifying any template
-@template = default
-@title = Hello world!
-@date = 15-03-2025
-
-% String, to support multiline
-@desc = "A hello world!
-Now with multiple lines!"
-
-= Hello world
-This is some text!
-_italic!_ *Bold!* `Monospace`
-Next up, an image!
-
-@image(the SLSG logo; logo.svg)
-
-Inline macros are possible too!
-If not seperated by newlines, they are put inside the `<p>` element
-like so! @link(Home; /)
-
-Next up, a codeblock!
-
-@begin code(lua)
--- Templates are defined as follows:
-local templates
-function templates:page(content)
-  return h {
-    h.head {
-      h.title { self.meta.title }
-    },
-    h.body {
-      h.h1 { self.meta.title },
-      h.time { class = 'time-small`, page.meta.date }
-      h.p { self.meta.desc },
-      h.article { self.content }
-    }
-  }
-end
-
--- Smaller templates, for things like images
-function templates:image(alt, src)
-  -- use the image
-  -- Looks for the file next to the luamark file if it's relative,
-  -- or the project root if absolute
-  -- returns the eventual location of the file if the name is not changed
-  local loc = site.use(src)
-  return h.img { alt = alt, src = loc }
-end
-
-return templates
-@end
-```
-
-## Current TODO:
-- [ ] have example site also serve as short intro to slsg (show some features)
-- [ ] Lua language server files
-- [ ] Fix HTML escape
-- [ ] API docs
-- [ ] Luamark parser
-- [ ] Syntax highlighting + html generation
-- [ ] Functioning macros
-
