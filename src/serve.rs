@@ -246,7 +246,7 @@ fn respond(
     };
 
     // check for compression
-    let compress = can_be_compressed(&RelativePathBuf::from(file_path));
+    let compress = can_be_compressed(mime.unwrap_or(""));
 
     // send the page back
     let response = format!(
@@ -330,16 +330,20 @@ fn reload(
 }
 
 /// should the file be compressed?
-fn can_be_compressed(path: &RelativePathBuf) -> bool {
-    let Some(ext) = path.extension() else {
-        return false;
-    };
-
+fn can_be_compressed(mime: &str) -> bool {
     [
-        "htm", "html", "css", "js", "mjs", "svg", "json", "xml", // common text formats
-        "otf", "ttf", // fonts
+        // common text formats
+        "text/html",
+        "text/css",
+        "text/javascript",
+        "image/svg+xml",
+        "text/json",
+        "application/xml",
+        // fonts
+        "font/otf",
+        "font/ttf",
     ]
-    .contains(&ext)
+    .contains(&mime)
 }
 
 /// Get a mime type from a file path
