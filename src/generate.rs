@@ -1,7 +1,8 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
-    fs
+    fs,
+    rc::Rc,
 };
 
 use glob::Pattern;
@@ -12,6 +13,7 @@ use relative_path::{RelativePath, RelativePathBuf};
 use crate::{
     conf::Config,
     font::{chars_from_html, subset_font},
+    highlight::Highlighter,
     markdown::markdown,
     templates::template,
 };
@@ -144,22 +146,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // set up lua
     let lua = unsafe { Lua::unsafe_new() };
 
-    // load syntax highlighting
-    // default one, has a good set of languages already
-    //let builtin_highlights = Arc::new(SyntaxSet::load_defaults_newlines());
-    //let mut external_highlights = SyntaxSetBuilder::new();
-
-    // load the ones from the config file
-    /*for path in config.syntaxes.iter() {
-        external_highlights
-            .add_from_folder(path, true)
-            .into_lua_err()
-            .with_context(|_| format!("Failed to load syntaxes from folder `{path}`"))?;
-    }
-
-    // build it
-    let external_highlights = Arc::new(external_highlights.build());*/
-
     // load standard library
     let globals = lua.globals();
     globals.set("development", dev)?; // true if we are serving
@@ -181,43 +167,37 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?,
     )?;
 
+    // register a syntax
+    let syntaxes = Rc::new(RefCell::new(Vec::new()));
+    let syntaxes_clone = syntaxes.clone();
+    globals.set(
+        "registersyntax",
+        lua.create_function(move |lua, table| {
+            let highlighter = Highlighter::from_table(lua, table)?;
+            syntaxes_clone.borrow_mut().push(highlighter);
+            Ok(())
+        })?,
+    )?;
+
     // highlight code
-    //let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
     globals.set(
         "highlight",
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
-                // finding by name doesn't seem to work?
-                /*let (syn, set) = if let Some(syn) = hl.find_syntax_by_token(&language) {
-                    (syn, &hl)
-                } else if let Some(syn) = ext.find_syntax_by_token(&language) {
-                    (syn, &ext)
-                } else if language == "" {
-                    (hl.find_syntax_plain_text(), &hl)
-                } else {
-                    return Err(mlua::Error::external(format!(
-                        "No syntax found for `{language}`"
-                    )));
-                };
-                let mut generator = ClassedHTMLGenerator::new_with_class_style(
-                    syn,
-                    set,
-                    if let Some(prefix) = prefix {
-                        ClassStyle::SpacedPrefixed {
-                            // TODO: prevent leaking memory here
-                            // probably cache this so it wont leak if there's no new ones?
-                            prefix: prefix.leak(),
-                        }
-                    } else {
-                        ClassStyle::Spaced
-                    },
-                );
-                for line in LinesWithEndings::from(&code) {
-                    generator
-                        .parse_html_for_line_which_includes_newline(line)
-                        .into_lua_err()
-                        .context("Failed to parse line")?;
-                }*/
+                // find the highlighter to use
+                let syntaxes = syntaxes.borrow();
+                let highlighter = syntaxes
+                    .iter()
+                    .find(|x| x.match_filename(&language))
+                    .ok_or_else(|| {
+                        mlua::Error::external(format!(
+                            "Could not find a highlighter for language `{language}`"
+                        ))
+                    })?;
+                // highlight the code
+                let code = highlighter.highlight(&code, &prefix.unwrap_or(String::new()))?;
+
+                // return
                 Ok(code)
             },
         )?,
@@ -314,6 +294,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             Ok(res)
         })?,
     )?;
+
+    // load syntaxes
+    lua.load(include_str!("syntaxes.lua"))
+        .set_name("=syntaxes.lua")
+        .exec()?;
 
     // if fennel is enabled, add fennel
     if config.fennel {
