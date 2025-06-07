@@ -18,12 +18,14 @@ enum CachedRegex {
 }
 
 /// Highlighter
+#[derive(Clone)]
 pub(crate) struct Highlighter {
     language: String,
     regex: Regex,
     rules: Vec<Rule>,
 }
 
+#[derive(Clone)]
 enum Rule {
     Match {
         re: Regex,

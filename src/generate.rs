@@ -131,6 +131,9 @@ thread_local! {
 
     /// Cached fonts
     static SUBSETTED: RefCell<BTreeMap<Vec<u8>, Vec<u8>>> = RefCell::new(BTreeMap::new());
+
+    /// Syntax cache
+    static SYNTAXES: RefCell<Vec<Highlighter>> = RefCell::new(Vec::new());
 }
 
 /// Generate the site
@@ -180,12 +183,13 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     )?;
 
     // highlight code
+    let syntaxes_clone = syntaxes.clone();
     globals.set(
         "highlight",
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
                 // find the highlighter to use
-                let syntaxes = syntaxes.borrow();
+                let syntaxes = syntaxes_clone.borrow();
                 let highlighter = syntaxes
                     .iter()
                     .find(|x| x.match_filename(&language))
@@ -296,9 +300,22 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     )?;
 
     // load syntaxes
-    lua.load(include_str!("syntaxes.lua"))
-        .set_name("=syntaxes.lua")
-        .exec()?;
+    // cache them to reuse the regexes and avoid having to reload the lua file
+    // this should only be run the first time the program starts, and is done
+    // before loading any of the site functions, so no custom syntaxes can
+    // be cached here
+    if SYNTAXES.with_borrow(|x| x.is_empty()) {
+        // load
+        lua.load(include_str!("syntaxes.lua"))
+            .set_name("=syntaxes.lua")
+            .exec()?;
+
+        // add the loaded set to the cache
+        SYNTAXES.set(syntaxes.clone().borrow().clone());
+    } else {
+        // else, load from cache
+        *syntaxes.borrow_mut() = SYNTAXES.with_borrow(|x| x.clone());
+    };
 
     // if fennel is enabled, add fennel
     if config.fennel {
