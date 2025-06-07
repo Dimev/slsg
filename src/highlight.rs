@@ -39,6 +39,13 @@ enum Rule {
 }
 
 impl Rule {
+    fn name(&self) -> &str {
+        match self {
+            Self::Match { name, .. } => name,
+            Self::Complex { name, .. } => name,
+        }
+    }
+
     fn from_table(lua: &Lua, table: Table) -> Result<Rule> {
         let token = table.get("token")?;
         if table.contains_key("open")? {
@@ -122,7 +129,56 @@ impl Highlighter {
     /// Highlight code
     pub(crate) fn highlight(&self, mut code: &str, prefix: &str) -> Result<String> {
         let mut out = String::with_capacity(code.len());
-        // TODO
-        Ok(code.into())
+        // TODO see https://github.com/Dimev/slsg/blob/f5d4ec56b868e54e4e65465f73de2256a64052a1/src/highlight.rs
+        while !code.is_empty() {
+            // find the closest match
+            if let Some((start, rule)) = self
+                .rules
+                .iter()
+                .filter_map(|x| match x {
+                    Rule::Match { re, .. } => re.find(code).map(|y| (y, x)),
+                    Rule::Complex { open, .. } => open.find(code).map(|y| (y, x)),
+                })
+                .min_by_key(|x| x.0.start())
+            {
+                // split by what part we know and don't
+                let up_to = &code[..start.start()];
+                let include = &code[start.start()..start.end()]; // TODO: proper
+                let rest = &code[start.end()..];
+
+                // TODO: match so the end works
+                // TODO: also include the inside of include
+                // TODO: also escape html
+                out.push_str(&format!(
+                    "{}<span class=\"{}\">{}</span>",
+                    escape_html(up_to),
+                    rule.name(),
+                    escape_html(include),
+                ));
+                code = rest;
+            } else {
+                // no match, push the rest
+                // TODO html escape
+                out.push_str(&format!("<span>{}</span>", escape_html(code)));
+                code = "";
+            }
+        }
+        Ok(out)
     }
+}
+
+/// Escape html
+fn escape_html(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    for c in html.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
 }

@@ -56,15 +56,10 @@ code {
   color: #999;
 }
 
-.keyword,
-.type {
+.statement {
   color: #c22;
 }
 
-.name {
-  color: #56c;
-}
-
-.string {
+.constant-string {
   color: #181;
 }

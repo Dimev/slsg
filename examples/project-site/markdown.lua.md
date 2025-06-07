@@ -17,6 +17,7 @@ We also have highlights!
 And syntax highlights!
 ```lua
 local function hello()
+	-- Hello world!
 	print "Hello"
 end
 ```
