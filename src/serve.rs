@@ -29,14 +29,26 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
     let listener = TcpListener::bind(&addr)
         .unwrap_or_else(|e| panic!("Failed to serve site on {}: {}", addr, e));
 
+    // time
+    let start = Instant::now();
+
+    // generate the initial site
+    let mut site = generate(true);
+
+    // notify if it went bad
+    if let Err(ref e) = site {
+        print_error("Failed to build site", e)
+    }
+
     // we are live
     print_success(
         &format!(
-            "serving on `http://{}`",
+            "serving on `http://{}` ({}ms)",
             listener
                 .local_addr()
                 .map(|x| x.to_string())
-                .unwrap_or(addr.to_string())
+                .unwrap_or(addr.to_string()),
+            start.elapsed().as_millis()
         ),
         &"change a file to reload the site",
     );
@@ -84,14 +96,6 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
     if let Err(e) = &watcher {
         print_warning("Failed to watch for changes", e)
     };
-
-    // generate the initial site
-    let mut site = generate(true);
-
-    // notify if it went bad
-    if let Err(ref e) = site {
-        print_error("Failed to build site", e)
-    }
 
     // requests to notify when there's an update
     let mut update_notify = Vec::new();
