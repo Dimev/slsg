@@ -9,10 +9,6 @@ use conf::Config;
 use generate::generate;
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
-use syntect::{
-    highlighting::ThemeSet,
-    html::{ClassStyle, css_for_theme_with_class_style},
-};
 
 mod conf;
 mod font;
@@ -21,27 +17,24 @@ mod markdown;
 mod print;
 mod serve;
 mod templates;
+mod highlight;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
 
 Usage:
-  slsg dev [path] [--address]          Serve the site in path (default ./)
-  slsg build [path] [--output]         Build the site in path (default ./)
-  slsg new [path]                      Create a new site in path
-  slsg theme [name] <path> [--prefix]  Load a .tmtheme and convert it to css
-  slsg docs                            Show the documentation
-  slsg help                            Show this screen
+  slsg dev [path] [--address]   Serve the site in path (default ./)
+  slsg build [path] [--output]  Build the site in path (default ./)
+  slsg new <template> [path]    Create a new site in path
+  slsg docs                     Show the documentation
+  slsg help                     Show this screen
 
 Options:
   -h --help     Show this screen
   -v --version  Print SLSG and luaJIT version
 
-  -a --address  Address and port to use when hosting the dev server
-                defaults to 127.0.0.1:1111
-  -o --output   Output directory to use when building the site
-                defaults to dist/
-  -p --prefix   What to add in front of the css classes generated from a theme
+  -a --address  Where to bind the dev server to (default 127.0.0.1:1111)
+  -o --output   Where to output the files to (default dist/)
 ";
 
 fn main() {
@@ -89,7 +82,6 @@ fn main() {
         Some("build") => build(pargs),
         Some("new") => new(pargs),
         Some("docs") => print_docs(),
-        Some("theme") => theme(pargs),
         _ => Ok(println!("{}", HELP)),
     };
 
@@ -309,60 +301,4 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
 
 fn print_docs() -> Result<()> {
     todo!();
-}
-
-fn theme(mut pargs: pico_args::Arguments) -> Result<()> {
-    let prefix: Option<String> = pargs
-        .opt_value_from_str(["-p", "--prefix"])
-        .into_lua_err()
-        .context("Failed to get prefix for css")?;
-
-    let name: String = pargs
-        .free_from_str()
-        .into_lua_err()
-        .context("Failed to get theme name from arguments\nRun with an arbitrary name to see all available themes")?;
-
-    let directory: Option<String> = pargs
-        .opt_free_from_str()
-        .into_lua_err()
-        .context("Failed to get theme directory from arguments")?;
-
-    // load the themes
-    let themeset = if let Some(dir) = directory {
-        let mut set = ThemeSet::new();
-        set.add_from_folder(dir)
-            .into_lua_err()
-            .context("Failed to load theme")?;
-        set
-    } else {
-        ThemeSet::load_defaults()
-    };
-
-    // find theme
-    if let Some(theme) = themeset.themes.get(&name) {
-        let css = css_for_theme_with_class_style(
-            theme,
-            if let Some(prefix) = prefix {
-                ClassStyle::SpacedPrefixed {
-                    // yes this leaks memory, but it cleans up later because the program stops
-                    prefix: prefix.leak(),
-                }
-            } else {
-                ClassStyle::Spaced
-            },
-        )
-        .into_lua_err()
-        .context("Failed to get css for theme")?;
-
-        // print!
-        print!("{}", css);
-    } else {
-        println!("Theme not found");
-        println!("The following themes are available:");
-        for theme in themeset.themes.keys() {
-            println!(" - {}", theme);
-        }
-    }
-
-    Ok(())
 }

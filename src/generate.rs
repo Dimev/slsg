@@ -1,19 +1,13 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
-    fs,
-    sync::Arc,
+    fs
 };
 
 use glob::Pattern;
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
 use relative_path::{RelativePath, RelativePathBuf};
-use syntect::{
-    html::{ClassStyle, ClassedHTMLGenerator},
-    parsing::{SyntaxSet, SyntaxSetBuilder},
-    util::LinesWithEndings,
-};
 
 use crate::{
     conf::Config,
@@ -152,11 +146,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
     // load syntax highlighting
     // default one, has a good set of languages already
-    let builtin_highlights = Arc::new(SyntaxSet::load_defaults_newlines());
-    let mut external_highlights = SyntaxSetBuilder::new();
+    //let builtin_highlights = Arc::new(SyntaxSet::load_defaults_newlines());
+    //let mut external_highlights = SyntaxSetBuilder::new();
 
     // load the ones from the config file
-    for path in config.syntaxes.iter() {
+    /*for path in config.syntaxes.iter() {
         external_highlights
             .add_from_folder(path, true)
             .into_lua_err()
@@ -164,7 +158,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     }
 
     // build it
-    let external_highlights = Arc::new(external_highlights.build());
+    let external_highlights = Arc::new(external_highlights.build());*/
 
     // load standard library
     let globals = lua.globals();
@@ -188,13 +182,13 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     )?;
 
     // highlight code
-    let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
+    //let (hl, ext) = (builtin_highlights.clone(), external_highlights.clone());
     globals.set(
         "highlight",
         lua.create_function(
             move |_, (language, code, prefix): (String, String, Option<String>)| {
                 // finding by name doesn't seem to work?
-                let (syn, set) = if let Some(syn) = hl.find_syntax_by_token(&language) {
+                /*let (syn, set) = if let Some(syn) = hl.find_syntax_by_token(&language) {
                     (syn, &hl)
                 } else if let Some(syn) = ext.find_syntax_by_token(&language) {
                     (syn, &ext)
@@ -223,8 +217,8 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                         .parse_html_for_line_which_includes_newline(line)
                         .into_lua_err()
                         .context("Failed to parse line")?;
-                }
-                Ok(generator.finalize())
+                }*/
+                Ok(code)
             },
         )?,
     )?;

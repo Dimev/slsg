@@ -20,7 +20,7 @@ mlua = { version = "0.10.0", features = ["luajit", "macros"] }
 notify = "8.0.0"
 pico-args = "0.5.0"
 pulldown-cmark = "0.13.0"
+regex = "1.11.1"
 relative-path = "2.0.1"
-syntect = "5.2.0"
 unicode-width = "0.2.0"
 
