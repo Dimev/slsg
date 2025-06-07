@@ -63,3 +63,11 @@ code {
 .constant-string {
   color: #181;
 }
+
+.identifier {
+  color: #c22;
+}
+
+.special {
+  color: #22c;
+}

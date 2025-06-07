@@ -49,6 +49,7 @@ registersyntax {
   { token = "symbol",          "(\\*|//|/|%|\\+|-|\\^|>|>=|<|<=|~=|=|[\\.]{2,3}|#)" },
 
   { token = "constant-number", "\\b((0[xX](([0-9A-Fa-f]+\\.[0-9A-Fa-f]*)|(\\.?[0-9A-Fa-f]+))([pP][-+]?[0-9]+)?)|((([0-9]+\\.[0-9]*)|(\\.?[0-9]+))([eE][-+]?[0-9]+)?))" },
+
   { token = "constant-string", open = "\"", close = "\"", skip = "\\\\.",
     { token = "constant-specialChar", "\\\\([abfnrtvz\\'\"]|[0-9]{1,3}|x[0-9a-fA-F][0-9a-fA-F]|u\\{[0-9a-fA-F]+\\})" }
   },
@@ -61,5 +62,17 @@ registersyntax {
 
 registersyntax {
   name = "rust",
-  regex = "rs$"
+  regex = "rs$",
+  { token = "identifier",      "fn [a-z0-9_]+" },
+  { token = "statement",       "\\b(abstract|alignof|as|async|await|become|box|break|const|continue|crate|do|dyn|else|enum|extern|false|final|fn|for|gen|if|impl|in|let|loop|macro|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|struct|super|true|trait|type|typeof|try|union|unsafe|unsized|use|virtual|where|while|yield)\\b" },
+  { token = "special",         "[a-z_]+!" },
+  { token = "constant",        "\\b[A-Z][A-Z_0-9]+\\b" },
+  { token = "constant-number", "\\b[0-9]+\\b" },
+  { token = "constant",        "\\b(true|false)\\b" },
+  { token = "type",            "\\b[A-Z]+[a-zA-Z_0-9]*[a-z]+[a-zA-Z_0-9]*\\b" },
+  { token = "type",            "\\b(bool|str|char|((i|u)(8|16|32|64|128|size))|f(16|32|64|128))\\b" },
+
+  { token = "constant-string", open = "[bc]?\"", close = "\"", skip = "\\.",
+    { token = "constant-special-char", "\\." }
+  },
 }

@@ -48,6 +48,41 @@ impl Rule {
         }
     }
 
+    fn range(&self, mut text: &str) -> Option<(usize, usize)> {
+        match self {
+            // simply the range
+            Self::Match { re, .. } => re.find(text).map(|x| (x.start(), x.end())),
+            Self::Complex {
+                open, close, skip, ..
+            } => {
+                // find the open
+                let open = open.find(text)?;
+
+                // move so it's relative
+                text = &text[open.end()..];
+
+                // find the close
+                let close = close.find(text)?;
+
+                // start off
+                let mut close_start = close.start();
+                let mut close_end = close.end();
+
+                // while there is a skip before our close, take that
+                while let Some(skip) = skip
+                    .as_ref()
+                    .and_then(|x| x.find(text))
+                    .filter(|x| x.start() <= close.start())
+                    .filter(|_| false)
+                {
+                    // TODO
+                }
+
+                Some((open.start(), open.start() + close_end))
+            }
+        }
+    }
+
     fn from_table(lua: &Lua, table: Table) -> Result<Rule> {
         let token = table.get("token")?;
         if table.contains_key("open")? {
@@ -111,10 +146,8 @@ impl Highlighter {
         // read the rest
         let mut rules = Vec::new();
         for val in table.sequence_values() {
-            let value = val?;
-
             // parse the pair as a rule
-            rules.push(Rule::from_table(lua, value)?);
+            rules.push(Rule::from_table(lua, val?)?);
         }
         Ok(Highlighter {
             language: name,
@@ -132,27 +165,30 @@ impl Highlighter {
     pub(crate) fn highlight(&self, mut code: &str, prefix: &str) -> Result<String> {
         let mut out = String::with_capacity(code.len());
         // TODO see https://github.com/Dimev/slsg/blob/f5d4ec56b868e54e4e65465f73de2256a64052a1/src/highlight.rs
+        // TODO: inconsistent with how micro works
+        // I think that instead simply goes to the next one except for matches
+        // see how the code there works
         while !code.is_empty() {
             // find the closest match
-            if let Some((start, rule)) = self
+            if let Some((rule, start, end)) = self
                 .rules
                 .iter()
-                .filter_map(|x| match x {
-                    Rule::Match { re, .. } => re.find(code).map(|y| (y, x)),
-                    Rule::Complex { open, .. } => open.find(code).map(|y| (y, x)),
+                .filter_map(|x| {
+                    let (start, end) = x.range(code)?;
+                    Some((x, start, end))
                 })
-                .min_by_key(|x| x.0.start())
+                .min_by_key(|x| x.1)
             {
                 // split by what part we know and don't
-                let up_to = &code[..start.start()];
-                let include = &code[start.start()..start.end()]; // TODO: proper
-                let rest = &code[start.end()..];
+                let up_to = &code[..start];
+                let include = &code[start..end]; // TODO: proper
+                let rest = &code[end..];
 
                 // TODO: match so the end works
                 // TODO: also include the inside of include
                 // TODO: also escape html
                 out.push_str(&format!(
-                    "{}<span class=\"{}\">{}</span>",
+                    "<span>{}</span><span class=\"{prefix}{}\">{}</span>",
                     escape_html(up_to),
                     rule.name(),
                     escape_html(include),
@@ -165,6 +201,8 @@ impl Highlighter {
                 code = "";
             }
         }
+
+        // TODO: line numbers
         Ok(out)
     }
 }
