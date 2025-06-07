@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     sync::Arc,
@@ -126,6 +127,14 @@ fn escape_html(html: &str) -> String {
         }
     }
     out
+}
+
+thread_local! {
+    /// Previous charset
+    static CHARSET: RefCell<BTreeSet<char>> = RefCell::new(BTreeSet::new());
+
+    /// Cached fonts
+    static SUBSETTED: RefCell<BTreeMap<Vec<u8>, Vec<u8>>> = RefCell::new(BTreeMap::new());
 }
 
 /// Generate the site
@@ -592,14 +601,35 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
     }
 
+    // check for charset difference
+    let charset_changed = CHARSET.with_borrow(|x| x != &charset);
+
+    // clear cache because the charset is new
+    if charset_changed {
+        SUBSETTED.set(BTreeMap::new());
+        CHARSET.set(charset.clone());
+    }
+
     // subset fonts
     for path in to_subset {
         let font = fs::read(path.to_path("."))
             .into_lua_err()
             .with_context(|_| format!("Failed to read file `{path}`"))?;
         let subsetted = if config.subset {
-            subset_font(&font, &charset)
-                .with_context(|_| format!("Failed to subset font `{path}`"))?
+            if let Some(subsetted) = SUBSETTED.with_borrow(|x| x.get(&font).cloned()) {
+                // get from cache
+                subsetted
+            } else {
+                // else, subset and add
+                let subsetted = subset_font(&font, &charset)
+                    .with_context(|_| format!("Failed to subset font `{path}`"))?;
+
+                // add
+                SUBSETTED.with_borrow_mut(|x| x.insert(font.clone(), subsetted.clone()));
+
+                // return the font we have
+                subsetted
+            }
         } else {
             font
         };
