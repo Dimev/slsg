@@ -61,6 +61,13 @@ registersyntax {
 }
 
 registersyntax {
+  name = "shell",
+  regex = "sh$",
+  { token = "statement",  "--*\\w+" },
+  { token = "identifier", "^\\w+" },
+}
+
+registersyntax {
   name = "rust",
   regex = "rs$",
   { token = "identifier",      "fn [a-z0-9_]+" },

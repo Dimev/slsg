@@ -5,9 +5,6 @@ pub(crate) struct Config {
     /// What files to ignore
     pub ignore: Vec<String>,
 
-    /// What extra syntaxes to load
-    pub syntaxes: Vec<String>,
-
     /// File to use for 404
     pub not_found: Option<String>,
 
@@ -33,7 +30,6 @@ pub(crate) struct Config {
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Mode {
     Global,
-    Highlight,
     Build,
     Ignore,
     Font,
@@ -44,7 +40,6 @@ impl Config {
     pub(crate) fn parse(conf: &str) -> Result<Config> {
         let mut cfg = Config {
             ignore: Vec::new(),
-            syntaxes: Vec::new(),
             output_dir: "dist/".into(),
             not_found: None,
             fennel: true,
@@ -68,8 +63,6 @@ impl Config {
             // try and detect mode change
             else if line == "[build]" {
                 mode = Mode::Build
-            } else if line == "[highlight]" {
-                mode = Mode::Highlight
             } else if line == "[ignore]" {
                 mode = Mode::Ignore
             } else if line == "[dev]" {
@@ -113,8 +106,6 @@ impl Config {
             } else if mode == Mode::Ignore {
                 // no key-values, just add directly
                 cfg.ignore.push(line.into());
-            } else if mode == Mode::Highlight {
-                cfg.syntaxes.push(line.into());
             } else if mode == Mode::Dev {
                 // try and parse a line
                 let (key, value) = line.split_once('=').ok_or(mlua::Error::external(format!(
@@ -180,12 +171,9 @@ mod tests {
             allow-lua = false # we don't want lua
 
             [ignore]
-            scripts/* # ignore our fennel scripts and templates
-            syntax/* # ignore our syntax files
-
-            [highlight]
-            syntax/
-            
+            # ignore our fennel scripts and templates
+            scripts/*
+            templates/*
         ";
 
         let cfg = Config::parse(config).expect("Failed to parse");
@@ -193,9 +181,8 @@ mod tests {
         assert_eq!(cfg.lua, false);
         assert_eq!(
             cfg.ignore,
-            vec!["scripts/*".to_string(), "syntax/*".to_string()]
+            vec!["scripts/*".to_string(), "templates/*".to_string()]
         );
-        assert_eq!(cfg.syntaxes, vec!["syntax/".to_string()]);
     }
 
     #[test]
@@ -209,11 +196,7 @@ mod tests {
 
             [ignore]
             scripts/* # ignore our fennel scripts and templates
-            syntax/* # ignore our syntax files
-
-            [highlight]
-            syntax/
-
+            
             [dev]
             not-found = 404.html
 
@@ -229,11 +212,7 @@ mod tests {
         assert_eq!(cfg.lua, false);
         assert_eq!(cfg.output_dir, "out/".to_string());
         assert_eq!(cfg.not_found, Some("404.html".to_string()));
-        assert_eq!(
-            cfg.ignore,
-            vec!["scripts/*".to_string(), "syntax/*".to_string()]
-        );
-        assert_eq!(cfg.syntaxes, vec!["syntax/".to_string()]);
+        assert_eq!(cfg.ignore, vec!["scripts/*".to_string()]);
         assert_eq!(cfg.subset, false);
         assert_eq!(cfg.extra, "abcdef".to_string());
         assert_eq!(cfg.setup, Some("script.lua".to_string()));

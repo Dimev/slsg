@@ -30,7 +30,16 @@ pub(crate) fn markdown(
     let mut functions = VecDeque::new();
 
     // parse
-    for (event, offset) in Parser::new_ext(content, Options::ENABLE_MATH).into_offset_iter() {
+    for (event, offset) in Parser::new_ext(
+        content,
+        Options::ENABLE_MATH
+            | Options::ENABLE_FOOTNOTES
+            | Options::ENABLE_STRIKETHROUGH
+            | Options::ENABLE_SMART_PUNCTUATION
+            | Options::ENABLE_HEADING_ATTRIBUTES,
+    )
+    .into_offset_iter()
+    {
         match event {
             Event::InlineHtml(html) if html.starts_with("<?lua") && apply_template => {
                 if !conf.lua {

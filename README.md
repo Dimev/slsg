@@ -59,9 +59,6 @@ allow-lua = true # same for fennel
 [ignore]
 # scripts/* # files to ignore when building the site
 
-[highlight]
-# syntax/ # where to find *.tmLanuguage files for highlighting
-
 [dev]
 # not-found = 404.html # page to use as 404 when developing
 
