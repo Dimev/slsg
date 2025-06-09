@@ -61,6 +61,11 @@ registersyntax {
 }
 
 registersyntax {
+  name = "markdown",
+  regex = "md$"
+}
+
+registersyntax {
   name = "shell",
   regex = "sh$",
   { token = "statement",  "--*\\w+" },

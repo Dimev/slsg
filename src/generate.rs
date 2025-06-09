@@ -548,11 +548,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     while let Some((path, mut res, mut functions)) = to_template.pop_front() {
         if let Some(fun) = functions.pop_front() {
             if let Some(fun) = fun.as_function() {
-                res = fun.call(res.clone())?;
+                res = fun
+                    .call(res.clone())
+                    .with_context(|_| format!("Failed to template `{path}`"))?;
             } else if let Some(fun) = fun.as_table() {
-                res = fun.call(res.clone())?;
+                res = fun
+                    .call(res.clone())
+                    .with_context(|_| format!("Failed to template `{path}`"))?;
             } else if let Some(fun) = fun.as_userdata() {
-                res = fun.call(res.clone())?;
+                res = fun
+                    .call(res.clone())
+                    .with_context(|_| format!("Failed to template `{path}`"))?;
             }
 
             // need to process again

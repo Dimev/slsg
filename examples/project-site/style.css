@@ -4,7 +4,7 @@
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
-  src: url("fonts/inter-variable.ttf");
+  src: url("/fonts/inter-variable.ttf");
 }
 
 @font-face {
@@ -12,7 +12,39 @@
   font-style: italic;
   font-weight: 100 900;
   font-display: swap;
-  src: url("fonts/inter-variable-italic.ttf");
+  src: url("/fonts/inter-variable-italic.ttf");
+}
+
+@font-face {
+  font-family: CommitMono;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/commitmono-400.ttf");
+}
+
+@font-face {
+  font-family: CommitMono;
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/commitmono-400-italic.ttf");
+}
+
+@font-face {
+  font-family: CommitMono;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/commitmono-700.ttf");
+}
+
+@font-face {
+  font-family: CommitMono;
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/commitmono-700-italic.ttf");
 }
 
 /* style */
@@ -25,17 +57,19 @@ html {
   padding: 0;
 
   min-height: 100vh;
+  width: 100vw;
 
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   font-family: Inter, sans-serif;
 }
 
 body {
   border-left: solid #1D2951 4px;
-  padding: 16px;
-  margin: 16px;
+  padding: 2ch;
+  margin: 2ch;
   box-shadow: 4px 4px 16px #aaa;
   max-width: 80ch;
 }
@@ -69,7 +103,7 @@ pre {
 }
 
 code {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: CommitMono, Courier, monospace;
 }
 
 /* syntax highlighting */
@@ -77,15 +111,15 @@ code {
   color: #999;
 }
 
-.statement {
-  color: #c22;
+.identifier {
+  color: #56c;
 }
 
 .constant-string {
   color: #181;
 }
 
-.identifier {
+.statement {
   color: #c22;
 }
 
