@@ -1,20 +1,47 @@
 use std::{collections::VecDeque, iter::repeat};
 
 use latex2mathml::latex_to_mathml;
-use mlua::{ErrorContext, ExternalResult, Lua, Result, Value, chunk};
+use mlua::{
+    ErrorContext, ExternalResult, Lua, Result,
+    Value::{self, Nil},
+    chunk,
+};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
+use relative_path::RelativePath;
 use unicode_width::UnicodeWidthStr;
 
-use crate::Config;
+use crate::path::{DoubleFileExt, HtmlToIndex};
 
 /// Parse minimark to html
 pub(crate) fn markdown(
     lua: &Lua,
     content: &str,
-    name: &str,
-    conf: &Config,
-    apply_template: bool,
+    name: &RelativePath,
 ) -> Result<(String, VecDeque<Value>)> {
+    // translated name
+    let path = name
+        .with_extension("html")
+        .without_double_ext()
+        .ok_or(mlua::Error::external(format!(
+            "Expected path `{name}` to have a second `.lua` or `.fnl` extension"
+        )))?;
+    let path = path.html_to_index().unwrap_or(path);
+
+    // set up environment
+    // current file
+    lua.globals().set("curfile", name.as_str())?;
+
+    // current directory
+    lua.globals()
+        .set("curdir", name.parent().map(RelativePath::as_str))?;
+
+    // where this file will be emitted to
+    lua.globals().set("curtarget", path.as_str())?;
+
+    // directory this file will be emitted to
+    lua.globals()
+        .set("curtargetdir", path.parent().map(RelativePath::as_str))?;
+
     // events to parse
     let mut events = Vec::new();
 
@@ -41,13 +68,7 @@ pub(crate) fn markdown(
     .into_offset_iter()
     {
         match event {
-            Event::InlineHtml(html) if html.starts_with("<?lua") && apply_template => {
-                if !conf.lua {
-                    return Err(mlua::Error::external(
-                        "Found a lua code block, but lua is not enabled in `site.conf`",
-                    ));
-                }
-
+            Event::InlineHtml(html) if html.starts_with("<?") && name.has_double_ext("lua") => {
                 let position = offset.start;
                 let lines = content[..position].chars().filter(|x| *x == '\n').count();
                 let width = content[..position]
@@ -60,9 +81,9 @@ pub(crate) fn markdown(
                 let code = String::from_iter(
                     repeat('\n')
                         .take(lines)
-                        .chain(repeat(' ').take(width + 6))
+                        .chain(repeat(' ').take(width + 3))
                         .chain(
-                            html.strip_prefix("<?lua")
+                            html.strip_prefix("<?")
                                 .unwrap()
                                 .strip_suffix("?>")
                                 .unwrap()
@@ -71,7 +92,7 @@ pub(crate) fn markdown(
                 );
 
                 // run code
-                let result: Value = lua.load(code).set_name(format!("={name}")).eval()?;
+                let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
                 // string, numbers or booleans can be embedded directly
                 if result.is_string() || result.is_number() || result.is_boolean() {
@@ -83,12 +104,7 @@ pub(crate) fn markdown(
                     functions.push_back(result.clone());
                 }
             }
-            Event::InlineHtml(html) if html.starts_with("<?fnl") && apply_template => {
-                if !conf.fennel {
-                    return Err(mlua::Error::external(
-                        "Found a fennel code block, but fennel is not enabled in `site.conf`",
-                    ));
-                }
+            Event::InlineHtml(html) if html.starts_with("<?") && name.has_double_ext("fnl") => {
                 let position = offset.start;
                 let lines = content[..position].chars().filter(|x| *x == '\n').count();
                 let width = content[..position]
@@ -101,9 +117,9 @@ pub(crate) fn markdown(
                 let code = String::from_iter(
                     repeat('\n')
                         .take(lines)
-                        .chain(repeat(' ').take(width + 6))
+                        .chain(repeat(' ').take(width + 3))
                         .chain(
-                            html.strip_prefix("<?fnl")
+                            html.strip_prefix("<?")
                                 .unwrap()
                                 .strip_suffix("?>")
                                 .unwrap()
@@ -113,8 +129,8 @@ pub(crate) fn markdown(
 
                 // run code
                 let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
-                .set_name(format!("={name}"))
+                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
+                .set_name(format!("@{name}"))
                 .eval()?;
 
                 // string, numbers or booleans can be embedded directly
@@ -136,17 +152,9 @@ pub(crate) fn markdown(
             Event::Html(x) => html.as_mut().unwrap().push_str(&x),
             // run lua
             Event::End(TagEnd::HtmlBlock)
-                if html
-                    .as_ref()
-                    .map(|x| x.starts_with("<?lua"))
-                    .unwrap_or(false)
-                    && apply_template =>
+                if html.as_ref().map(|x| x.starts_with("<?")).unwrap_or(false)
+                    && name.has_double_ext("lua") =>
             {
-                if !conf.lua {
-                    return Err(mlua::Error::external(
-                        "Found a lua code block, but lua is not enabled in `site.conf`",
-                    ));
-                }
                 let position = pos.take().unwrap();
                 let lines = content[..position].chars().filter(|x| *x == '\n').count();
                 let width = content[..position]
@@ -159,12 +167,12 @@ pub(crate) fn markdown(
                 let code = String::from_iter(
                     repeat('\n')
                         .take(lines)
-                        .chain(repeat(' ').take(width + 6))
+                        .chain(repeat(' ').take(width + 3))
                         .chain(
                             html.as_mut()
                                 .take()
                                 .unwrap()
-                                .strip_prefix("<?lua")
+                                .strip_prefix("<?")
                                 .unwrap()
                                 .trim_end()
                                 .strip_suffix("?>")
@@ -174,7 +182,7 @@ pub(crate) fn markdown(
                 );
 
                 // run code
-                let result: Value = lua.load(code).set_name(format!("={name}")).eval()?;
+                let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
                 // string, numbers or booleans can be embedded directly
                 if result.is_string() || result.is_number() || result.is_boolean() {
@@ -190,18 +198,9 @@ pub(crate) fn markdown(
             }
             // run fennel
             Event::End(TagEnd::HtmlBlock)
-                if html
-                    .as_ref()
-                    .map(|x| x.starts_with("<?fnl"))
-                    .unwrap_or(false)
-                    && apply_template =>
+                if html.as_ref().map(|x| x.starts_with("<?")).unwrap_or(false)
+                    && name.has_double_ext("fnl") =>
             {
-                if !conf.fennel {
-                    return Err(mlua::Error::external(
-                        "Found a fennel code block, but fennel is not enabled in `site.conf`",
-                    ));
-                }
-
                 let position = pos.take().unwrap();
                 let lines = content[..position].chars().filter(|x| *x == '\n').count();
                 let width = content[..position]
@@ -214,12 +213,12 @@ pub(crate) fn markdown(
                 let code = String::from_iter(
                     repeat('\n')
                         .take(lines)
-                        .chain(repeat(' ').take(width + 6))
+                        .chain(repeat(' ').take(width + 3))
                         .chain(
                             html.as_mut()
                                 .take()
                                 .unwrap()
-                                .strip_prefix("<?fnl")
+                                .strip_prefix("<?")
                                 .unwrap()
                                 .trim_end()
                                 .strip_suffix("?>")
@@ -230,8 +229,8 @@ pub(crate) fn markdown(
 
                 // run code
                 let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
-                .set_name(format!("={name}"))
+                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
+                .set_name(format!("@{name}"))
                 .eval()?;
 
                 // string, numbers or booleans can be embedded directly
@@ -245,7 +244,8 @@ pub(crate) fn markdown(
                 }
 
                 events.push(Event::End(TagEnd::HtmlBlock))
-            } // else, not
+            }
+            // else, not
             Event::End(TagEnd::HtmlBlock) => {
                 events.push(Event::Html(html.take().unwrap().into()));
                 events.push(Event::End(TagEnd::HtmlBlock))
@@ -289,7 +289,7 @@ pub(crate) fn markdown(
                 // also works nicely in case it is overridden
                 let highlighted: String = lua
                     .load(chunk! {highlight($lang, $code, $prefix)})
-                    .set_name(format!("={name}"))
+                    .set_name(format!("@{name}"))
                     .eval()?;
 
                 //
@@ -307,5 +307,12 @@ pub(crate) fn markdown(
     // push out all events
     let mut out = String::with_capacity(content.len());
     push_html(&mut out, events.into_iter());
+
+    // unset environment
+    lua.globals().set("curfile", Nil)?;
+    lua.globals().set("curdir", Nil)?;
+    lua.globals().set("curtarget", Nil)?;
+    lua.globals().set("curtargetdir", Nil)?;
+
     Ok((out, functions))
 }

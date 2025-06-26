@@ -1,9 +1,7 @@
-<?lua
-  require('scripts/templates').page {
-    title = "Scriptable Lua Site Generator",
-    description = "Generate static sites with lua",
-  }
-?>
+<? require('scripts/templates').page {
+  title = "Scriptable Lua Site Generator",
+  description = "Generate static sites with lua",
+} ?>
 
 # SLSG --- Scriptable Lua Site Generator
 Instead of a templating language like tera, handlebars, or other, there are `lua`
@@ -62,7 +60,7 @@ end
 
 Then, when we write markdown, we can use this to template our page!
 ```markdown
-<?lua require 'template'.page {
+<? require 'template'.page {
   -- Give our title
   title = "Hello word!"
 } ?>

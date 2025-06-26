@@ -1,3 +1,9 @@
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeMap,
+    ops::Range,
+};
+
 use mlua::{
     ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table,
     Value::{self, Nil},
@@ -9,32 +15,112 @@ use regex::Regex;
 
 thread_local! {
     /// Regex cache, to prevent them from compiling all at the start
-    static REGEX_CACHE: () = ();
+    static REGEX_CACHE: RefCell<Vec<Regex>> = RefCell::new(Vec::new());
+
+    /// Regex text to id
+    static REGEX_RES: RefCell<BTreeMap<String, usize>> = RefCell::new(BTreeMap::new());
+}
+
+/// innner cached regex
+#[derive(Clone)]
+enum InnerRegex {
+    New(String),
+    Cached(usize),
+}
+
+impl InnerRegex {
+    fn init(&mut self) -> Result<usize> {
+        if let Self::New(re) = self
+            && let Some(id) = REGEX_RES.with_borrow(|x| x.get(re).cloned())
+        {
+            // convert self to use the id
+            *self = Self::Cached(id);
+        } else if let Self::New(regex) = self {
+            // create the regex
+            let re = Regex::new(regex)
+                .into_lua_err()
+                .with_context(|_| format!("Failed to make regex `{regex}`"))?;
+
+            // id is the end of the array
+            let id = REGEX_CACHE.with_borrow(Vec::len);
+
+            // add to the cache
+            REGEX_CACHE.with_borrow_mut(|x| x.push(re));
+
+            // add to the relations
+            REGEX_RES.with_borrow_mut(|x| x.insert(regex.clone(), id));
+
+            // convert self to use the id
+            *self = Self::Cached(id);
+        }
+
+        match self {
+            Self::Cached(id) => Ok(*id),
+            _ => unreachable!(),
+        }
+    }
+
+    fn find(&mut self, haystack: &str) -> Result<Option<Range<usize>>> {
+        // build our regex
+        let id = self.init()?;
+
+        // use it
+        Ok(REGEX_CACHE
+            // find
+            .with_borrow(|x| x[id].find(haystack))
+            // get the range out
+            .map(|x| x.range()))
+    }
+
+    fn is_match(&mut self, haystack: &str) -> Result<bool> {
+        // build our regex
+        let id = self.init()?;
+
+        // use it
+        Ok(REGEX_CACHE
+            // find
+            .with_borrow(|x| x[id].is_match(haystack)))
+    }
 }
 
 /// Cached regex
-enum CachedRegex {
-    // TODO use
+#[derive(Clone)]
+struct CachedRegex(RefCell<InnerRegex>);
+
+impl CachedRegex {
+    fn new(re: &str) -> Self {
+        // put it in the cell
+        Self(RefCell::new(InnerRegex::New(re.to_string())))
+    }
+
+    fn find(&self, haystack: &str) -> Result<Option<Range<usize>>> {
+        self.0.borrow_mut().find(haystack)
+    }
+
+    fn is_match(&self, haystack: &str) -> Result<bool> {
+        self.0.borrow_mut().is_match(haystack)
+    }
 }
 
 /// Highlighter
 #[derive(Clone)]
 pub(crate) struct Highlighter {
     language: String,
-    regex: Regex,
+    regex: CachedRegex,
     rules: Vec<Rule>,
 }
 
 #[derive(Clone)]
 enum Rule {
     Match {
-        re: Regex,
+        re: CachedRegex,
         name: String,
     },
+    // TODO: no inner rules here
     Complex {
-        open: Regex,
-        close: Regex,
-        skip: Option<Regex>,
+        open: CachedRegex,
+        close: CachedRegex,
+        skip: Option<CachedRegex>,
         name: String,
         rules: Vec<Rule>,
     },
@@ -48,18 +134,19 @@ impl Rule {
         }
     }
 
-    fn range(&self, mut text: &str) -> Option<(usize, usize)> {
+    fn range(&self, mut text: &str) -> Result<Option<Range<usize>>> {
         match self {
             // simply the range
-            Self::Match { re, .. } => re.find(text).map(|x| (x.start(), x.end())),
-            Self::Complex {
+            Self::Match { re, .. } => re.find(text),
+            _ => Ok(None),
+            /*Self::Complex {
                 open, close, skip, ..
             } => {
                 // find the open
-                let open = open.find(text)?;
+                let (open_start, open_end) = open.find(text)?;
 
                 // move so it's relative
-                text = &text[open.end()..];
+                text = &text[open_end..];
 
                 // find the close
                 let close = close.find(text)?;
@@ -71,7 +158,7 @@ impl Rule {
                 // while there is a skip before our close, take that
                 while let Some(skip) = skip
                     .as_ref()
-                    .and_then(|x| x.find(text))
+                    .and_then(|x| x.find(text)?)
                     .filter(|x| x.start() <= close.start())
                     .filter(|_| false)
                 {
@@ -79,7 +166,7 @@ impl Rule {
                 }
 
                 Some((open.start(), open.start() + close_end))
-            }
+            }*/
         }
     }
 
@@ -92,19 +179,9 @@ impl Rule {
             let rules: Option<Table> = table.get("rules")?;
 
             Ok(Rule::Complex {
-                open: Regex::new(&begin)
-                    .into_lua_err()
-                    .context("Failed to compile regex")?,
-                close: Regex::new(&end)
-                    .into_lua_err()
-                    .context("Failed to compile regex")?,
-                skip: skip
-                    .map(|x| {
-                        Regex::new(&x)
-                            .into_lua_err()
-                            .context("Failed to compile regex")
-                    })
-                    .transpose()?,
+                open: CachedRegex::new(&begin),
+                close: CachedRegex::new(&end),
+                skip: skip.map(|x| CachedRegex::new(&x)),
                 name: token,
                 rules: rules
                     .map(|x| {
@@ -120,9 +197,7 @@ impl Rule {
             })
         } else {
             Ok(Rule::Match {
-                re: Regex::new(&table.get::<String>(1)?)
-                    .into_lua_err()
-                    .context("Failed to compile regex")?,
+                re: CachedRegex::new(&table.get::<String>(1)?),
                 name: token,
             })
         }
@@ -134,9 +209,7 @@ impl Highlighter {
         // read meta
         let name: String = table.get("name")?;
         let regex: String = table.get("regex")?;
-        let regex = Regex::new(&regex)
-            .into_lua_err()
-            .context("Failed to compile regex")?;
+        let regex = CachedRegex::new(&regex);
 
         // read rules
         // ignore these, as we just had them
@@ -157,8 +230,8 @@ impl Highlighter {
     }
 
     /// Check if the name or extension matches this highlighter
-    pub(crate) fn match_filename(&self, name: &str) -> bool {
-        self.language.to_lowercase() == name.to_lowercase() || self.regex.is_match(name)
+    pub(crate) fn match_filename(&self, name: &str) -> Result<bool> {
+        Ok(self.language.to_lowercase() == name.to_lowercase() || self.regex.is_match(name)?)
     }
 
     /// Highlight code
@@ -168,14 +241,16 @@ impl Highlighter {
         // TODO: inconsistent with how micro works
         // I think that instead simply goes to the next one except for matches
         // see how the code there works
+        // TODO: see https://github.com/zyedidia/micro/blob/master/pkg/highlight/highlighter.go#L113
+        //
         while !code.is_empty() {
             // find the closest match
             if let Some((rule, start, end)) = self
                 .rules
                 .iter()
                 .filter_map(|x| {
-                    let (start, end) = x.range(code)?;
-                    Some((x, start, end))
+                    let range = x.range(code).ok()??;
+                    Some((x, range.start, range.end))
                 })
                 .min_by_key(|x| x.1)
             {

@@ -5,89 +5,20 @@ use std::{
     rc::Rc,
 };
 
-use glob::Pattern;
+use glob::{Paths, Pattern};
+use hb_subset::Language;
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
-use relative_path::{RelativePath, RelativePathBuf};
+use relative_path::RelativePathBuf;
 
 use crate::{
     conf::Config,
     font::{chars_from_html, subset_font},
     highlight::Highlighter,
     markdown::markdown,
+    path::{DoubleFileExt, HtmlToIndex},
     templates::template,
 };
-
-trait DoubleFileExt {
-    fn has_double_ext(&self, ext: &str) -> bool;
-    fn without_double_ext(&self) -> Option<RelativePathBuf>;
-}
-
-impl<T: AsRef<RelativePath>> DoubleFileExt for T {
-    fn has_double_ext(&self, ext: &str) -> bool {
-        // no file name, stop
-        if self
-            .as_ref()
-            .file_name()
-            .map(|x| [".", ".."].contains(&x))
-            .unwrap_or(true)
-        {
-            return false;
-        }
-
-        let mut splits = self.as_ref().as_str().rsplit(".");
-        splits.next();
-        let second_ext = splits.next();
-        second_ext.map(|x| x == ext).unwrap_or(false)
-    }
-
-    fn without_double_ext(&self) -> Option<RelativePathBuf> {
-        // no file name, stop
-        if self
-            .as_ref()
-            .file_name()
-            .map(|x| [".", ".."].contains(&x))
-            .unwrap_or(true)
-        {
-            return None;
-        }
-
-        let mut splits = self.as_ref().as_str().rsplitn(3, ".");
-        let first_ext = splits.next()?;
-        let _ = splits.next()?;
-        let root = splits.next()?;
-
-        Some(RelativePathBuf::from(format!("{root}.{first_ext}")))
-    }
-}
-
-trait HtmlToIndex {
-    fn html_to_index(&self) -> Option<RelativePathBuf>;
-}
-
-impl<T: AsRef<RelativePath>> HtmlToIndex for T {
-    fn html_to_index(&self) -> Option<RelativePathBuf> {
-        let ext = self
-            .as_ref()
-            .extension()
-            .filter(|x| ["htm", "html"].contains(x))?;
-        let file_stem = self.as_ref().file_stem()?;
-
-        if file_stem == "index" {
-            // already done, don't do anything
-            None
-        } else {
-            // else, build the new string
-            Some(
-                self.as_ref()
-                    .parent()?
-                    .join(file_stem)
-                    .join("index.htm")
-                    .with_extension(ext),
-            )
-        }
-    }
-}
 
 pub(crate) struct Site {
     /// Generated files
@@ -190,19 +121,19 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             move |_, (language, code, prefix): (String, String, Option<String>)| {
                 // find the highlighter to use
                 let syntaxes = syntaxes_clone.borrow();
-                let highlighter = syntaxes
-                    .iter()
-                    .find(|x| x.match_filename(&language))
-                    .ok_or_else(|| {
-                        mlua::Error::external(format!(
-                            "Could not find a highlighter for language `{language}`"
-                        ))
-                    })?;
-                // highlight the code
-                let code = highlighter.highlight(&code, &prefix.unwrap_or(String::new()))?;
 
-                // return
-                Ok(code)
+                // no try_find yet
+                for h in syntaxes.iter() {
+                    if h.match_filename(&language)? {
+                        // highlight!
+                        return h.highlight(&code, &prefix.unwrap_or(String::new()));
+                    }
+                }
+
+                // return error if no language was found
+                Err(mlua::Error::external(format!(
+                    "Could not find a highlighter for language `{language}`"
+                )))
             },
         )?,
     )?;
@@ -299,6 +230,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?,
     )?;
 
+    // add chars to subset
+    let subset_chars = Rc::new(RefCell::new(BTreeSet::new()));
+    let subset_cloned = subset_chars.clone();
+    globals.set(
+        "extendsubset",
+        lua.create_function(move |_, chars: String| {
+            subset_cloned.borrow_mut().extend(chars.chars());
+            Ok(())
+        })?,
+    )?;
+
     // load syntaxes
     // cache them to reuse the regexes and avoid having to reload the lua file
     // this should only be run the first time the program starts, and is done
@@ -317,20 +259,18 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         *syntaxes.borrow_mut() = SYNTAXES.with_borrow(|x| x.clone());
     };
 
-    // if fennel is enabled, add fennel
-    if config.fennel {
-        let fennel = include_str!("fennel.lua");
-        let fennel = lua
-            .load(fennel)
-            .set_name("=fennel.lua")
-            .into_function()
-            .context("Failed to load fennel")?;
-        lua.load(chunk! {
-            package.preload["fennel"] = $fennel
-        })
-        .exec()
-        .context("failed to install fennel")?;
-    }
+    // load fennel
+    let fennel = include_str!("fennel.lua");
+    let fennel = lua
+        .load(fennel)
+        .set_name("=fennel.lua")
+        .into_function()
+        .context("Failed to load fennel")?;
+    lua.load(chunk! {
+        package.preload["fennel"] = $fennel
+    })
+    .exec()
+    .context("failed to install fennel")?;
 
     // output directory, as we want to ignore this one
     let out_dir = RelativePathBuf::from(&config.output_dir);
@@ -476,9 +416,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read `{path}`"))?,
-                path.as_str(),
-                &config,
-                path.has_double_ext("lua") || path.has_double_ext("fnl"),
+                &path,
             )
             .with_context(|_| format!("Failed to template file `{path}`"))?;
 
@@ -502,8 +440,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read `{path}`"))?,
-                path.as_str(),
-                &config,
+                &path,
             )
             .with_context(|_| format!("Failed to template file `{path}`"))?;
 
@@ -511,8 +448,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             let path = path
                 .without_double_ext()
                 .ok_or(mlua::Error::external(format!(
-                    "Expected path `{}` to have a second `.lua` or `.fnl` extension",
-                    path
+                    "Expected path `{path}` to have a second `.lua` or `.fnl` extension",
                 )))?;
             let path = path.html_to_index().unwrap_or(path);
 
@@ -585,6 +521,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
 
     // load from extra
     charset.extend(config.extra.chars());
+    charset.extend(subset_chars.borrow().iter());
 
     // load from files
     for (path, file) in files.iter() {

@@ -2,13 +2,13 @@
 Scriptable Lua Site Generator
 
 ## Instead of templating, there is lua (or fennel)
-Write your files in normal markdown or html. When a file has a \*.lua.\* in it's
-extension, it will be processed. In this casy, any `<?lua ... ?>` is interpreted
-as lua, and any `<?fnl ... ?>` is interpreted as Fennel. In markdown files, this
-is done by replacing any inline and block html that forms a processing instruction.
+Write your files in normal markdown or html. When a file has a \*.lua.\* or \*.fnl.\*
+in it's extension, it will be processed. In this casy, any `<? ... ?>` is interpreted
+as lua or fennel, depending on the double extension In markdown files, this is done by
+replacing any inline and block html that forms a processing instruction.
 
-Any number or string that is returned from `<?lua ... ?>` and `<?fnl ... ?>`
-expressions are added into the resulting file.
+Any number or string that is returned from `<? ... ?>` expressions are added into the
+resulting file.
 
 If a function or table is returned, this function is called after templating is
 done, with the entire text in the file. The resulting string from the function is

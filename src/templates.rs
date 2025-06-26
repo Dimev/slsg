@@ -1,33 +1,57 @@
 use std::{collections::VecDeque, iter::repeat};
 
-use mlua::{Lua, Result, Value, chunk};
+use mlua::{
+    Lua, Result,
+    Value::{self, Nil},
+    chunk,
+};
+use relative_path::RelativePath;
 use unicode_width::UnicodeWidthStr;
 
-use crate::conf::Config;
+use crate::path::{DoubleFileExt, HtmlToIndex};
 
 pub(crate) fn template(
     lua: &Lua,
     content: &str,
-    name: &str,
-    conf: &Config,
+    name: &RelativePath,
 ) -> Result<(String, VecDeque<Value>)> {
+    // translated name
+    let path = name
+        .without_double_ext()
+        .ok_or(mlua::Error::external(format!(
+            "Expected path `{name}` to have a second `.lua` or `.fnl` extension"
+        )))?;
+    let path = path.html_to_index().unwrap_or(path);
+
+    // set up environment
+    // current file
+    lua.globals().set("curfile", name.as_str())?;
+
+    // current directory
+    lua.globals()
+        .set("curdir", name.parent().map(RelativePath::as_str))?;
+
+    // where this file will be emitted to
+    lua.globals().set("curtarget", path.as_str())?;
+
+    // directory this file will be emitted to
+    lua.globals()
+        .set("curtargetdir", path.parent().map(RelativePath::as_str))?;
+
+    // output string
     let mut out = String::with_capacity(content.len());
+
+    // functions to run after
     let mut functions = VecDeque::new();
+
+    // what to parse
     let mut chars = content.char_indices();
 
+    // parse!
     while let Some((_, c)) = chars.next() {
         // open tag and a ?lua? parse lua
-        if c == '<' && chars.as_str().starts_with("?lua") {
-            if !conf.lua {
-                return Err(mlua::Error::external(
-                    "Found a lua code block, but lua is not enabled in `site.conf`",
-                ));
-            }
+        if c == '<' && chars.as_str().starts_with("?") && name.has_double_ext("lua") {
             chars.next();
-            chars.next();
-            chars.next();
-            chars.next();
-
             // add extra whitespace to the start to have the line numbers match up
             let position = chars.offset();
             let lines = content[..position].chars().filter(|x| *x == '\n').count();
@@ -51,7 +75,7 @@ pub(crate) fn template(
             }
 
             // run code
-            let result: Value = lua.load(code).set_name(format!("={name}")).eval()?;
+            let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
             // string, numbers or booleans can be embedded directly
             if result.is_string() || result.is_number() || result.is_boolean() {
@@ -64,15 +88,7 @@ pub(crate) fn template(
             }
         }
         // open tag and a ?fnl? parse fennel
-        else if c == '<' && chars.as_str().starts_with("?fnl") {
-            if !conf.fennel {
-                return Err(mlua::Error::external(
-                    "Found a fennel code block, but fennel is not enabled in `site.conf`",
-                ));
-            }
-            chars.next();
-            chars.next();
-            chars.next();
+        else if c == '<' && chars.as_str().starts_with("?") && name.has_double_ext("fnl") {
             chars.next();
 
             // add extra whitespace to the start to have the line numbers match up
@@ -99,8 +115,8 @@ pub(crate) fn template(
 
             // run code
             let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
-                .set_name(format!("={name}"))
+                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
+                .set_name(format!("@{name}"))
                 .eval()?;
 
             // string, numbers or booleans can be embedded directly
@@ -118,6 +134,12 @@ pub(crate) fn template(
             out.push(c);
         }
     }
+
+    // unset environment
+    lua.globals().set("curfile", Nil)?;
+    lua.globals().set("curdir", Nil)?;
+    lua.globals().set("curtarget", Nil)?;
+    lua.globals().set("curtargetdir", Nil)?;
 
     Ok((out, functions))
 }

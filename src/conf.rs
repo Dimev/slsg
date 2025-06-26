@@ -11,12 +11,6 @@ pub(crate) struct Config {
     /// Output directory, defaults to dist (all files are automatically ignored there)
     pub output_dir: String,
 
-    /// Whether to enable fennel (<?fnl ... ?>), true by default
-    pub fennel: bool,
-
-    /// Whether to enable lua (<?lua ... ?>), true by default
-    pub lua: bool,
-
     /// Whether to subset fonts
     pub subset: bool,
 
@@ -42,8 +36,6 @@ impl Config {
             ignore: Vec::new(),
             output_dir: "dist/".into(),
             not_found: None,
-            fennel: true,
-            lua: true,
             subset: true,
             extra: String::new(),
             setup: None,
@@ -83,19 +75,8 @@ impl Config {
                 let key = key.trim();
                 let value = value.trim();
 
-                // here we expect key-value pairs
-                let as_bool = Some(value == "true")
-                    .filter(|_| ["true", "false"].contains(&value))
-                    .ok_or(mlua::Error::external(format!(
-                        "site.conf:{num}:1: Expected a `key = value` pair"
-                    )));
-
                 if key == "output" {
                     cfg.output_dir = value.into()
-                } else if key == "allow-lua" {
-                    cfg.lua = as_bool?
-                } else if key == "allow-fennel" {
-                    cfg.fennel = as_bool?
                 } else if key == "setup" {
                     cfg.setup = Some(value.into());
                 } else {
@@ -168,7 +149,7 @@ mod tests {
     fn parse_config() {
         let config = "
             [build]
-            allow-lua = false # we don't want lua
+            output = out/ # we want another output
 
             [ignore]
             # ignore our fennel scripts and templates
@@ -178,7 +159,7 @@ mod tests {
 
         let cfg = Config::parse(config).expect("Failed to parse");
 
-        assert_eq!(cfg.lua, false);
+        assert_eq!(cfg.output_dir, "out/");
         assert_eq!(
             cfg.ignore,
             vec!["scripts/*".to_string(), "templates/*".to_string()]
@@ -190,8 +171,6 @@ mod tests {
         let config = "
             [build]
             output = out/
-            allow-fennel = false
-            allow-lua = false # we don't want lua
             setup = script.lua
 
             [ignore]
@@ -208,8 +187,6 @@ mod tests {
 
         let cfg = Config::parse(config).expect("Failed to parse");
 
-        assert_eq!(cfg.fennel, false);
-        assert_eq!(cfg.lua, false);
         assert_eq!(cfg.output_dir, "out/".to_string());
         assert_eq!(cfg.not_found, Some("404.html".to_string()));
         assert_eq!(cfg.ignore, vec!["scripts/*".to_string()]);
