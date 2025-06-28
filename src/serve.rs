@@ -316,8 +316,33 @@ fn reload(
         // notify if it went bad
         if let Err(ref e) = *site {
             print_error("Failed to build site", e);
-        } else {
-            println!("Site rebuilt ({}ms)", start.elapsed().as_millis());
+        } else if let Ok(ref s) = *site {
+            let count = s.files.len();
+            let size = s.files.values().map(|x| x.len()).sum::<usize>() as f64 / 1000.0;
+
+            // pick largest size to use for representation
+            // if bigger than one mb, scale down
+            let megabytes = if size > 1000.0 { true } else { false };
+            let size = if megabytes { size / 1000.0 } else { size };
+
+            // and if bigger than a gb, scale down
+            let gigabytes = if size > 1000.0 { true } else { false };
+            let size = if gigabytes { size / 1000.0 } else { size };
+
+            // pick unit
+            let unit = if gigabytes {
+                "gb"
+            } else if megabytes {
+                "mb"
+            } else {
+                "kb"
+            };
+
+            println!(
+                "site rebuilt - took {}ms - {count} file{} - {size:.2}{unit}",
+                start.elapsed().as_millis(),
+                if count > 1 { "s" } else { "" },
+            );
         }
 
         // notify the listeners we got updated as well
