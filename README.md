@@ -1,6 +1,12 @@
 # SLSG
 Scriptable Lua Site Generator
 
+## TODO
+- [ ] Fix fennel's function scopes, so they can be used acros scripts
+- [ ] Project site
+- [ ] Template for both fennel and lua (index, single post, rss feed)
+- [ ] `new` command that uses one of the templates
+
 ## Instead of templating, there is lua (or fennel)
 Write your files in normal markdown or html. When a file has a \*.lua.\* or \*.fnl.\*
 in it's extension, it will be processed. In this casy, any `<? ... ?>` is interpreted
@@ -52,8 +58,6 @@ defaults:
 ```ini
 [build]
 output = dist/
-allow-fennel = true # allow lua, set to false to crash if <?lua ... ?> is found
-allow-lua = true # same for fennel
 # setup = script.lua # setup script, run before processing
 
 [ignore]

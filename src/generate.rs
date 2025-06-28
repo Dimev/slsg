@@ -5,8 +5,9 @@ use std::{
     rc::Rc,
 };
 
-use glob::{Paths, Pattern};
-use hb_subset::Language;
+use codemap::SpanLoc;
+use glob::Pattern;
+use grass::{Logger, Options};
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
 use relative_path::RelativePathBuf;
@@ -17,8 +18,37 @@ use crate::{
     highlight::Highlighter,
     markdown::markdown,
     path::{DoubleFileExt, HtmlToIndex},
+    print::print_warning,
     templates::template,
 };
+
+#[derive(Debug)]
+struct SassLogger();
+
+impl Logger for SassLogger {
+    fn debug(&self, location: SpanLoc, message: &str) {
+        print_warning(
+            &format!(
+                "While parsing `{}:{}` [DEBUG]",
+                location.file.name(),
+                location.begin.line + 1
+            ),
+            &message,
+        );
+    }
+
+    fn warn(&self, location: SpanLoc, message: &str) {
+        print_warning(
+            &format!(
+                "While parsing `{}:{}:{}`",
+                location.file.name(),
+                location.begin.line + 1,
+                location.begin.column + 1
+            ),
+            &message,
+        );
+    }
+}
 
 pub(crate) struct Site {
     /// Generated files
@@ -63,7 +93,7 @@ thread_local! {
     /// Cached fonts
     static SUBSETTED: RefCell<BTreeMap<Vec<u8>, Vec<u8>>> = RefCell::new(BTreeMap::new());
 
-    /// Syntax cache
+    /// Syntax cache, only stores the built-in ones
     static SYNTAXES: RefCell<Vec<Highlighter>> = RefCell::new(Vec::new());
 }
 
@@ -123,7 +153,8 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 let syntaxes = syntaxes_clone.borrow();
 
                 // no try_find yet
-                for h in syntaxes.iter() {
+                // search from the back, as we add syntaxes to the back of the list
+                for h in syntaxes.iter().rev() {
                     if h.match_filename(&language)? {
                         // highlight!
                         return h.highlight(&code, &prefix.unwrap_or(String::new()));
@@ -158,7 +189,31 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         lua.create_function(|_, html: String| Ok(escape_html(&html)))?,
     )?;
 
-    // emit a file TODO
+    // emit a file
+    let emit_extra = Rc::new(RefCell::new(BTreeMap::new()));
+    let emit_extra_clone = emit_extra.clone();
+    globals.set(
+        "emitfile",
+        lua.create_function(move |_, (path, content): (String, mlua::String)| {
+            emit_extra_clone
+                .borrow_mut()
+                .insert(RelativePathBuf::from(path), content.as_bytes().to_owned());
+            Ok(())
+        })?,
+    )?;
+
+    // ignore a file
+    let ignore_extra = Rc::new(RefCell::new(BTreeSet::new()));
+    let ignore_extra_clone = ignore_extra.clone();
+    globals.set(
+        "ignorefile",
+        lua.create_function(move |_, path: String| {
+            ignore_extra_clone
+                .borrow_mut()
+                .insert(RelativePathBuf::from(path));
+            Ok(())
+        })?,
+    )?;
 
     // list files in directory
     globals.set(
@@ -249,7 +304,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     if SYNTAXES.with_borrow(|x| x.is_empty()) {
         // load
         lua.load(include_str!("syntaxes.lua"))
-            .set_name("=syntaxes.lua")
+            .set_name("@syntaxes.lua")
             .exec()?;
 
         // add the loaded set to the cache
@@ -307,8 +362,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             }
             Some(_) | None => {
                 return Err(mlua::Error::external(format!(
-                    "File `{}` is not a lua or fennel file, and can't be run as setup script",
-                    path
+                    "File `{path}` is not a lua or fennel file, and can't be run as setup script",
                 )));
             }
         };
@@ -407,6 +461,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // fonts to subset
     let mut to_subset = Vec::new();
 
+    // sass filet to compile
+    let mut to_sass = Vec::new();
+
     for path in process {
         // is it a minimark file?
         if path.extension().map(|x| x == "md").unwrap_or(false) {
@@ -465,6 +522,14 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 to_subset.push(path);
             }
         }
+        // .sass or .scss? compile
+        else if path
+            .extension()
+            .map(|x| ["sass", "scss"].contains(&x))
+            .unwrap_or(false)
+        {
+            to_sass.push(path);
+        }
         // else? emit normally
         else {
             // make the final path
@@ -500,10 +565,9 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             // need to process again
             to_template.push_back((path, res, functions));
         } else {
-            files.insert(path.clone(), res.clone().into_bytes());
+            files.insert(path, res.into_bytes());
         }
     }
-
     // complete post-processing
     if let Some(fun) = post_process {
         if let Some(fun) = fun.as_function() {
@@ -515,6 +579,34 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         }
     }
 
+    // add emitted files
+    files.extend(emit_extra.replace(Default::default()).into_iter());
+
+    // we got all files to ignore, filter
+    files.retain(|k, _| !ignore_extra.borrow().contains(k));
+
+    // do sass
+    for path in to_sass
+        .into_iter()
+        .filter(|x| !ignore_extra.borrow().contains(x))
+    {
+        let logger = SassLogger();
+        let opts = Options::default()
+            .style(if dev {
+                grass::OutputStyle::Expanded
+            } else {
+                grass::OutputStyle::Compressed
+            })
+            .logger(&logger);
+
+        let res = grass::from_path(path.to_path("."), &opts)
+            .into_lua_err()
+            .with_context(|_| format!("Failed to compile sass file `{path}`"))?;
+
+        // export a css file
+        files.insert(path.with_extension("css"), res.into_bytes());
+    }
+
     // do font subsetting
     // find what characters we have
     let mut charset = BTreeSet::new();
@@ -524,7 +616,10 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     charset.extend(subset_chars.borrow().iter());
 
     // load from files
-    for (path, file) in files.iter() {
+    for (path, file) in files
+        .iter()
+        .filter(|x| !ignore_extra.borrow().contains(x.0))
+    {
         // only work on html files
         if path.extension() == Some("htm") || path.extension() == Some("html") {
             // interpret as utf8
@@ -550,7 +645,10 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     }
 
     // subset fonts
-    for path in to_subset {
+    for path in to_subset
+        .iter()
+        .filter(|x| !ignore_extra.borrow().contains(*x))
+    {
         let font = fs::read(path.to_path("."))
             .into_lua_err()
             .with_context(|_| format!("Failed to read file `{path}`"))?;

@@ -13,12 +13,12 @@ use print::print_error;
 mod conf;
 mod font;
 mod generate;
+mod highlight;
 mod markdown;
+mod path;
 mod print;
 mod serve;
 mod templates;
-mod highlight;
-mod path;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator

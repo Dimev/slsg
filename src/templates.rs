@@ -78,12 +78,15 @@ pub(crate) fn template(
             let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
             // string, numbers or booleans can be embedded directly
-            if result.is_string() || result.is_number() || result.is_boolean() {
-                out.push_str(&result.to_string()?);
+            if result.is_string() || result.is_number() || result.is_integer() {
+                out.push_str(&lua.coerce_string(result)?.unwrap().to_str()?);
             }
-
+            // boolean
+            else if let Some(b) = result.as_boolean() {
+                out.push_str(if b { "true" } else { "false" });
+            }
             // functions and tables can be called, so run them later
-            if result.is_function() || result.is_table() {
+            else if result.is_function() || result.is_table() {
                 functions.push_back(result.clone());
             }
         }
@@ -114,18 +117,22 @@ pub(crate) fn template(
             }
 
             // run code
+            let name = name.as_str();
             let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
+                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
                 .set_name(format!("@{name}"))
                 .eval()?;
 
             // string, numbers or booleans can be embedded directly
-            if result.is_string() || result.is_number() || result.is_boolean() {
-                out.push_str(&result.to_string()?);
+            if result.is_string() || result.is_number() || result.is_integer() {
+                out.push_str(&lua.coerce_string(result)?.unwrap().to_str()?);
             }
-
+            // boolean
+            else if let Some(b) = result.as_boolean() {
+                out.push_str(if b { "true" } else { "false" });
+            }
             // functions and tables can be called, so run them later
-            if result.is_function() || result.is_table() {
+            else if result.is_function() || result.is_table() {
                 functions.push_back(result.clone());
             }
         }

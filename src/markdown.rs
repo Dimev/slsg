@@ -95,12 +95,21 @@ pub(crate) fn markdown(
                 let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
                 // string, numbers or booleans can be embedded directly
-                if result.is_string() || result.is_number() || result.is_boolean() {
-                    events.push(Event::InlineHtml(result.to_string()?.into()));
+                if result.is_string() || result.is_number() || result.is_integer() {
+                    events.push(Event::Html(
+                        lua.coerce_string(result)?
+                            .unwrap()
+                            .to_str()?
+                            .to_owned()
+                            .into(),
+                    ));
                 }
-
+                // boolean
+                else if let Some(b) = result.as_boolean() {
+                    events.push(Event::Html(if b { "true" } else { "false" }.into()));
+                }
                 // functions and tables can be called, so run them later
-                if result.is_function() || result.is_table() {
+                else if result.is_function() || result.is_table() {
                     functions.push_back(result.clone());
                 }
             }
@@ -128,18 +137,28 @@ pub(crate) fn markdown(
                 );
 
                 // run code
+                let name = name.as_str();
                 let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
-                .set_name(format!("@{name}"))
-                .eval()?;
+                    .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name.as_str })))
+                    .set_name(format!("@{name}"))
+                    .eval()?;
 
                 // string, numbers or booleans can be embedded directly
-                if result.is_string() || result.is_number() || result.is_boolean() {
-                    events.push(Event::InlineHtml(result.to_string()?.into()));
+                if result.is_string() || result.is_number() || result.is_integer() {
+                    events.push(Event::Html(
+                        lua.coerce_string(result)?
+                            .unwrap()
+                            .to_str()?
+                            .to_owned()
+                            .into(),
+                    ));
                 }
-
+                // boolean
+                else if let Some(b) = result.as_boolean() {
+                    events.push(Event::Html(if b { "true" } else { "false" }.into()));
+                }
                 // functions and tables can be called, so run them later
-                if result.is_function() || result.is_table() {
+                else if result.is_function() || result.is_table() {
                     functions.push_back(result.clone());
                 }
             }
@@ -185,12 +204,21 @@ pub(crate) fn markdown(
                 let result: Value = lua.load(code).set_name(format!("@{name}")).eval()?;
 
                 // string, numbers or booleans can be embedded directly
-                if result.is_string() || result.is_number() || result.is_boolean() {
-                    events.push(Event::Html(result.to_string()?.into()));
+                if result.is_string() || result.is_number() || result.is_integer() {
+                    events.push(Event::Html(
+                        lua.coerce_string(result)?
+                            .unwrap()
+                            .to_str()?
+                            .to_owned()
+                            .into(),
+                    ));
                 }
-
+                // boolean
+                else if let Some(b) = result.as_boolean() {
+                    events.push(Event::Html(if b { "true" } else { "false" }.into()));
+                }
                 // functions and tables can be called, so run them later
-                if result.is_function() || result.is_table() {
+                else if result.is_function() || result.is_table() {
                     functions.push_back(result.clone());
                 }
 
@@ -228,18 +256,28 @@ pub(crate) fn markdown(
                 );
 
                 // run code
+                let name = name.as_str();
                 let result: Value = lua
-                .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $(name.as_str()) })))
-                .set_name(format!("@{name}"))
-                .eval()?;
+                    .load(chunk!(require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })))
+                    .set_name(format!("@{name}"))
+                    .eval()?;
 
                 // string, numbers or booleans can be embedded directly
-                if result.is_string() || result.is_number() || result.is_boolean() {
-                    events.push(Event::Html(result.to_string()?.into()));
+                if result.is_string() || result.is_number() || result.is_integer() {
+                    events.push(Event::Html(
+                        lua.coerce_string(result)?
+                            .unwrap()
+                            .to_str()?
+                            .to_owned()
+                            .into(),
+                    ));
                 }
-
+                // boolean
+                else if let Some(b) = result.as_boolean() {
+                    events.push(Event::Html(if b { "true" } else { "false" }.into()));
+                }
                 // functions and tables can be called, so run them later
-                if result.is_function() || result.is_table() {
+                else if result.is_function() || result.is_table() {
                     functions.push_back(result.clone());
                 }
 
