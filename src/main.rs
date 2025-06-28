@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
     fs::{self, create_dir_all, read_dir, remove_dir_all},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use conf::Config;
@@ -33,6 +34,7 @@ Usage:
 Options:
   -h --help     Show this screen
   -v --version  Print SLSG and luaJIT version
+     --verbose  Print out extra information when building
 
   -a --address  Where to bind the dev server to (default 127.0.0.1:1111)
   -o --output   Where to output the files to (default dist/)
@@ -150,6 +152,9 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .context("Failed to parse arguments")?;
 
+    // verbose output?
+    let verbose = pargs.contains("--verbose");
+
     // force clear the directory, only if we are building the current site's ./dist folder
     // or are passed the --force argument
     let force_clear = pargs.contains(["-f", "--force"]);
@@ -204,6 +209,9 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         )));
     }
 
+    // start timing
+    let start = Instant::now();
+
     // make sure the path exists
     create_dir_all(&output_path)
         .into_lua_err()
@@ -231,8 +239,13 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // generate the site,
-    let site = generate(false)?; //.context("Failed to generate site")?;
+    let site = generate(false)?;
+    let mut count = 0;
+    let mut size = 0;
     for (file_path, contents) in site.files.into_iter() {
+        count += 1;
+        size += contents.len();
+
         // create the directory for it
         create_dir_all(
             &file_path
@@ -260,6 +273,35 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
                     file_path.to_path(&output_path).to_string_lossy()
                 )
             })?;
+    }
+
+    // report info, if verbose
+    if verbose {
+        let size = size as f64 / 1000.0;
+
+        // pick largest size to use for representation
+        // if bigger than one mb, scale down
+        let megabytes = if size > 1000.0 { true } else { false };
+        let size = if megabytes { size / 1000.0 } else { size };
+
+        // and if bigger than a gb, scale down
+        let gigabytes = if size > 1000.0 { true } else { false };
+        let size = if gigabytes { size / 1000.0 } else { size };
+
+        // pick unit
+        let unit = if gigabytes {
+            "gb"
+        } else if megabytes {
+            "mb"
+        } else {
+            "kb"
+        };
+
+        println!(
+            "took {}ms - {count} file{} - {size:.2}{unit}",
+            start.elapsed().as_millis(),
+            if count > 1 { "s" } else { "" },
+        );
     }
 
     Ok(())
