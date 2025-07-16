@@ -1,4 +1,4 @@
-<? require('scripts/templates').page {
+<? page {
   title = "Scriptable Lua Site Generator",
   description = "Generate static sites with lua",
 } ?>
@@ -47,7 +47,7 @@ We can create a template like so:
 
 And a function to load our template
 ```lua
--- template.lua
+-- main.lua
 function page(args)
   local template = readfile 'template.html'
     :gsub('@@title', args.title)
@@ -56,11 +56,13 @@ function page(args)
     return template:gsub('@@content', content)
   end
 end
+
+return { page = page }
 ```
 
 Then, when we write markdown, we can use this to template our page!
 ```markdown
-<? require 'template'.page {
+<? page {
   -- Give our title
   title = "Hello word!"
 } ?>

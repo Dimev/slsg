@@ -17,8 +17,8 @@ pub(crate) struct Config {
     /// extra characters to subset
     pub extra: String,
 
-    /// Setup script to run first
-    pub setup: Option<String>,
+    /// include script to run first
+    pub include: Option<String>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -38,7 +38,7 @@ impl Config {
             not_found: None,
             subset: true,
             extra: String::new(),
-            setup: None,
+            include: None,
         };
 
         let mut mode = Mode::Global;
@@ -77,8 +77,8 @@ impl Config {
 
                 if key == "output" {
                     cfg.output_dir = value.into()
-                } else if key == "setup" {
-                    cfg.setup = Some(value.into());
+                } else if key == "include" {
+                    cfg.include = Some(value.into());
                 } else {
                     return Err(mlua::Error::external(format!(
                         "site.conf:{num}:1: Unrecognized key `{key}`"
@@ -171,7 +171,7 @@ mod tests {
         let config = "
             [build]
             output = out/
-            setup = script.lua
+            include = script.lua
 
             [ignore]
             scripts/* # ignore our fennel scripts and templates
@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(cfg.ignore, vec!["scripts/*".to_string()]);
         assert_eq!(cfg.subset, false);
         assert_eq!(cfg.extra, "abcdef".to_string());
-        assert_eq!(cfg.setup, Some("script.lua".to_string()));
+        assert_eq!(cfg.include, Some("script.lua".to_string()));
     }
 
     #[test]

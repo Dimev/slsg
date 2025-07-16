@@ -1,4 +1,6 @@
-local function page(args)
+local mod = {}
+
+function mod.page(args)
   -- this is the template we'll use
   local template = readfile 'templates/page.html'
       -- apply the templates we can here
@@ -12,4 +14,4 @@ local function page(args)
   end
 end
 
-return { page = page }
+return mod

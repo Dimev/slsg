@@ -9,7 +9,7 @@ use codemap::SpanLoc;
 use glob::Pattern;
 use grass::{Logger, Options};
 use latex2mathml::{DisplayStyle, latex_to_mathml};
-use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Value, chunk};
+use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, Value, chunk};
 use relative_path::RelativePathBuf;
 
 use crate::{
@@ -346,14 +346,17 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?;
 
     // setup script
-    let post_process = if let Some(setup) = &config.setup {
+    if let Some(setup) = &config.include {
         let path = RelativePathBuf::from(setup);
-        let continuation: Value = match path.extension() {
-            Some("lua") => lua.load(path.to_path(".")).eval()?,
+        let module: Option<Table> = match path.extension() {
+            Some("lua") => lua
+                .load(path.to_path("."))
+                .eval()
+                .with_context(|_| format!("Failed to load include file `{path}`"))?,
             Some("fnl") => {
                 let code = fs::read_to_string(path.to_path("."))
                     .into_lua_err()
-                    .with_context(|_| format!("Could not load fennel file `{path}`"))?;
+                    .with_context(|_| format!("Failed to load include file `{path}`"))?;
                 let name = path.as_str();
                 lua.load(
                     chunk! { require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })},
@@ -366,10 +369,15 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
                 )));
             }
         };
-        Some(continuation)
-    } else {
-        None
-    };
+
+        // add module to global scope
+        if let Some(m) = module {
+            for p in m.pairs() {
+                let (k, v): (Value, Value) = p?;
+                lua.globals().set(k, v)?;
+            }
+        }
+    }
 
     // files to process, in that order
     let mut process = Vec::new();
@@ -377,15 +385,24 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // depth first traversal of the directories
     let mut stack = vec![RelativePathBuf::new()];
     while let Some(path) = stack.pop() {
-        // skip if this path is in the skippable list
+        // skip if this path is in the skippable list, one of the main files, or is hidden
+        // don't include output
         if path.starts_with(&out_dir)
+            // don't include site
             || path == "site.conf"
+            // don't include the include file
             || config
-                .setup
+                .include
                 .as_ref()
                 .map(|x| x.as_str() == path)
                 .unwrap_or(false)
+             // don't include any to ignore
             || to_ignore.iter().any(|x| x.matches(path.as_str()))
+            // don't include hidden
+            || path
+                .file_name()
+                .map(|x| x.starts_with('.'))
+                .unwrap_or(false)
         {
             continue;
         // if it's a directory, read all directories
@@ -566,16 +583,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             to_template.push_back((path, res, functions));
         } else {
             files.insert(path, res.into_bytes());
-        }
-    }
-    // complete post-processing
-    if let Some(fun) = post_process {
-        if let Some(fun) = fun.as_function() {
-            fun.call::<()>(())?;
-        } else if let Some(fun) = fun.as_table() {
-            fun.call::<()>(())?;
-        } else if let Some(fun) = fun.as_userdata() {
-            fun.call::<()>(())?;
         }
     }
 
