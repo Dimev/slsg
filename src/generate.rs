@@ -334,7 +334,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // setup script
     let setup_path = if RelativePathBuf::from("site.lua").to_path(".").exists() {
         RelativePathBuf::from("site.lua")
-    } else if RelativePathBuf::from("site.lua").to_path(".").exists() {
+    } else if RelativePathBuf::from("site.fnl").to_path(".").exists() {
         RelativePathBuf::from("site.fnl")
     } else {
         return Err(mlua::Error::external("no `site.lua` or `site.fnl` found"));
