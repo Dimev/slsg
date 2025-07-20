@@ -44,6 +44,7 @@ registersyntax {
   { token = "identifier",      "\\b(self|arg)\\b" },
   { token = "constant",        "\\b(false|nil|true)\\b" },
   { token = "statement",       "(\\b(dofile|require|include)|%q|%!|%Q|%r|%x)\\b" },
+  { token = "comment", "--.*" },
 
   { token = "symbol-brackets", "[(){}\\[\\]]" },
   { token = "symbol",          "(\\*|//|/|%|\\+|-|\\^|>|>=|<|<=|~=|=|[\\.]{2,3}|#)" },
@@ -53,6 +54,12 @@ registersyntax {
   { token = "constant-string", open = "\"", close = "\"", skip = "\\\\.",
     { token = "constant-specialChar", "\\\\([abfnrtvz\\'\"]|[0-9]{1,3}|x[0-9a-fA-F][0-9a-fA-F]|u\\{[0-9a-fA-F]+\\})" }
   },
+
+  { token = "constant-string", open = "\'", close = "\'", skip = "\\\\.",
+    { token = "constant-specialChar", "\\\\([abfnrtvz\\'\"]|[0-9]{1,3}|x[0-9a-fA-F][0-9a-fA-F]|u\\{[0-9a-fA-F]+\\})" }
+  },
+
+  
 }
 
 registersyntax {

@@ -61,5 +61,17 @@ pub(crate) fn print_success<E: Display>(context: &str, error: &E) {
 
 /// Produce an error page for html
 pub(crate) fn html_error<E: Display>(error: &E) -> String {
-    format!(include_str!("error_template.html"), error)
+    let error = error.to_string();
+    let mut err = String::with_capacity(error.len());
+    for c in error.chars() {
+        match c {
+            '&' => err.push_str("&amp;"),
+            '<' => err.push_str("&lt;"),
+            '>' => err.push_str("&gt;"),
+            '"' => err.push_str("&quot;"),
+            '\'' => err.push_str("&#39;"),
+            _ => err.push(c),
+        }
+    }
+    format!(include_str!("error_template.html"), err)
 }

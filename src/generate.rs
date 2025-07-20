@@ -13,7 +13,6 @@ use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, Value, 
 use relative_path::RelativePathBuf;
 
 use crate::{
-    conf::Config,
     font::{chars_from_html, subset_font},
     highlight::Highlighter,
     markdown::markdown,
@@ -100,19 +99,38 @@ thread_local! {
 /// Generate the site
 /// Assumes that the current directory contains the site.conf file
 pub(crate) fn generate(dev: bool) -> Result<Site> {
-    // read the config file
-    let config = fs::read_to_string("site.conf")
-        .into_lua_err()
-        .context("failed to read `site.conf`")?;
-
-    let config = Config::parse(&config)?;
-
     // set up lua
     let lua = unsafe { Lua::unsafe_new() };
 
     // load standard library
     let globals = lua.globals();
     globals.set("development", dev)?; // true if we are serving
+
+    // ignore a file
+    let ignore = Rc::new(RefCell::new(Vec::new()));
+    let ignore_clone = ignore.clone();
+    globals.set(
+        "ignorefiles",
+        lua.create_function(move |_, glob: String| {
+            let glob = Pattern::new(&glob)
+                .into_lua_err()
+                .with_context(|_| format!("Failed to make glob pattern `{glob}`"))?;
+
+            ignore_clone.borrow_mut().push(glob);
+            Ok(())
+        })?,
+    )?;
+
+    // file to use as not found
+    let not_found = Rc::new(RefCell::new(None));
+    let not_found_clone = not_found.clone();
+    globals.set(
+        "notfound",
+        lua.create_function(move |_, file: String| {
+            *not_found_clone.borrow_mut() = Some(file);
+            Ok(())
+        })?,
+    )?;
 
     // math
     globals.set(
@@ -201,20 +219,6 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             Ok(())
         })?,
     )?;
-
-    // ignore a file
-    let ignore_extra = Rc::new(RefCell::new(BTreeSet::new()));
-    let ignore_extra_clone = ignore_extra.clone();
-    globals.set(
-        "ignorefile",
-        lua.create_function(move |_, path: String| {
-            ignore_extra_clone
-                .borrow_mut()
-                .insert(RelativePathBuf::from(path));
-            Ok(())
-        })?,
-    )?;
-
     // list files in directory
     globals.set(
         "listfiles",
@@ -327,55 +331,41 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     .exec()
     .context("failed to install fennel")?;
 
-    // output directory, as we want to ignore this one
-    let out_dir = RelativePathBuf::from(&config.output_dir);
-
-    // pattterns to ignore
-    let to_ignore = config
-        .ignore
-        .iter()
-        .map(|x| {
-            Pattern::new(x)
-                .into_lua_err()
-                .with_context(|_| format!("Failed to make glob pattern `{x}`"))
-        })
-        // stable try_collect
-        .try_fold(Vec::new(), |mut v, p| {
-            v.push(p?);
-            Ok::<Vec<_>, mlua::Error>(v)
-        })?;
-
     // setup script
-    if let Some(setup) = &config.include {
-        let path = RelativePathBuf::from(setup);
-        let module: Option<Table> = match path.extension() {
-            Some("lua") => lua
-                .load(path.to_path("."))
-                .eval()
-                .with_context(|_| format!("Failed to load include file `{path}`"))?,
-            Some("fnl") => {
-                let code = fs::read_to_string(path.to_path("."))
-                    .into_lua_err()
-                    .with_context(|_| format!("Failed to load include file `{path}`"))?;
-                let name = path.as_str();
-                lua.load(
+    let setup_path = if RelativePathBuf::from("site.lua").to_path(".").exists() {
+        RelativePathBuf::from("site.lua")
+    } else if RelativePathBuf::from("site.lua").to_path(".").exists() {
+        RelativePathBuf::from("site.fnl")
+    } else {
+        return Err(mlua::Error::external("no `site.lua` or `site.fnl` found"));
+    };
+    let setup_module: Option<Table> = match setup_path.extension() {
+        Some("lua") => lua
+            .load(setup_path.to_path("."))
+            .eval()
+            .with_context(|_| format!("Failed to load include file `{setup_path}`"))?,
+        Some("fnl") => {
+            let code = fs::read_to_string(setup_path.to_path("."))
+                .into_lua_err()
+                .with_context(|_| format!("Failed to load include file `{setup_path}`"))?;
+            let name = setup_path.as_str();
+            lua.load(
                     chunk! { require("fennel").eval($code, { ["error-pinpoint"] = false, filename = $name })},
                 )
                 .eval()?
-            }
-            Some(_) | None => {
-                return Err(mlua::Error::external(format!(
-                    "File `{path}` is not a lua or fennel file, and can't be run as setup script",
-                )));
-            }
-        };
+        }
+        Some(_) | None => {
+            return Err(mlua::Error::external(format!(
+                "File `{setup_path}` is not a lua or fennel file, and can't be run as setup script",
+            )));
+        }
+    };
 
-        // add module to global scope
-        if let Some(m) = module {
-            for p in m.pairs() {
-                let (k, v): (Value, Value) = p?;
-                lua.globals().set(k, v)?;
-            }
+    // add module to global scope
+    if let Some(m) = setup_module {
+        for p in m.pairs() {
+            let (k, v): (Value, Value) = p?;
+            lua.globals().set(k, v)?;
         }
     }
 
@@ -387,18 +377,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     while let Some(path) = stack.pop() {
         // skip if this path is in the skippable list, one of the main files, or is hidden
         // don't include output
-        if path.starts_with(&out_dir)
-            // don't include site
-            || path == "site.conf"
-            // don't include the include file
-            || config
-                .include
-                .as_ref()
-                .map(|x| x.as_str() == path)
-                .unwrap_or(false)
+        if path.starts_with(".dist")
+            // don't include site file
+            || path == "site.lua" || path == "site.fnl"
              // don't include any to ignore
-            || to_ignore.iter().any(|x| x.matches(path.as_str()))
-            // don't include hidden
+            || ignore.borrow().iter().any(|x| x.matches(path.as_str()))
+            // don't include hidden files
             || path
                 .file_name()
                 .map(|x| x.starts_with('.'))
@@ -550,11 +534,11 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         // else? emit normally
         else {
             // make the final path
-            let path = path.html_to_index().unwrap_or(path);
+            let final_path = path.html_to_index().unwrap_or(path.clone());
 
             // insert it into the files
             files.insert(
-                path.clone(),
+                final_path,
                 fs::read(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read file `{path}`"))?,
@@ -590,12 +574,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     files.extend(emit_extra.replace(Default::default()).into_iter());
 
     // we got all files to ignore, filter
-    files.retain(|k, _| !ignore_extra.borrow().contains(k));
+    files.retain(|k, _| !ignore.borrow().iter().any(|x| x.matches(k.as_str())));
 
     // do sass
     for path in to_sass
         .into_iter()
-        .filter(|x| !ignore_extra.borrow().contains(x))
+        .filter(|x| !ignore.borrow().iter().any(|y| y.matches(x.as_str())))
     {
         let logger = SassLogger();
         let opts = Options::default()
@@ -619,13 +603,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     let mut charset = BTreeSet::new();
 
     // load from extra
-    charset.extend(config.extra.chars());
     charset.extend(subset_chars.borrow().iter());
 
     // load from files
     for (path, file) in files
         .iter()
-        .filter(|x| !ignore_extra.borrow().contains(x.0))
+        .filter(|x| !ignore.borrow().iter().any(|y| y.matches(x.0.as_str())))
     {
         // only work on html files
         if path.extension() == Some("htm") || path.extension() == Some("html") {
@@ -654,28 +637,24 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     // subset fonts
     for path in to_subset
         .iter()
-        .filter(|x| !ignore_extra.borrow().contains(*x))
+        .filter(|x| !ignore.borrow().iter().any(|y| y.matches(x.as_str())))
     {
         let font = fs::read(path.to_path("."))
             .into_lua_err()
             .with_context(|_| format!("Failed to read file `{path}`"))?;
-        let subsetted = if config.subset {
-            if let Some(subsetted) = SUBSETTED.with_borrow(|x| x.get(&font).cloned()) {
-                // get from cache
-                subsetted
-            } else {
-                // else, subset and add
-                let subsetted = subset_font(&font, &charset)
-                    .with_context(|_| format!("Failed to subset font `{path}`"))?;
-
-                // add
-                SUBSETTED.with_borrow_mut(|x| x.insert(font.clone(), subsetted.clone()));
-
-                // return the font we have
-                subsetted
-            }
+        let subsetted = if let Some(subsetted) = SUBSETTED.with_borrow(|x| x.get(&font).cloned()) {
+            // get from cache
+            subsetted
         } else {
-            font
+            // else, subset and add
+            let subsetted = subset_font(&font, &charset)
+                .with_context(|_| format!("Failed to subset font `{path}`"))?;
+
+            // add
+            SUBSETTED.with_borrow_mut(|x| x.insert(font.clone(), subsetted.clone()));
+
+            // return the font we have
+            subsetted
         };
         let path = path
             .without_double_ext()
@@ -686,7 +665,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     }
 
     // set the not found file
-    let not_found = if let Some(path) = config.not_found {
+    let not_found = if let Some(path) = not_found.take() {
         Some(
             files
                 .get(&RelativePathBuf::from(&path))

@@ -6,12 +6,10 @@ use std::{
     time::Instant,
 };
 
-use conf::Config;
 use generate::generate;
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
 
-mod conf;
 mod font;
 mod generate;
 mod highlight;
@@ -122,19 +120,23 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
 
 /// Find the site.conf file
 fn find_working_dir(path: &Path) -> Result<&Path> {
-    if path.file_name() == Some(&OsString::from("site.conf")) {
+    if path.file_name() == Some(&OsString::from("site.lua")) {
         path.parent().ok_or(mlua::Error::external(
-            "site.conf does not have a parent directory",
+            "`site.lua` does not have a parent directory",
+        ))
+    } else if path.file_name() == Some(&OsString::from("site.fnl")) {
+        path.parent().ok_or(mlua::Error::external(
+            "`site.fnl` does not have a parent directory",
         ))
     } else {
         for ancestor in path.ancestors() {
-            if ancestor.join("site.conf").exists() {
+            if ancestor.join("site.lua").exists() || ancestor.join("site.fnl").exists() {
                 return Ok(ancestor);
             }
         }
 
         Err(mlua::Error::external(format!(
-            "site.conf does not exist in `{}` or any of it's ancestors",
+            "`site.lua` or `site.fnl` does not exist in `{}` or any of it's ancestors",
             path.to_string_lossy()
         )))
     }
@@ -171,23 +173,12 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
             .context("Failed to find working directory")?
     };
 
-    let config = fs::read_to_string(&path.join("site.conf"))
-        .into_lua_err()
-        .with_context(|_| {
-            format!(
-                "failed to read `site.conf` in `{}`",
-                &path.to_string_lossy()
-            )
-        })?;
-
-    let config = Config::parse(&config)?;
-
-    let output_path = output_path.unwrap_or(path.join(&config.output_dir));
+    let output_path = output_path.unwrap_or(path.join(".dist"));
 
     // clear the output
     // only clear if it's allowed, or it's the output path
     if force_clear && output_path.is_dir()
-        || output_path.is_dir() && output_path == path.join(&config.output_dir)
+        || output_path.is_dir() && output_path == path.join(".dist")
     {
         remove_dir_all(&output_path)
             .into_lua_err()

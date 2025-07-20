@@ -1,5 +1,8 @@
-local mod = {}
+-- ignore our templates
+ignorefiles 'templates/*'
 
+-- all available functions
+local mod = {}
 function mod.page(args)
   -- this is the template we'll use
   local template = readfile 'templates/page.html'
