@@ -338,10 +338,12 @@ fn reload(
                 "kb"
             };
 
-            println!(
-                "site rebuilt - took {}ms - {count} file{} - {size:.2}{unit}",
-                start.elapsed().as_millis(),
-                if count > 1 { "s" } else { "" },
+            print_success(
+                &format!("Site rebuilt ({}ms)", start.elapsed().as_millis()),
+                &format!(
+                    "{count} file{}, {size:.2}{unit} total",
+                    if count > 1 { "s" } else { "" }
+                ),
             );
         }
 

@@ -10,6 +10,8 @@ use generate::generate;
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
 
+use crate::print::print_success;
+
 mod font;
 mod generate;
 mod highlight;
@@ -25,7 +27,7 @@ SLSG - Scriptable Lua Site Generator
 Usage:
   slsg dev [path] [--address]   Serve the site in path (default ./)
   slsg build [path] [--output]  Build the site in path (default ./)
-  slsg new <template> [path]    Create a new site in path
+  slsg new <language> [path]    Create a new site in path
   slsg docs                     Show the documentation
   slsg help                     Show this screen
 
@@ -92,8 +94,30 @@ fn main() {
     }
 }
 
+enum Lang {
+    Lua,
+    Fennel,
+}
+
 /// Create a new site
 fn new(mut pargs: pico_args::Arguments) -> Result<()> {
+    // read the template
+    let language = pargs
+        .subcommand()
+        .into_lua_err()
+        .context("Failed to parse arguments")?;
+
+    // stop if not the right language
+    // leaking memory here is fine as the program will end after this function call
+    let language = match language.map(|x| &x.to_lowercase().leak()[..]) {
+        Some("lua") => Ok(Lang::Lua),
+        Some("fennel") | Some("fnl") => Ok(Lang::Fennel),
+        _ => Err(mlua::Error::external(
+            "The given language needs to either be `lua`, `fennel` or `fnl`",
+        )),
+    }?;
+
+    // read where we make the site, or the current directory if none are given
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
         .into_lua_err()
@@ -103,19 +127,85 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // ensure the path does not exist yet
     if let Ok(mut dir) = path.read_dir() {
         if dir.next().is_some() {
-            println!(
+            return Err(mlua::Error::external(format!(
                 "Failed to create new site: target directory {:?} is not empty!",
                 path
-            );
-            //return;
+            )));
+        }
+    } else {
+        fs::create_dir_all(&path)
+            .into_lua_err()
+            .context("Failed to create new site directory")?;
+    }
+
+    // make the template
+    match language {
+        Lang::Lua => {
+            todo!()
+        }
+        Lang::Fennel => {
+            // make directories
+            fs::create_dir_all(path.join("templates")).into_lua_err()?;
+            fs::create_dir_all(path.join("posts")).into_lua_err()?;
+
+            // write out template
+            fs::write(
+                path.join(".gitignore"),
+                include_bytes!("../examples/template-fennel/.gitignore"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("site.fnl"),
+                include_bytes!("../examples/template-fennel/site.fnl"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("icon.svg"),
+                include_bytes!("../examples/template-fennel/icon.svg"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("style.scss"),
+                include_bytes!("../examples/template-fennel/style.scss"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("index.fnl.md"),
+                include_bytes!("../examples/template-fennel/index.fnl.md"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("templates/index.html"),
+                include_bytes!("../examples/template-fennel/templates/index.html"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("templates/page.html"),
+                include_bytes!("../examples/template-fennel/templates/page.html"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("posts/first.fnl.md"),
+                include_bytes!("../examples/template-fennel/posts/first.fnl.md"),
+            )
+            .into_lua_err()?;
         }
     }
 
-    todo!();
-
     // report success
-    println!("Created new site in {:?}", path);
-    println!("Run `slsg dev` in the directory to start making your site!");
+    print_success(
+        &format!("Created a new site in `{}`", path.to_string_lossy()),
+        &"Run `slsg dev` in the directory to run the dev server",
+    );
+
+    Ok(())
 }
 
 /// Find the site.conf file

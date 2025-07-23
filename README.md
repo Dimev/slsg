@@ -2,10 +2,11 @@
 Scriptable Lua Site Generator
 
 ## TODO
-- [ ] Fix fennel's function scopes, so they can be used acros scripts
+- [x] Fix fennel's function scopes, so they can be used acros scripts
 - [ ] Project site
 - [ ] Template for both fennel and lua (index, single post, rss feed)
 - [ ] `new` command that uses one of the templates
+- [ ] `doc` command that prints out the documentation
 
 ## Instead of templating, there is lua (or fennel)
 Write your files in normal markdown or html. When a file has a \*.lua.\* or \*.fnl.\*
