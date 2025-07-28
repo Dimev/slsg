@@ -143,10 +143,10 @@ pub(crate) fn template(
     }
 
     // unset environment
-    lua.globals().set("curfile", Nil)?;
-    lua.globals().set("curdir", Nil)?;
-    lua.globals().set("curtarget", Nil)?;
-    lua.globals().set("curtargetdir", Nil)?;
+    lua.globals().set("curfile", false)?;
+    lua.globals().set("curdir", false)?;
+    lua.globals().set("curtarget", false)?;
+    lua.globals().set("curtargetdir", false)?;
 
     Ok((out, functions))
 }

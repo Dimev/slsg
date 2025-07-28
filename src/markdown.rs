@@ -1,11 +1,7 @@
 use std::{collections::VecDeque, iter::repeat};
 
 use latex2mathml::latex_to_mathml;
-use mlua::{
-    ErrorContext, ExternalResult, Lua, Result,
-    Value::{self, Nil},
-    chunk,
-};
+use mlua::{ErrorContext, ExternalResult, Lua, Result, Value, chunk};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
 use relative_path::RelativePath;
 use unicode_width::UnicodeWidthStr;
@@ -347,10 +343,10 @@ pub(crate) fn markdown(
     push_html(&mut out, events.into_iter());
 
     // unset environment
-    lua.globals().set("curfile", Nil)?;
-    lua.globals().set("curdir", Nil)?;
-    lua.globals().set("curtarget", Nil)?;
-    lua.globals().set("curtargetdir", Nil)?;
+    lua.globals().set("curfile", false)?;
+    lua.globals().set("curdir", false)?;
+    lua.globals().set("curtarget", false)?;
+    lua.globals().set("curtargetdir", false)?;
 
     Ok((out, functions))
 }

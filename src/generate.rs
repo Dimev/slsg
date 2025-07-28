@@ -10,7 +10,7 @@ use glob::Pattern;
 use grass::{Logger, Options};
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, Value, chunk};
-use relative_path::RelativePathBuf;
+use relative_path::{RelativePath, RelativePathBuf};
 
 use crate::{
     font::{chars_from_html, subset_font},
@@ -300,6 +300,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         })?,
     )?;
 
+    // currently not working inside a file
+    lua.globals().set("curfile", false)?;
+    lua.globals().set("curdir", false)?;
+    lua.globals().set("curtarget", false)?;
+    lua.globals().set("curtargetdir", false)?;
+
     // load syntaxes
     // cache them to reuse the regexes and avoid having to reload the lua file
     // this should only be run the first time the program starts, and is done
@@ -469,12 +475,13 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         // is it a minimark file?
         if path.extension().map(|x| x == "md").unwrap_or(false) {
             // parse
+            let name = path.clone();
             let (res, functions) = markdown(
                 &lua,
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read `{path}`"))?,
-                &path,
+                &name,
             )
             .with_context(|_| format!("Failed to template file `{path}`"))?;
 
@@ -488,17 +495,18 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             let path = path.html_to_index().unwrap_or(path);
 
             // template it
-            to_template.push_back((path, res, functions));
+            to_template.push_back((path, name, res, functions));
         }
         // .fnl or .lua second ext? template
         else if path.has_double_ext("fnl") || path.has_double_ext("lua") {
             // process it now once
+            let name = path.clone();
             let (res, functions) = template(
                 &lua,
                 &fs::read_to_string(path.to_path("."))
                     .into_lua_err()
                     .with_context(|_| format!("Failed to read `{path}`"))?,
-                &path,
+                &name,
             )
             .with_context(|_| format!("Failed to template file `{path}`"))?;
 
@@ -511,7 +519,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             let path = path.html_to_index().unwrap_or(path);
 
             // template it
-            to_template.push_back((path, res, functions));
+            to_template.push_back((path, name, res, functions));
         }
         // .subset second ext? subset
         else if path.has_double_ext("subset") {
@@ -547,7 +555,22 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
     }
 
     // apply templating
-    while let Some((path, mut res, mut functions)) = to_template.pop_front() {
+    while let Some((path, name, mut res, mut functions)) = to_template.pop_front() {
+        // set environment
+        lua.globals().set("curfile", name.as_str())?;
+
+        // current directory
+        lua.globals()
+            .set("curdir", name.parent().map(RelativePath::as_str))?;
+
+        // where this file will be emitted to
+        lua.globals().set("curtarget", path.as_str())?;
+
+        // directory this file will be emitted to
+        lua.globals()
+            .set("curtargetdir", path.parent().map(RelativePath::as_str))?;
+
+        // run
         if let Some(fun) = functions.pop_front() {
             if let Some(fun) = fun.as_function() {
                 res = fun
@@ -564,7 +587,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             }
 
             // need to process again
-            to_template.push_back((path, res, functions));
+            to_template.push_back((path, name, res, functions));
         } else {
             files.insert(path, res.into_bytes());
         }

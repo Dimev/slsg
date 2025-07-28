@@ -9,7 +9,7 @@
 
 ;; page template
 (fn mod.page [args]
-  (tset index _G.curtargetdir {:title args.title :desc args.description}) ; add to the index
+  (tset index curtargetdir {:title args.title :desc args.description}) ; add to the index
   (let [t (readfile :templates/page.html) ; template we'll use
         t (t:gsub "@@title" (or args.title "")) ; insert title
         t (t:gsub "@@description" (or args.description "")) ; description
