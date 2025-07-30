@@ -12,6 +12,7 @@ use print::print_error;
 
 use crate::print::print_success;
 
+mod html;
 mod font;
 mod generate;
 mod highlight;

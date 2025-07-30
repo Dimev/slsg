@@ -15,6 +15,7 @@ use relative_path::{RelativePath, RelativePathBuf};
 use crate::{
     font::{chars_from_html, subset_font},
     highlight::Highlighter,
+    html::text_from_html,
     markdown::markdown,
     path::{DoubleFileExt, HtmlToIndex},
     print::print_warning,
@@ -298,6 +299,12 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
             subset_cloned.borrow_mut().extend(chars.chars());
             Ok(())
         })?,
+    )?;
+
+    // turn html back into text
+    globals.set(
+        "textfromhtml",
+        lua.create_function(move |_, html: String| text_from_html(&html))?,
     )?;
 
     // currently not working inside a file
