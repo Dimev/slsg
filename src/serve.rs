@@ -116,6 +116,9 @@ pub(crate) fn serve(addr: &str) -> mlua::Result<()> {
         }
     }
 
+    // drop watcher, we are done
+    std::mem::drop(watcher);
+
     Ok(())
 }
 

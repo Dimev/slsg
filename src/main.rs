@@ -142,7 +142,58 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // make the template
     match language {
         Lang::Lua => {
-            todo!()
+                        // make directories
+            fs::create_dir_all(path.join("templates")).into_lua_err()?;
+            fs::create_dir_all(path.join("posts")).into_lua_err()?;
+
+            // write out template
+            fs::write(
+                path.join(".gitignore"),
+                include_bytes!("../examples/template-lua/.gitignore"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("site.fnl"),
+                include_bytes!("../examples/template-lua/site.lua"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("icon.svg"),
+                include_bytes!("../examples/template-lua/icon.svg"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("style.scss"),
+                include_bytes!("../examples/template-lua/style.scss"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("index.fnl.md"),
+                include_bytes!("../examples/template-lua/index.lua.md"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("templates/index.html"),
+                include_bytes!("../examples/template-lua/templates/index.html"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("templates/page.html"),
+                include_bytes!("../examples/template-lua/templates/page.html"),
+            )
+            .into_lua_err()?;
+
+            fs::write(
+                path.join("posts/first.fnl.md"),
+                include_bytes!("../examples/template-lua/posts/first.lua.md"),
+            )
+            .into_lua_err()?;
         }
         Lang::Fennel => {
             // make directories
