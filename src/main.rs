@@ -12,10 +12,10 @@ use print::print_error;
 
 use crate::print::print_success;
 
-mod html;
 mod font;
 mod generate;
 mod highlight;
+mod html;
 mod markdown;
 mod path;
 mod print;
@@ -142,7 +142,7 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // make the template
     match language {
         Lang::Lua => {
-                        // make directories
+            // make directories
             fs::create_dir_all(path.join("templates")).into_lua_err()?;
             fs::create_dir_all(path.join("posts")).into_lua_err()?;
 

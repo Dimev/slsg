@@ -2,12 +2,14 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
+    io::Cursor,
     rc::Rc,
 };
 
 use codemap::SpanLoc;
 use glob::Pattern;
 use grass::{Logger, Options};
+use image::{ImageFormat, ImageReader};
 use latex2mathml::{DisplayStyle, latex_to_mathml};
 use mlua::{ErrorContext, ExternalResult, Lua, ObjectLike, Result, Table, Value, chunk};
 use relative_path::{RelativePath, RelativePathBuf};
@@ -95,6 +97,9 @@ thread_local! {
 
     /// Syntax cache, only stores the built-in ones
     static SYNTAXES: RefCell<Vec<Highlighter>> = RefCell::new(Vec::new());
+
+    /// Cached images that were processed
+    static IMAGES: RefCell<BTreeMap<(Vec<u8>, Option<String>, Option<u32>, Option<u32>, Option<u32>), Vec<u8>>> = RefCell::new(BTreeMap::new());
 }
 
 /// Generate the site
@@ -307,6 +312,97 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         lua.create_function(move |_, html: String| text_from_html(&html))?,
     )?;
 
+    // render an svg, returns the rendered png
+    // TODO cache?
+    globals.set(
+        "svgtopng",
+        lua.create_function(move |lua, (svg, scale): (String, f32)| {
+            let mut opt = usvg::Options::default();
+            opt.fontdb_mut().load_system_fonts();
+            let tree = usvg::Tree::from_str(&svg, &opt)
+                .into_lua_err()
+                .context("Failed to render svg")?;
+
+            // image size, scaled
+            let (width, height) = (tree.size().width() * scale, tree.size().height() * scale);
+
+            // render
+            let mut pixmap = tiny_skia::Pixmap::new(width as u32, height as u32)
+                .ok_or("Failed to render svg")
+                .into_lua_err()?;
+
+            resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+
+            // to image
+            let png = pixmap
+                .encode_png()
+                .into_lua_err()
+                .context("Failed to encode resulting png")?;
+
+            // store it as lua string
+            lua.create_string(png)
+        })?,
+    )?;
+
+    // TODO: convert an image, (scale, format)
+    globals.set(
+        "convertimage",
+        lua.create_function(move |lua, (image, options): (mlua::String, Table)| {
+            // read parameters
+            let data = image.as_bytes().to_vec();
+            let format = options.get::<Option<String>>("format")?;
+            let width = options.get::<Option<u32>>("width")?;
+            let height = options.get::<Option<u32>>("height")?;
+            let scale = options
+                .get::<Option<f32>>("scale")?
+                // floats are ass
+                .map(|x| (x * 65536.0) as u32);
+
+            // check the cache
+            if let Some(img) = IMAGES.with_borrow(|x| {
+                x.get(&(data.clone(), format.clone(), width, height, scale))
+                    .cloned()
+            }) {
+                lua.create_string(img)
+            } else {
+                // parse
+                let img = ImageReader::new(Cursor::new(data))
+                    .with_guessed_format()
+                    .into_lua_err()
+                    .context("cursor does not fail")?;
+
+                // format to write to
+                let img_format = format
+                    .and_then(|x| {
+                        ImageFormat::from_extension(&x).or(ImageFormat::from_mime_type(&x))
+                    })
+                    .unwrap_or(
+                        img.format()
+                            .ok_or("Could not guess image format")
+                            .into_lua_err()?,
+                    );
+
+                let img = img
+                    .decode()
+                    .into_lua_err()
+                    .context("Failed to parse image")?;
+
+                // rescale TODO
+
+                // re-encode
+                let mut data = Cursor::new(Vec::new());
+                img.write_to(&mut data, img_format)
+                    .into_lua_err()
+                    .context("Failed to convert image")?;
+
+                // and to string
+                lua.create_string(data.into_inner())
+            }
+        })?,
+    )?;
+
+    // TODO: search index, see how zola does it
+
     // currently not working inside a file
     lua.globals().set("curfile", false)?;
     lua.globals().set("curdir", false)?;
@@ -393,7 +489,7 @@ pub(crate) fn generate(dev: bool) -> Result<Site> {
         if path.starts_with(".dist")
             // don't include site file
             || path == "site.lua" || path == "site.fnl"
-             // don't include any to ignore
+            // don't include any to ignore
             || ignore.borrow().iter().any(|x| x.matches(path.as_str()))
             // don't include hidden files
             || path
