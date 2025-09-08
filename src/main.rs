@@ -6,21 +6,15 @@ use std::{
     time::Instant,
 };
 
-use generate::generate;
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
 
-use crate::print::print_success;
+use crate::{generate::generate, print::print_success};
 
 mod font;
 mod generate;
-mod highlight;
-mod html;
 mod markdown;
-mod path;
 mod print;
-mod serve;
-mod templates;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -142,112 +136,10 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // make the template
     match language {
         Lang::Lua => {
-            // make directories
-            fs::create_dir_all(path.join("templates")).into_lua_err()?;
-            fs::create_dir_all(path.join("posts")).into_lua_err()?;
-
-            // write out template
-            fs::write(
-                path.join(".gitignore"),
-                include_bytes!("../examples/template-lua/.gitignore"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("site.fnl"),
-                include_bytes!("../examples/template-lua/site.lua"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("icon.svg"),
-                include_bytes!("../examples/template-lua/icon.svg"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("style.scss"),
-                include_bytes!("../examples/template-lua/style.scss"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("index.fnl.md"),
-                include_bytes!("../examples/template-lua/index.lua.md"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("templates/index.html"),
-                include_bytes!("../examples/template-lua/templates/index.html"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("templates/page.html"),
-                include_bytes!("../examples/template-lua/templates/page.html"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("posts/first.fnl.md"),
-                include_bytes!("../examples/template-lua/posts/first.lua.md"),
-            )
-            .into_lua_err()?;
+            todo!()
         }
         Lang::Fennel => {
-            // make directories
-            fs::create_dir_all(path.join("templates")).into_lua_err()?;
-            fs::create_dir_all(path.join("posts")).into_lua_err()?;
-
-            // write out template
-            fs::write(
-                path.join(".gitignore"),
-                include_bytes!("../examples/template-fennel/.gitignore"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("site.fnl"),
-                include_bytes!("../examples/template-fennel/site.fnl"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("icon.svg"),
-                include_bytes!("../examples/template-fennel/icon.svg"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("style.scss"),
-                include_bytes!("../examples/template-fennel/style.scss"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("index.fnl.md"),
-                include_bytes!("../examples/template-fennel/index.fnl.md"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("templates/index.html"),
-                include_bytes!("../examples/template-fennel/templates/index.html"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("templates/page.html"),
-                include_bytes!("../examples/template-fennel/templates/page.html"),
-            )
-            .into_lua_err()?;
-
-            fs::write(
-                path.join("posts/first.fnl.md"),
-                include_bytes!("../examples/template-fennel/posts/first.fnl.md"),
-            )
-            .into_lua_err()?;
+            todo!()
         }
     }
 
@@ -372,7 +264,7 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // generate the site,
-    let site = generate(false)?;
+    let site = todo!();/*generate(false)?;
     let mut count = 0;
     let mut size = 0;
     for (file_path, contents) in site.files.into_iter() {
@@ -436,7 +328,7 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
             if count > 1 { "s" } else { "" },
         );
     }
-
+    */
     Ok(())
 }
 
@@ -470,7 +362,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
         .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // run the development server
-    serve::serve(&addr)?;
+    todo!();//serve::serve(&addr)?;
     println!("Stopped (ctrl-c)");
     Ok(())
 }
