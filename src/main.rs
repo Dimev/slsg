@@ -9,11 +9,11 @@ use std::{
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
 
-use crate::{generate::generate, print::print_success};
+use crate::{print::print_success};
 
 mod font;
 mod generate;
-mod markdown;
+mod page;
 mod print;
 
 const HELP: &str = "\
