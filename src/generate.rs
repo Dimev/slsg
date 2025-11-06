@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
@@ -137,6 +137,9 @@ impl Site {
                 // SAFETY: we want all the libraries
                 let lua = unsafe { Lua::unsafe_new() };
 
+                // add the scripts directory to the loader
+                // TODO
+
                 // load fennel
                 let fennel = lua
                     .load(include_str!("fennel.lua"))
@@ -150,29 +153,35 @@ impl Site {
                 .exec()
                 .context("Failed to load fennel into lua")?;
 
-                // load teal
-                let teal = lua
-                    .load(include_str!("tl.lua"))
-                    .set_name("=tl.lua")
-                    .into_function()
-                    .context("Failed to load teal")?;
-                lua.load(chunk! {
-                    // load the teal package
-                    package.preload["tl"] = $teal;
-
-                    // install the teal loader
-                    require("tl").loader();
-                })
-                .exec()
-                .context("Failed to load teal into lua")?;
-
                 // TODO: load relevant functions
+
+                // load the lua scripts
+                if fs::exists("site.lua")? {
+                    let code = fs::read_to_string("site.lua")
+                        .into_lua_err()
+                        .context("Failed to load `site.lua`")?;
+                    lua.load(code).exec().context("Failed to run `site.lua`")?;
+                } else if fs::exists("site.fnl")? {
+                    let code = fs::read_to_string("site.fnl")
+                        .into_lua_err()
+                        .context("Failed to load `site.fnl`")?;
+                    lua.load(chunk! {
+                        require("fennel").eval(
+                            $code,
+                            { ["error-pinpoint"] = false, filename = "site.fnl" }
+                        );
+                    })
+                    .exec()
+                    .context("Failed to run `site.fnl`")?;
+                } else {
+                    return Err(mlua::Error::external(
+                        "No `site.lua` or `site.fnl` file found",
+                    ));
+                }
 
                 // set the lua state
                 Ok(lua)
             })();
-
-            // TODO load the other files
         }
 
         // if syntaxes changed, reload
@@ -227,6 +236,9 @@ impl Site {
         // TODO: markdown change detection
         for file in self.changed_pages.iter() {
             // TODO
+            // read all .md files in ./pages
+            // parse them
+            // 
         }
 
         // no more changes to process
@@ -251,7 +263,7 @@ impl Site {
         // TODO for lua: register lolhtml replacers, functions for making mathml and code are provided
         // TODO also lua: determine the 404 file
 
-        todo!()
+        Err(mlua::Error::external("Not yet implemented"))
     }
 
     /// Generate files from the current directory
@@ -263,7 +275,7 @@ impl Site {
     /// mark file as dirty
     pub fn mark_dirty(&mut self, path: RelativePathBuf) {
         // lua file changed?
-        if [Some("fnl"), Some("lua"), Some("tl")].contains(&path.extension()) {
+        if [Some("fnl"), Some("lua")].contains(&path.extension()) || path.starts_with("scripts") {
             self.changed_lua = true;
         }
 

@@ -11,6 +11,9 @@ pub(crate) struct Page {
     /// Output path, where it will be in the final site
     output: RelativePathBuf,
 
+    /// Resulting html, after processing
+    result: Result<String>,
+
     /// Template to use
     template: String,
 
@@ -35,7 +38,7 @@ impl Page {
         let parser = Parser::new_ext(
             &md,
             Options::ENABLE_MATH | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS,
-        );
+        ).collect::<Vec<_>>();
 
         // TODO: read first metadata block
         todo!()

@@ -29,11 +29,11 @@ Usage:
 Options:
   [path]        Where to load the site from, defaults to ./
   -a --address  Where to bind the dev server to (defaults to 127.0.0.1:1111)
-  -o --output   Where to output the files to (defaults to  .dist/)
+  -o --output   Where to output the files to (defaults to .dist/)
   -f --force    Force overwrite the output directory.
 
   -h --help     Show this screen
-  -v --version  Print SLSG, luaJIT, Fennel, and Teal version
+  -v --version  Print SLSG, luaJIT, and Fennel version
 ";
 
 fn main() {
@@ -47,7 +47,7 @@ fn main() {
 
     // print version
     if pargs.contains(["-v", "--version"]) {
-        println!("SLSG {}", env!("CARGO_PKG_VERSION"));
+        println!("SLSG v{}", env!("CARGO_PKG_VERSION"));
 
         // luajit version
         let lua = unsafe { Lua::unsafe_new() };
@@ -71,18 +71,6 @@ fn main() {
             .eval::<String>()
             .expect("Failed to install fennel");
         println!("Fennel {}", version);
-
-        // install teal to get it's version
-        let teal = include_str!("tl.lua");
-        let teal = lua.load(teal).into_function().expect("Failed to load teal");
-        let version = lua
-            .load(chunk! {
-                package.preload["tl"] = $teal;
-                return require("tl").version();
-            })
-            .eval::<String>()
-            .expect("Failed to get teal version");
-        println!("Teal {}", version);
 
         return;
     }
@@ -223,15 +211,10 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .unwrap_or((path.join(".dist"), true));
 
     // make it canonical
-    let output_path = output_path
-        .canonicalize()
+    let output_path = std::env::current_dir()
         .into_lua_err()
-        .with_context(|_| {
-            format!(
-                "Failed to canonicalize output directory path `{}`",
-                output_path.to_string_lossy()
-            )
-        })?;
+        .context("Failed to get current directory")?
+        .join(output_path);
 
     // move to where the main.lua file is
     std::env::set_current_dir(&path)
@@ -252,7 +235,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
 
     let current_dir = current_dir()
         .into_lua_err()
-        .context("could not open current directory")?;
+        .context("Could not open current directory")?;
 
     let path = if let Some(path) = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
