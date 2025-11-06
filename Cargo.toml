@@ -9,7 +9,7 @@ categories = ["web-programming", "template-engine", "command-line-utilities"]
 edition = "2024"
 
 [dependencies]
-mlua = { version = "0.10.0", features = ["luajit", "macros"] }
+mlua = { version = "0.11.0", features = ["luajit", "macros"] }
 pulldown-cmark = "0.13.0"
 lol_html = "2.6.0"
 grass = "0.13.4"

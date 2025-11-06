@@ -1,8 +1,15 @@
-use std::{collections::BTreeMap, fs};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+};
 
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use relative_path::RelativePathBuf;
-use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
+use syntect::{
+    highlighting::ThemeSet,
+    parsing::{SyntaxSet, SyntaxSetBuilder},
+};
 use tera::Tera;
 
 pub(crate) struct Files {
@@ -13,7 +20,54 @@ pub(crate) struct Files {
     pub not_found: Option<RelativePathBuf>,
 }
 
+impl Files {
+    pub fn write_to_path(&self, path: &Path, force: bool) -> Result<()> {
+        // fail if the output directory is not empty and we are not forced to overwrite it
+        if !force
+            && path.exists()
+            && path
+                .read_dir()
+                .into_lua_err()
+                .context("Failed to check if path is empty")?
+                .next()
+                .is_none()
+        {
+            return Err(mlua::Error::external("Output directory is not empty"));
+        }
+
+        // remove the directory if it does exist and we are forced to do it
+        if force {
+            fs::remove_dir_all(path)
+                .into_lua_err()
+                .context("Failed to remove output directory")?;
+        }
+
+        // write out all files here
+        for (output, contents) in self.files.iter() {
+            // output path
+            let path = output.to_path(path);
+
+            // ensure it exists
+            fs::create_dir_all(&path)
+                .into_lua_err()
+                .with_context(|_| format!("Failed to create directories for `{output}`"))?;
+
+            // write out
+            fs::write(&path, contents)
+                .into_lua_err()
+                .with_context(|_| {
+                    format!("Failet to write file `{output}` to `{}`", path.display())
+                })?;
+        }
+
+        Ok(())
+    }
+}
+
 pub(crate) struct Site {
+    /// Lua state
+    lua: Result<Lua>,
+
     /// loaded syntaxes
     syntaxes: SyntaxSet,
 
@@ -29,9 +83,9 @@ pub(crate) struct Site {
     /// templates
     templates: Result<Tera>,
 
-    // TODO style, fonts?
+    // TODO fonts?
     /// What pages to reload
-    changed_pages: Vec<RelativePathBuf>,
+    changed_pages: BTreeSet<RelativePathBuf>,
 
     /// Reload templates?
     changed_templates: bool,
@@ -51,65 +105,90 @@ pub(crate) struct Site {
 
 impl Site {
     pub fn new() -> Result<Site> {
-        // load syntaxes
-        let syntaxes = SyntaxSet::load_defaults_nonewlines();
-        let user_syntaxes = if fs::exists("./syntaxes")
-            .into_lua_err()
-            .context("Failed to check if syntaxes exist")?
-        {
-            SyntaxSet::load_from_folder("./syntaxes")
-                .into_lua_err()
-                .context("Failed to load syntaxes")
-        } else {
-            Ok(SyntaxSet::new())
+        let mut site = Site {
+            syntaxes: SyntaxSet::load_defaults_newlines(),
+            themes: ThemeSet::load_defaults(),
+            lua: Err(mlua::Error::external("Lua not loaded yet")),
+            user_syntaxes: Err(mlua::Error::external("User syntaxes not loaded yet")),
+            user_themes: Err(mlua::Error::external("User themes not loaded yet")),
+            templates: Err(mlua::Error::external("Templates not loaded yet")),
+            changed_pages: BTreeSet::new(),
+            changed_templates: true,
+            changed_css: true,
+            changed_lua: true,
+            changed_syntaxes: true,
+            changed_themes: true,
         };
 
-        // load themes
-        let themes = ThemeSet::load_defaults();
-        let user_themes = if fs::exists("./themes")
-            .into_lua_err()
-            .context("Failed to check if themes exist")?
-        {
-            ThemeSet::load_from_folder("./themes")
-                .into_lua_err()
-                .context("Failed to load themes")
-        } else {
-            Ok(ThemeSet::new())
-        };
+        // load the templates and themes and syntaxes
+        site.manage_changes()?;
 
-        // templates
-        let templates = Tera::new("./templates/**/*.tera")
-            .into_lua_err()
-            .context("Failed to load templates");
-
-        // TODO markdown posts
-
-        Ok(Site {
-            syntaxes,
-            user_syntaxes,
-            themes,
-            user_themes,
-            changed_pages: Vec::new(),
-            templates,
-            changed_templates: false,
-            changed_css: false,
-            changed_lua: false,
-            changed_syntaxes: false,
-            changed_themes: false,
-        })
+        Ok(site)
     }
 
-    pub fn generate_files(&mut self) -> Result<Files> {
+    /// Reload everything that has changed and update internal state
+    fn manage_changes(&mut self) -> Result<()> {
+        // if lua changed, reload
+        if self.changed_lua {
+            self.changed_lua = false;
+
+            // function, because we want to catch the errors if anything fails to load
+            self.lua = (|| {
+                // SAFETY: we want all the libraries
+                let lua = unsafe { Lua::unsafe_new() };
+
+                // load fennel
+                let fennel = lua
+                    .load(include_str!("fennel.lua"))
+                    .set_name("=fennel.lua")
+                    .into_function()
+                    .context("Failed to load fennel")?;
+                lua.load(chunk! {
+                    // load the fennel package
+                    package.preload["fennel"] = $fennel;
+                })
+                .exec()
+                .context("Failed to load fennel into lua")?;
+
+                // load teal
+                let teal = lua
+                    .load(include_str!("tl.lua"))
+                    .set_name("=tl.lua")
+                    .into_function()
+                    .context("Failed to load teal")?;
+                lua.load(chunk! {
+                    // load the teal package
+                    package.preload["tl"] = $teal;
+
+                    // install the teal loader
+                    require("tl").loader();
+                })
+                .exec()
+                .context("Failed to load teal into lua")?;
+
+                // TODO: load relevant functions
+
+                // set the lua state
+                Ok(lua)
+            })();
+
+            // TODO load the other files
+        }
+
         // if syntaxes changed, reload
         if self.changed_syntaxes {
             self.changed_syntaxes = false;
-            self.user_syntaxes = if fs::exists("./syntaxes")
+            self.user_syntaxes = if fs::exists("syntaxes")
                 .into_lua_err()
                 .context("Failed to check if syntaxes exist")?
             {
-                SyntaxSet::load_from_folder("./syntaxes")
+                let mut set = SyntaxSetBuilder::new();
+
+                // add newlines
+                set.add_from_folder("syntaxes", true)
                     .into_lua_err()
                     .context("Failed to load syntaxes")
+                    .and_then(|_| Ok(set.build()))
             } else {
                 Ok(SyntaxSet::new())
             };
@@ -118,11 +197,11 @@ impl Site {
         // if themes changed, reload
         if self.changed_themes {
             self.changed_themes = false;
-            self.user_themes = if fs::exists("./themes")
+            self.user_themes = if fs::exists("themes")
                 .into_lua_err()
                 .context("Failed to check if themes exist")?
             {
-                ThemeSet::load_from_folder("./themes")
+                ThemeSet::load_from_folder("themes")
                     .into_lua_err()
                     .context("Failed to load themes")
             } else {
@@ -133,9 +212,16 @@ impl Site {
         // if templates changed, reload
         if self.changed_templates {
             self.changed_templates = false;
-            self.templates = Tera::new("./templates/**/*.tera")
+            self.templates = if fs::exists("templates")
                 .into_lua_err()
-                .context("Failed to load templates");
+                .context("Failed to check if templates exist")?
+            {
+                Tera::new("templates/**/*.tera")
+                    .into_lua_err()
+                    .context("Failed to load templates")
+            } else {
+                Ok(Tera::default())
+            }
         }
 
         // TODO: markdown change detection
@@ -146,24 +232,18 @@ impl Site {
         // no more changes to process
         self.changed_pages.clear();
 
+        // TODO build index?
+
+        Ok(())
+    }
+
+    /// Generate files from the current state.
+    /// `development` is whether the development flag is set to true in tera and lua.
+    pub fn generate_files(&mut self, development: bool) -> Result<Files> {
+        // reload all files that changed
+        self.manage_changes()?;
+
         // TODO: build index
-
-        // load lua
-        // SAFETY: we want all libraries
-        let lua = unsafe { Lua::unsafe_new() };
-
-        // load fennel
-        let fennel = lua
-            .load(include_str!("fennel.lua"))
-            .set_name("=fennel.lua")
-            .into_function()
-            .context("Failed to load fennel")?;
-        lua.load(chunk! {
-            // load the fennel package
-            package.preload["fennel"] = $fennel;
-        })
-        .exec()
-        .context("Failed to load fennel into lua")?;
 
         // TODO convert with lol_html
         // TODO copy out files
@@ -174,8 +254,32 @@ impl Site {
         todo!()
     }
 
+    /// Generate files from the current directory
+    pub fn generate() -> Result<Files> {
+        // set up self, then generate all files
+        Self::new()?.generate_files(false)
+    }
+
     /// mark file as dirty
     pub fn mark_dirty(&mut self, path: RelativePathBuf) {
-        // TODO: update the file
+        // lua file changed?
+        if [Some("fnl"), Some("lua"), Some("tl")].contains(&path.extension()) {
+            self.changed_lua = true;
+        }
+
+        // template changed?
+        if path.starts_with("templates") {
+            self.changed_templates = true;
+        }
+
+        // themes changed?
+        if path.starts_with("themes") {
+            self.changed_themes = true;
+        }
+
+        // syntaxes changed?
+        if path.starts_with("syntaxes") {
+            self.changed_syntaxes = true;
+        }
     }
 }

@@ -9,7 +9,7 @@ use std::{
 use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
 use print::print_error;
 
-use crate::{print::print_success};
+use crate::{generate::Site, print::print_success};
 
 mod font;
 mod generate;
@@ -20,19 +20,20 @@ const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
 
 Usage:
-  slsg dev [path] [--address]   Serve the site in path (default ./)
-  slsg build [path] [--output]  Build the site in path (default ./)
-  slsg new <language> [path]    Create a new site in path
-  slsg docs                     Show the documentation
-  slsg help                     Show this screen
+  slsg dev [path] [--address]             Serve the site in path
+  slsg build [path] [--output] [--force]  Build the site in path
+  slsg new <language> [path]              Create a new site at path
+  slsg docs                               Show the documentation
+  slsg help                               Show this screen
 
 Options:
-  -h --help     Show this screen
-  -v --version  Print SLSG and luaJIT version
-     --verbose  Print out extra information when building
+  [path]        Where to load the site from, defaults to ./
+  -a --address  Where to bind the dev server to (defaults to 127.0.0.1:1111)
+  -o --output   Where to output the files to (defaults to  .dist/)
+  -f --force    Force overwrite the output directory.
 
-  -a --address  Where to bind the dev server to (default 127.0.0.1:1111)
-  -o --output   Where to output the files to (default dist/)
+  -h --help     Show this screen
+  -v --version  Print SLSG, luaJIT, Fennel, and Teal version
 ";
 
 fn main() {
@@ -64,12 +65,24 @@ fn main() {
             .expect("Failed to load fennel");
         let version = lua
             .load(chunk! {
-                package.preload["fennel"] = $fennel
-                return require("fennel").version
+                package.preload["fennel"] = $fennel;
+                return require("fennel").version;
             })
             .eval::<String>()
-            .expect("failed to install fennel");
+            .expect("Failed to install fennel");
         println!("Fennel {}", version);
+
+        // install teal to get it's version
+        let teal = include_str!("tl.lua");
+        let teal = lua.load(teal).into_function().expect("Failed to load teal");
+        let version = lua
+            .load(chunk! {
+                package.preload["tl"] = $teal;
+                return require("tl").version();
+            })
+            .eval::<String>()
+            .expect("Failed to get teal version");
+        println!("Teal {}", version);
 
         return;
     }
@@ -188,9 +201,6 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .context("Failed to parse arguments")?;
 
-    // verbose output?
-    let verbose = pargs.contains("--verbose");
-
     // force clear the directory, only if we are building the current site's ./dist folder
     // or are passed the --force argument
     let force_clear = pargs.contains(["-f", "--force"]);
@@ -207,45 +217,10 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
             .context("Failed to find working directory")?
     };
 
-    let output_path = output_path.unwrap_or(path.join(".dist"));
-
-    // clear the output
-    // only clear if it's allowed, or it's the output path
-    if force_clear && output_path.is_dir()
-        || output_path.is_dir() && output_path == path.join(".dist")
-    {
-        remove_dir_all(&output_path)
-            .into_lua_err()
-            .with_context(|_| {
-                format!(
-                    "Failed to remove content of output directory `{}`",
-                    output_path.to_string_lossy()
-                )
-            })?;
-
-    // else, crash if it's not empty
-    } else if read_dir(&output_path)
-        .map(|mut x| x.next().is_some())
-        .unwrap_or(false)
-    {
-        return Err(mlua::Error::external(format!(
-            "Output directory `{}` is not empty, use --force to overwrite",
-            output_path.to_string_lossy()
-        )));
-    }
-
-    // start timing
-    let start = Instant::now();
-
-    // make sure the path exists
-    create_dir_all(&output_path)
-        .into_lua_err()
-        .with_context(|_| {
-            format!(
-                "Failed to create output directory `{}`",
-                output_path.to_string_lossy()
-            )
-        })?;
+    let (output_path, force_clear) = output_path
+        .map(|x| (x, force_clear))
+        // force clear if we write to .dist in the project directory
+        .unwrap_or((path.join(".dist"), true));
 
     // make it canonical
     let output_path = output_path
@@ -263,73 +238,8 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
         .into_lua_err()
         .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
-    // generate the site,
-    let site = todo!();/*generate(false)?;
-    let mut count = 0;
-    let mut size = 0;
-    for (file_path, contents) in site.files.into_iter() {
-        count += 1;
-        size += contents.len();
-
-        // create the directory for it
-        create_dir_all(
-            &file_path
-                .to_path(&output_path)
-                .parent()
-                .ok_or(mlua::Error::external(format!(
-                    "output path `{}` could not be created",
-                    file_path.to_path(&output_path).to_string_lossy()
-                )))?,
-        )
-        .into_lua_err()
-        .with_context(|_| {
-            format!(
-                "output path `{}` could not be created",
-                file_path.to_path(&output_path).to_string_lossy()
-            )
-        })?;
-
-        // write the file
-        fs::write(file_path.to_path(&output_path), contents)
-            .into_lua_err()
-            .with_context(|_| {
-                format!(
-                    "Failed to write file `{}`",
-                    file_path.to_path(&output_path).to_string_lossy()
-                )
-            })?;
-    }
-
-    // report info, if verbose
-    if verbose {
-        let size = size as f64 / 1000.0;
-
-        // pick largest size to use for representation
-        // if bigger than one mb, scale down
-        let megabytes = if size > 1000.0 { true } else { false };
-        let size = if megabytes { size / 1000.0 } else { size };
-
-        // and if bigger than a gb, scale down
-        let gigabytes = if size > 1000.0 { true } else { false };
-        let size = if gigabytes { size / 1000.0 } else { size };
-
-        // pick unit
-        let unit = if gigabytes {
-            "gb"
-        } else if megabytes {
-            "mb"
-        } else {
-            "kb"
-        };
-
-        println!(
-            "took {}ms - {count} file{} - {size:.2}{unit}",
-            start.elapsed().as_millis(),
-            if count > 1 { "s" } else { "" },
-        );
-    }
-    */
-    Ok(())
+    // generate the site, and write out the files
+    Site::generate()?.write_to_path(&output_path, force_clear)
 }
 
 /// Serve an existing site with the development server
@@ -362,7 +272,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
         .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
 
     // run the development server
-    todo!();//serve::serve(&addr)?;
+    todo!(); //serve::serve(&addr)?;
     println!("Stopped (ctrl-c)");
     Ok(())
 }
