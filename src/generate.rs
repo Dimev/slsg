@@ -39,7 +39,7 @@ impl Files {
         }
 
         // remove the directory if it does exist and we are forced to do it
-        if force {
+        if force && path.exists() {
             fs::remove_dir_all(path)
                 .into_lua_err()
                 .context("Failed to remove output directory")?;
@@ -323,6 +323,15 @@ impl Site {
     pub fn generate_files(&mut self, development: bool) -> Result<Files> {
         // reload all files that changed
         self.manage_changes();
+
+        // check if there are any errors
+        self.page_error
+            .as_ref()
+            .map_or(Ok(()), |x| Err(x.clone()))?;
+        self.user_syntaxes.as_ref().map_err(|x| x.clone())?;
+        self.user_themes.as_ref().map_err(|x| x.clone())?;
+        self.templates.as_ref().map_err(|x| x.clone())?;
+        self.lua.as_ref().map_err(|x| x.clone())?;
 
         // copy over the pages
         Ok(Files {

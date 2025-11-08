@@ -1,8 +1,7 @@
 +++
 out = "index.html"
-
-[table]
-sus = "amogus"
+template = "page.tera"
+tags = "pages"
 +++
 
 # Index page
