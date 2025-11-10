@@ -25,24 +25,23 @@ pub(crate) struct Files {
 
 impl Files {
     pub fn write_to_path(&self, path: &Path, force: bool) -> Result<()> {
-        // fail if the output directory is not empty and we are not forced to overwrite it
-        if !force
-            && path.exists()
-            && path
+        if path.exists() {
+            // remove the directory if it does exist and we are forced to do it
+            if force {
+                fs::remove_dir_all(path)
+                    .into_lua_err()
+                    .context("Failed to remove output directory")?;
+            }
+            // fail if the output directory is not empty and we are not forced to overwrite it
+            else if path
                 .read_dir()
                 .into_lua_err()
                 .context("Failed to check if path is empty")?
                 .next()
                 .is_none()
-        {
-            return Err(mlua::Error::external("Output directory is not empty"));
-        }
-
-        // remove the directory if it does exist and we are forced to do it
-        if force && path.exists() {
-            fs::remove_dir_all(path)
-                .into_lua_err()
-                .context("Failed to remove output directory")?;
+            {
+                return Err(mlua::Error::external("Output directory is not empty"));
+            }
         }
 
         // write out all files here
@@ -68,6 +67,33 @@ impl Files {
         Ok(())
     }
 }
+
+// TODO:
+// ```rust
+// struct Part<T> {
+//     dirty: bool,
+//     value: Result<T>,
+// }
+//
+// impl<T> Part<T> {
+//     fn mark_dirty(&mut self) {
+//         self.dirty = true;
+//     }
+//
+//     fn update(&mut self, factory: impl FnOnce() -> Result<T>) {
+//         if self.dirty {
+//             self.dirty = false;
+//             self.value = factory();
+//         }
+//     }
+// }
+// ```
+// then
+// ```rust
+// self.user_syntaxes.update(|| {
+//     ...
+// });
+// ```
 
 pub(crate) struct Site {
     /// Lua state
