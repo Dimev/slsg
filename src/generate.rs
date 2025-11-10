@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fs,
     path::{Path, PathBuf},
 };
@@ -254,9 +254,7 @@ impl Site {
                     // read all files in the directory
                     for path in path.read_dir()? {
                         let path = path?.path();
-                        if path.is_file()
-                            && path.extension() == Some(OsString::from("md").as_os_str())
-                        {
+                        if path.is_file() && path.extension() == Some(OsStr::new("md")) {
                             pages.push(
                                 RelativePathBuf::from_path(&path)
                                     .into_lua_err()
