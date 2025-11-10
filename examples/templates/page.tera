@@ -1,2 +1,10 @@
 <!DOCTYPE html>
-<p> Hello {# hello #} </p>
+<html>
+
+<head></head>
+
+<body>
+	<main>{{ content }}</main>
+</body>
+
+</html>

@@ -32,8 +32,28 @@ Options:
   -o --output   Where to output the files to (defaults to .dist/)
   -f --force    Force overwrite the output directory.
 
-  -h --help     Show this screen
+  -h --help     Show this screen, and the extra help screen
   -v --version  Print SLSG, luaJIT, and Fennel version
+";
+const MANUAL: &str = "\
+Site file structure:
+    site.lua (or site.fnl)     Main script, registers all file's settings.
+    scripts                    Put all other lua and fennel files here,
+        *.lua, *.fnl           This directory is added to lua's require path.
+    pages
+        *.md
+    templates
+        *.tera
+    themes
+        
+    syntaxes
+        
+    styles
+        *.css, *.scss, *.sass
+    static
+        *
+
+Lua API:
 ";
 
 fn main() {
@@ -42,6 +62,7 @@ fn main() {
     // print help
     if pargs.contains(["-h", "--help"]) {
         println!("{}", HELP);
+        println!("{}", MANUAL);
         return;
     }
 

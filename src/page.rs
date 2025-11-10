@@ -11,25 +11,25 @@ pub(crate) struct Page {
     markdown: String,
 
     /// Html content
-    pub html: String,
+    pub(crate) html: String,
 
     /// Front matter table
     front: Table,
 
     /// Output path, where it will be in the final site
-    output: RelativePathBuf,
+    pub(crate) output: RelativePathBuf,
 
     /// Resulting html, after processing
-    result: Result<String>,
+    pub(crate) result: Result<String>,
 
     /// Template to use
-    template: String,
+    pub(crate) template: String,
 
     /// Files to include
-    include: BTreeSet<RelativePathBuf>,
+    pub(crate) include: Option<RelativePathBuf>,
 
     /// What tags this page is part of
-    tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
 
     /// Has this been changed?
     update: bool,
@@ -87,6 +87,13 @@ impl Page {
                 ))
             })?;
 
+        // path to include extra files from
+        let include = front.remove("include").and_then(|x| {
+            x.as_str()
+                .map(RelativePath::new)
+                .map(|x| x.to_relative_path_buf())
+        });
+
         // and template to use
         let template = front
             .remove("template")
@@ -120,9 +127,9 @@ impl Page {
             html: html,
             output,
             front,
-            result: Ok(String::new()),
+            result: Err(mlua::Error::external("Not generated the page yet")),
             template,
-            include: BTreeSet::new(),
+            include,
             tags,
             update: true, // reloaded, so this changed
         }))
