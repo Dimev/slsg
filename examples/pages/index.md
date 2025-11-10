@@ -1,6 +1,6 @@
 +++
 out = "index.html"
-template = "page.tera"
+template = "page.html"
 tags = "pages"
 +++
 

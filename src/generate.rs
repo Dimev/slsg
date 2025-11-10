@@ -1,11 +1,11 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, OsString},
-    fs,
+    fs::{self, ReadDir},
     path::{Path, PathBuf},
 };
 
-use mlua::{ErrorContext, ExternalResult, Lua, Result, Table, chunk};
+use mlua::{ErrorContext, ExternalError, ExternalResult, Lua, Result, Table, chunk};
 use relative_path::RelativePathBuf;
 use syntect::{
     highlighting::ThemeSet,
@@ -14,6 +14,58 @@ use syntect::{
 use tera::{Context, Tera};
 
 use crate::page::Page;
+
+/// Recurse a directory, iterate over every entry
+struct RecursiveDir {
+    stack: Vec<PathBuf>,
+    current: ReadDir,
+}
+
+impl RecursiveDir {
+    fn begin(root: impl AsRef<Path>) -> Result<Self> {
+        Ok(Self {
+            stack: Vec::new(),
+            current: std::fs::read_dir(root)?,
+        })
+    }
+}
+
+impl<'a> Iterator for &'a mut RecursiveDir {
+    type Item = Result<PathBuf>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let path = loop {
+            let Some(entry) = self.current.next() else {
+                let Some(dir) = self.stack.pop() else {
+                    return None;
+                };
+
+                match std::fs::read_dir(dir) {
+                    Ok(dir) => {
+                        self.current = dir;
+                    }
+                    Err(e) => return Some(Err(e.into_lua_err())),
+                }
+
+                continue;
+            };
+
+            let path = match entry {
+                Ok(entry) => entry.path(),
+                Err(e) => return Some(Err(e.into_lua_err())),
+            };
+
+            if path.is_dir() {
+                self.stack.push(path);
+                continue;
+            };
+
+            break path;
+        };
+
+        Some(Ok(path))
+    }
+}
 
 pub(crate) struct Files {
     /// resulting files
@@ -69,35 +121,47 @@ impl Files {
 }
 
 // TODO:
-// ```rust
-// struct Part<T> {
-//     dirty: bool,
-//     value: Result<T>,
-// }
-//
-// impl<T> Part<T> {
-//     fn mark_dirty(&mut self) {
-//         self.dirty = true;
-//     }
-//
-//     fn update(&mut self, factory: impl FnOnce() -> Result<T>) {
-//         if self.dirty {
-//             self.dirty = false;
-//             self.value = factory();
-//         }
-//     }
-// }
-// ```
-// then
-// ```rust
-// self.user_syntaxes.update(|| {
-//     ...
-// });
-// ```
+
+/// Track changes
+struct Part<T> {
+    dirty: bool,
+    value: Result<T>,
+}
+
+impl<T> Part<T> {
+    /// Create a new part
+    fn new(msg: &str) -> Self {
+        Self {
+            dirty: true,
+            value: Err(mlua::Error::external(msg)),
+        }
+    }
+
+    /// Mark the part as dirty
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Update the value inside the part
+    fn update(&mut self, factory: impl FnOnce() -> Result<T>) -> bool {
+        if self.dirty {
+            self.dirty = false;
+            self.value = factory();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get a reference to the value, or error
+    fn value(&self) -> &Result<T> {
+        &self.value
+    }
+}
 
 pub(crate) struct Site {
     /// Lua state
-    lua: Result<Lua>,
+    lua: Part<Lua>,
 
     /// lua API table
     api: Option<Table>,
@@ -106,16 +170,16 @@ pub(crate) struct Site {
     syntaxes: SyntaxSet,
 
     /// loaded user syntaxes
-    user_syntaxes: Result<SyntaxSet>,
+    user_syntaxes: Part<SyntaxSet>,
 
     /// Loaded themes
     themes: ThemeSet,
 
     /// loaded user themes
-    user_themes: Result<ThemeSet>,
+    user_themes: Part<ThemeSet>,
 
     /// templates
-    templates: Result<Tera>,
+    templates: Part<Tera>,
 
     /// Generated pages
     pages: BTreeMap<RelativePathBuf, Page>,
@@ -130,20 +194,8 @@ pub(crate) struct Site {
     /// What pages to reload
     changed_pages: bool,
 
-    /// Reload templates?
-    changed_templates: bool,
-
     /// Reload css?
     changed_css: bool,
-
-    /// Reload lua?
-    changed_lua: bool,
-
-    /// Reload syntaxes?
-    changed_syntaxes: bool,
-
-    /// Reload themes?
-    changed_themes: bool,
 }
 
 impl Site {
@@ -161,20 +213,17 @@ impl Site {
         let mut site = Site {
             syntaxes: SyntaxSet::load_defaults_newlines(),
             themes: ThemeSet::load_defaults(),
-            lua: Err(mlua::Error::external("Lua not loaded yet")),
+            lua: Part::new("Lua not loaded yet"),
             api: None,
-            user_syntaxes: Err(mlua::Error::external("User syntaxes not loaded yet")),
-            user_themes: Err(mlua::Error::external("User themes not loaded yet")),
-            templates: Err(mlua::Error::external("Templates not loaded yet")),
+            user_syntaxes: Part::new("User syntaxes not loaded yet"),
+            user_themes: Part::new("User themes not loaded yet"),
+            templates: Part::new("User templates not loaded yet"),
             page_index: Err(mlua::Error::external("Pages not loaded yet")),
             pages: BTreeMap::new(),
             not_found: None,
             changed_pages: true,
-            changed_templates: true,
+
             changed_css: true,
-            changed_lua: true,
-            changed_syntaxes: true,
-            changed_themes: true,
         };
 
         // load the templates and themes and syntaxes
@@ -186,56 +235,51 @@ impl Site {
     /// Reload everything that has changed and update internal state
     fn manage_changes(&mut self) {
         // if syntaxes changed, reload
-        if self.changed_syntaxes {
-            self.user_syntaxes = (|| {
-                if fs::exists("syntaxes")
-                    .into_lua_err()
-                    .context("Failed to check if syntaxes exist")?
-                {
-                    let mut set = SyntaxSetBuilder::new();
+        self.user_syntaxes.update(|| {
+            if fs::exists("syntaxes")
+                .into_lua_err()
+                .context("Failed to check if syntaxes exist")?
+            {
+                let mut set = SyntaxSetBuilder::new();
 
-                    // add newlines
-                    set.add_from_folder("syntaxes", true)
-                        .into_lua_err()
-                        .context("Failed to load syntaxes")
-                        .and_then(|_| Ok(set.build()))
-                } else {
-                    Ok(SyntaxSet::new())
-                }
-            })();
-        }
+                // add newlines
+                set.add_from_folder("syntaxes", true)
+                    .into_lua_err()
+                    .context("Failed to load syntaxes")
+                    .and_then(|_| Ok(set.build()))
+            } else {
+                Ok(SyntaxSet::new())
+            }
+        });
 
         // if themes changed, reload
-        if self.changed_themes {
-            self.user_themes = (|| {
-                if fs::exists("themes")
+        self.user_themes.update(|| {
+            if fs::exists("themes")
+                .into_lua_err()
+                .context("Failed to check if themes exist")?
+            {
+                ThemeSet::load_from_folder("themes")
                     .into_lua_err()
-                    .context("Failed to check if themes exist")?
-                {
-                    ThemeSet::load_from_folder("themes")
-                        .into_lua_err()
-                        .context("Failed to load themes")
-                } else {
-                    Ok(ThemeSet::new())
-                }
-            })();
-        }
+                    .context("Failed to load themes")
+            } else {
+                Ok(ThemeSet::new())
+            }
+        });
 
         // if templates changed, reload
-        if self.changed_templates {
-            self.templates = (|| {
-                if fs::exists("templates")
+        self.templates.update(|| {
+            if fs::exists("templates")
+                .into_lua_err()
+                .context("Failed to check if templates exist")?
+            {
+                // TODO also recurse directory?
+                Tera::new("templates/**/*")
                     .into_lua_err()
-                    .context("Failed to check if templates exist")?
-                {
-                    Tera::new("templates/**/*")
-                        .into_lua_err()
-                        .context("Failed to load templates")
-                } else {
-                    Ok(Tera::default())
-                }
-            })();
-        }
+                    .context("Failed to load templates")
+            } else {
+                Ok(Tera::default())
+            }
+        });
 
         // TODO css
 
@@ -247,115 +291,98 @@ impl Site {
                 // index to build
                 let mut index: BTreeMap<String, Vec<RelativePathBuf>> = BTreeMap::new();
 
-                // go over all files in the pages directory
-                let mut stack = vec![PathBuf::from("pages")];
-                let mut pages = Vec::new();
-                while let Some(path) = stack.pop() {
-                    // read all files in the directory
-                    for path in path.read_dir()? {
-                        let path = path?.path();
-                        if path.is_file() && path.extension() == Some(OsStr::new("md")) {
-                            pages.push(
-                                RelativePathBuf::from_path(&path)
-                                    .into_lua_err()
-                                    .with_context(|_| {
-                                        format!(
-                                            "Failed to convert path `{}` into relative path",
-                                            path.display()
-                                        )
-                                    })?,
-                            );
-                        } else if path.is_dir() {
-                            stack.push(path);
+                let md_ext = OsStr::new("md");
+
+                // update pages
+                self.pages = RecursiveDir::begin("pages")
+                    .into_lua_err()?
+                    .filter(|x| {
+                        // only go over markdown pages
+                        x.as_ref().is_ok_and(|x| x.extension() == Some(md_ext))
+                    })
+                    .map(|x| {
+                        // for each page, rebuild it
+                        let path = RelativePathBuf::from_path(x?).into_lua_err()?;
+
+                        // new page
+                        let page = Page::from_path_and_previous(&path, self.pages.remove(&path))?;
+
+                        // add to the index
+                        for tag in page.tags.iter() {
+                            index
+                                .entry(tag.clone())
+                                .or_default()
+                                .push(page.output.clone());
                         }
-                    }
-                }
 
-                // read the markdown
-                for path in pages {
-                    // reload the page
-                    let page = Page::from_path_and_previous(&path, self.pages.remove(&path))?;
-
-                    // add it to the index
-                    for tag in page.tags.iter() {
-                        if let Some(x) = index.get_mut(tag) {
-                            x.push(page.output.clone());
-                        } else {
-                            index.insert(tag.clone(), vec![page.output.clone()]);
-                        }
-                    }
-
-                    // put it back, now that it has been processed again
-                    self.pages.insert(path, page);
-                }
+                        Ok((path, page))
+                    })
+                    .collect::<Result<_>>()?;
 
                 Ok(index)
             })();
         }
 
         // if lua changed, reload
-        if self.changed_lua {
-            // function, because we want to catch the errors if anything fails to load
-            self.lua = (|| {
-                // SAFETY: we want all the libraries
-                let lua = unsafe { Lua::unsafe_new() };
+        self.lua.update(|| {
+            // SAFETY: we want all the libraries
+            let lua = unsafe { Lua::unsafe_new() };
 
-                // TODO: load relevant functions
+            // TODO: load relevant functions
 
-                // load fennel
-                let fennel = lua
-                    .load(include_str!("fennel.lua"))
-                    .set_name("=fennel.lua")
-                    .into_function()
-                    .context("Failed to load fennel")?;
+            // load fennel
+            let fennel = lua
+                .load(include_str!("fennel.lua"))
+                .set_name("=fennel.lua")
+                .into_function()
+                .context("Failed to load fennel")?;
 
-                // API table
-                let api = lua.create_table()?;
+            // API table
+            let api = lua.create_table()?;
 
-                // load API
-                lua.load(include_str!("api.lua"))
-                    .call::<()>((fennel, &api))
-                    .context("Failed to load API")?;
+            // load API
+            lua.load(include_str!("api.lua"))
+                .call::<()>((fennel, &api))
+                .context("Failed to load API")?;
 
-                // set it
-                self.api = Some(api);
+            // set it
+            self.api = Some(api);
 
-                // load the lua scripts
-                if fs::exists("site.lua")? {
-                    let code = fs::read_to_string("site.lua")
-                        .into_lua_err()
-                        .context("Failed to load `site.lua`")?;
-                    lua.load(code).exec().context("Failed to run `site.lua`")?;
-                } else if fs::exists("site.fnl")? {
-                    let code = fs::read_to_string("site.fnl")
-                        .into_lua_err()
-                        .context("Failed to load `site.fnl`")?;
-                    lua.load(chunk! {
-                        require("fennel").eval(
-                            $code,
-                            { ["error-pinpoint"] = false, filename = "site.fnl" }
-                        );
-                    })
-                    .exec()
-                    .context("Failed to run `site.fnl`")?;
-                } else {
-                    return Err(mlua::Error::external(
-                        "No `site.lua` or `site.fnl` file found",
-                    ));
-                }
+            // load the lua scripts
+            if fs::exists("site.lua")? {
+                let code = fs::read_to_string("site.lua")
+                    .into_lua_err()
+                    .context("Failed to load `site.lua`")?;
+                lua.load(code).exec().context("Failed to run `site.lua`")?;
+            } else if fs::exists("site.fnl")? {
+                let code = fs::read_to_string("site.fnl")
+                    .into_lua_err()
+                    .context("Failed to load `site.fnl`")?;
+                lua.load(chunk! {
+                    require("fennel").eval(
+                        $code,
+                        { ["error-pinpoint"] = false, filename = "site.fnl" }
+                    );
+                })
+                .exec()
+                .context("Failed to run `site.fnl`")?;
+            } else {
+                return Err(mlua::Error::external(
+                    "No `site.lua` or `site.fnl` file found",
+                ));
+            }
 
-                // set the lua state
-                Ok(lua)
-            })();
+            // set the lua state
+            Ok(lua)
+        });
 
-            // TODO create lolhtml settings and other settings
-        }
+        // TODO create lolhtml settings and other settings
 
         // update the output of all pages
         // only do so if we have a page index
         if let Ok(index) = self.page_index.as_ref()
-            && let Ok(templates) = self.templates.as_ref()
-            && let Ok(lua) = self.lua.as_ref()
+            && let Ok(templates) = self.templates.value()
+            && let Ok(lua) = self.lua.value()
             && let Some(api) = self.api.as_ref()
         {
             for page in self.pages.values_mut() {
@@ -375,14 +402,6 @@ impl Site {
                 // TODO run lolhtml
             }
         }
-
-        // reset changes
-        self.changed_pages = false;
-        self.changed_templates = false;
-        self.changed_css = false;
-        self.changed_lua = false;
-        self.changed_syntaxes = false;
-        self.changed_themes = false;
     }
 
     /// Generate files from the current state.
@@ -393,10 +412,10 @@ impl Site {
 
         // check if there are any errors
         self.page_index.as_ref().map_err(|x| x.clone())?;
-        self.user_syntaxes.as_ref().map_err(|x| x.clone())?;
-        self.user_themes.as_ref().map_err(|x| x.clone())?;
-        self.templates.as_ref().map_err(|x| x.clone())?;
-        self.lua.as_ref().map_err(|x| x.clone())?;
+        self.user_syntaxes.value().as_ref().map_err(|x| x.clone())?;
+        self.user_themes.value().as_ref().map_err(|x| x.clone())?;
+        self.templates.value().as_ref().map_err(|x| x.clone())?;
+        self.lua.value().as_ref().map_err(|x| x.clone())?;
 
         let mut files = Files {
             not_found: self.not_found.clone(),
@@ -441,22 +460,22 @@ impl Site {
 
         // lua file changed?
         if [Some("fnl"), Some("lua")].contains(&path.extension()) || path.starts_with("scripts") {
-            self.changed_lua = true;
+            self.lua.mark_dirty();
         }
 
         // template changed?
         if path.starts_with("templates") {
-            self.changed_templates = true;
+            self.templates.mark_dirty();
         }
 
         // themes changed?
         if path.starts_with("themes") {
-            self.changed_themes = true;
+            self.user_themes.mark_dirty();
         }
 
         // syntaxes changed?
         if path.starts_with("syntaxes") {
-            self.changed_syntaxes = true;
+            self.user_syntaxes.mark_dirty();
         }
     }
 }
