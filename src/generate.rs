@@ -30,7 +30,8 @@ impl RecursiveDir {
     }
 }
 
-impl<'a> Iterator for &'a mut RecursiveDir {
+impl Iterator for RecursiveDir {
+    // TODO relative path buf here?
     type Item = Result<PathBuf>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,9 +42,7 @@ impl<'a> Iterator for &'a mut RecursiveDir {
                 };
 
                 match std::fs::read_dir(dir) {
-                    Ok(dir) => {
-                        self.current = dir;
-                    }
+                    Ok(dir) => self.current = dir,
                     Err(e) => return Some(Err(e.into_lua_err())),
                 }
 
@@ -185,17 +184,14 @@ pub(crate) struct Site {
     pages: BTreeMap<RelativePathBuf, Page>,
 
     /// Index for the pager
-    page_index: Result<BTreeMap<String, Vec<RelativePathBuf>>>,
+    page_index: Part<BTreeMap<String, Vec<RelativePathBuf>>>,
 
     /// Page set as the 'not found' page
     not_found: Option<RelativePathBuf>,
 
     // TODO fonts?
-    /// What pages to reload
-    changed_pages: bool,
-
-    /// Reload css?
-    changed_css: bool,
+    /// Stylesheets
+    styles: Part<()>,
 }
 
 impl Site {
@@ -213,17 +209,15 @@ impl Site {
         let mut site = Site {
             syntaxes: SyntaxSet::load_defaults_newlines(),
             themes: ThemeSet::load_defaults(),
-            lua: Part::new("Lua not loaded yet"),
             api: None,
+            not_found: None,
+            pages: BTreeMap::new(),
+            lua: Part::new("Lua not loaded yet"),
             user_syntaxes: Part::new("User syntaxes not loaded yet"),
             user_themes: Part::new("User themes not loaded yet"),
             templates: Part::new("User templates not loaded yet"),
-            page_index: Err(mlua::Error::external("Pages not loaded yet")),
-            pages: BTreeMap::new(),
-            not_found: None,
-            changed_pages: true,
-
-            changed_css: true,
+            page_index: Part::new("Pages not loaded yet"),
+            styles: Part::new("No styles loaded yet"),
         };
 
         // load the templates and themes and syntaxes
@@ -272,56 +266,121 @@ impl Site {
                 .into_lua_err()
                 .context("Failed to check if templates exist")?
             {
-                // TODO also recurse directory?
-                Tera::new("templates/**/*")
+                // empty
+                let mut tera = Tera::default();
+
+                // load from disk
+                // ensures it's the same as loading the other templates
+                for template in RecursiveDir::begin("templates").into_lua_err()? {
+                    let template = template?;
+                    let content =
+                        fs::read_to_string(&template)
+                            .into_lua_err()
+                            .with_context(|_| {
+                                format!("Failed to load template `{}`", template.display())
+                            })?;
+
+                    // add to tera
+                    tera.add_raw_template(
+                        template
+                            .to_str()
+                            .and_then(|x| x.strip_prefix("templates/"))
+                            .ok_or_else(|| {
+                                mlua::Error::external(format!(
+                                    "Could not convert `{}` to utf8",
+                                    template.to_string_lossy()
+                                ))
+                            })?,
+                        &content,
+                    )
                     .into_lua_err()
-                    .context("Failed to load templates")
+                    .context("Failed to load template")?;
+                }
+
+                Ok(tera)
             } else {
                 Ok(Tera::default())
             }
         });
 
-        // TODO css
+        // reload css
+        self.styles.update(|| {
+            if fs::exists("styles")
+                .into_lua_err()
+                .context("Failed to check if styles exist")?
+            {
+                // possible extentions
+                let style_exts = [
+                    Some(OsStr::new("css")),
+                    Some(OsStr::new("scss")),
+                    Some(OsStr::new("sass")),
+                ];
+
+                // build styles
+                let styles = RecursiveDir::begin("styles")
+                    .into_lua_err()?
+                    .filter(|x| {
+                        // only go over stylesheets
+                        x.as_ref()
+                            .is_ok_and(|x| style_exts.contains(&x.extension()))
+                    })
+                    .map(|x| {
+                        // path of the stylesheet
+                        let path = RelativePathBuf::from_path(x?).into_lua_err()?;
+
+                        // compile it
+                        // TODO
+
+                        Ok(())
+                    })
+                    .collect::<Result<()>>()?;
+                Ok(())
+            } else {
+                Ok(())
+            }
+        });
 
         // update markdown
         // this is a bit more complex, as it happens in stages
-        // here, just parse everything again
-        if self.changed_pages {
-            self.page_index = (|| {
-                // index to build
-                let mut index: BTreeMap<String, Vec<RelativePathBuf>> = BTreeMap::new();
+        // here, just parse everything again, and create the page index
+        self.page_index.update(|| {
+            // this can only work if the page directory exists
+            if !fs::exists("pages").unwrap_or(false) {
+                return Err(mlua::Error::external("`pages` directory does not exist"));
+            }
 
-                let md_ext = OsStr::new("md");
+            // index to build
+            let mut index: BTreeMap<String, Vec<RelativePathBuf>> = BTreeMap::new();
+            let md_ext = OsStr::new("md");
 
-                // update pages
-                self.pages = RecursiveDir::begin("pages")
-                    .into_lua_err()?
-                    .filter(|x| {
-                        // only go over markdown pages
-                        x.as_ref().is_ok_and(|x| x.extension() == Some(md_ext))
-                    })
-                    .map(|x| {
-                        // for each page, rebuild it
-                        let path = RelativePathBuf::from_path(x?).into_lua_err()?;
+            // also recreate the pages
+            self.pages = RecursiveDir::begin("pages")
+                .into_lua_err()?
+                .filter(|x| {
+                    // only go over markdown pages
+                    x.as_ref().is_ok_and(|x| x.extension() == Some(md_ext))
+                })
+                .map(|x| {
+                    // for each page, rebuild it
+                    let path = RelativePathBuf::from_path(x?).into_lua_err()?;
 
-                        // new page
-                        let page = Page::from_path_and_previous(&path, self.pages.remove(&path))?;
+                    // new page
+                    let page = Page::from_path_and_previous(&path, self.pages.remove(&path))?;
 
-                        // add to the index
-                        for tag in page.tags.iter() {
-                            index
-                                .entry(tag.clone())
-                                .or_default()
-                                .push(page.output.clone());
-                        }
+                    // add to the index
+                    for tag in page.tags.iter() {
+                        index
+                            .entry(tag.clone())
+                            .or_default()
+                            .push(page.output.clone());
+                    }
 
-                        Ok((path, page))
-                    })
-                    .collect::<Result<_>>()?;
+                    Ok((path, page))
+                })
+                .collect::<Result<_>>()?;
 
-                Ok(index)
-            })();
-        }
+            Ok(index)
+        });
 
         // if lua changed, reload
         self.lua.update(|| {
@@ -380,24 +439,29 @@ impl Site {
 
         // update the output of all pages
         // only do so if we have a page index
-        if let Ok(index) = self.page_index.as_ref()
+        if let Ok(index) = self.page_index.value()
             && let Ok(templates) = self.templates.value()
             && let Ok(lua) = self.lua.value()
             && let Some(api) = self.api.as_ref()
         {
-            for page in self.pages.values_mut() {
+            // context for the page, load all shared context here
+            let mut context = Context::new();
+
+            // TODO file index
+
+            for (path, page) in self.pages.iter_mut() {
                 // TODO only redo these if the things changed
                 // TODO add index
                 // TODO add other stuff maybe (css pages?)
-                // context for the page
-                let mut context = Context::new();
+
+                // and per-page context
                 context.insert("content", &page.html);
 
                 // only update if the template changed
                 page.result = templates
                     .render(&page.template, &context)
                     .into_lua_err()
-                    .context("Failed to apply template");
+                    .with_context(|_| format!("Failed to apply template to `{path}`"));
 
                 // TODO run lolhtml
             }
@@ -411,7 +475,7 @@ impl Site {
         self.manage_changes();
 
         // check if there are any errors
-        self.page_index.as_ref().map_err(|x| x.clone())?;
+        self.page_index.value().as_ref().map_err(|x| x.clone())?;
         self.user_syntaxes.value().as_ref().map_err(|x| x.clone())?;
         self.user_themes.value().as_ref().map_err(|x| x.clone())?;
         self.templates.value().as_ref().map_err(|x| x.clone())?;
@@ -422,14 +486,14 @@ impl Site {
             files: BTreeMap::new(),
         };
 
-        for page in self.pages.values() {
+        for (path, page) in self.pages.iter() {
             // insert the page
             files.files.insert(
                 page.output.clone(),
                 page.result
                     .clone()
                     .map(|x| x.into_bytes())
-                    .with_context(|_| format!("Could not output page `{}`", &page.output))?,
+                    .with_context(|_| format!("Could not output page `{}`", path))?,
             );
         }
 
@@ -448,14 +512,14 @@ impl Site {
     pub fn mark_dirty(&mut self, path: RelativePathBuf) {
         // markdown file changed
         if path.extension() == Some("md") || path.starts_with("pages") {
-            self.changed_pages = true;
+            self.page_index.mark_dirty();
         }
 
         // stylesheet changed
         if [Some("sass"), Some("scss"), Some("css")].contains(&path.extension())
             && path.starts_with("styles")
         {
-            self.changed_pages = true;
+            self.styles.mark_dirty();
         }
 
         // lua file changed?

@@ -64,7 +64,9 @@ impl Page {
                 Some(Event::Text(t)),
                 Some(Event::End(TagEnd::MetadataBlock(MetadataBlockKind::PlusesStyle))),
             ) if md.starts_with("+++") => Ok(format!("###\n{t}")),
-            _ => Err(mlua::Error::external("Expected front matter")),
+            _ => Err(mlua::Error::external(format!(
+                "Expected toml front matter for `{path}`"
+            ))),
         }?;
 
         // parse the front matter toml
@@ -122,7 +124,7 @@ impl Page {
         push_html(&mut html, parser);
 
         // TODO: read first metadata block
-        Ok(dbg!(Self {
+        Ok(Self {
             markdown: md,
             html: html,
             output,
@@ -132,6 +134,6 @@ impl Page {
             include,
             tags,
             update: true, // reloaded, so this changed
-        }))
+        })
     }
 }
