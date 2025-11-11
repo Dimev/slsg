@@ -1,9 +1,8 @@
 use std::{
     env::current_dir,
     ffi::OsString,
-    fs::{self, create_dir_all, read_dir, remove_dir_all},
+    fs,
     path::{Path, PathBuf},
-    time::Instant,
 };
 
 use mlua::{Lua, chunk};
@@ -108,7 +107,7 @@ fn main() {
 
     // report error
     if let Err(e) = err {
-        print_error("Failed", &format!("{:#}", e));
+        print_error("Failed", &format!("{:?}", e));
     }
 }
 
@@ -173,10 +172,10 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
 fn find_working_dir(path: &Path) -> Result<&Path> {
     if path.file_name() == Some(&OsString::from("site.lua")) {
         path.parent()
-            .ok_or(anyhow!("'site.lua' does not have a parent directory",))
+            .ok_or_else(|| anyhow!("'site.lua' does not have a parent directory",))
     } else if path.file_name() == Some(&OsString::from("site.fnl")) {
         path.parent()
-            .ok_or(anyhow!("'site.fnl' does not have a parent directory",))
+            .ok_or_else(|| anyhow!("'site.fnl' does not have a parent directory",))
     } else {
         for ancestor in path.ancestors() {
             if ancestor.join("site.lua").exists() || ancestor.join("site.fnl").exists() {

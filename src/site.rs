@@ -1,14 +1,15 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    ffi::{OsStr, OsString},
-    fs::{self, ReadDir},
+    collections::HashMap,
+    ffi::OsStr,
+    fs::{self},
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as AnyhowCtx, Error, Result, anyhow, bail, ensure};
-use globwalk::glob;
+use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
+use globwalk::{GlobWalkerBuilder, glob};
 
-use mlua::{ExternalError, ExternalResult, Lua, Table, chunk};
+use lol_html::{RewriteStrSettings, rewrite_str};
+use mlua::{Lua, chunk};
 use pulldown_cmark::{Options, Parser, html::push_html};
 use relative_path::RelativePathBuf;
 use syntect::{
@@ -19,7 +20,7 @@ use tera::{Context, Tera};
 
 pub(crate) struct Files {
     /// resulting files
-    pub files: BTreeMap<RelativePathBuf, Vec<u8>>,
+    pub files: HashMap<RelativePathBuf, Vec<u8>>,
 
     /// which file to use as 404
     pub not_found: Option<RelativePathBuf>,
@@ -43,6 +44,9 @@ impl Files {
             }
         }
 
+        // ensure the path exists
+        fs::create_dir_all(path)?;
+
         // write out all files here
         for (output, contents) in self.files.iter() {
             // output path
@@ -52,13 +56,13 @@ impl Files {
             fs::create_dir_all(
                 &path
                     .parent()
-                    .ok_or_else(|| anyhow!("Path `{}` did not have a parent", path.display()))?,
+                    .ok_or_else(|| anyhow!("Path '{}' did not have a parent", path.display()))?,
             )
-            .with_context(|| format!("Failed to create directories for `{output}`"))?;
+            .with_context(|| format!("Failed to create directories for '{output}'"))?;
 
             // write out
             fs::write(&path, contents).with_context(|| {
-                format!("Failet to write file `{output}` to `{}`", path.display())
+                format!("Failet to write file '{output}' to '{}'", path.display())
             })?;
         }
 
@@ -66,6 +70,31 @@ impl Files {
     }
 }
 
+/// Page entry for the pages to generate later
+struct Page {
+    /// Filepath
+    path: PathBuf,
+
+    /// Where to output to
+    output: String,
+
+    /// Generated html from the markdown
+    html: String,
+
+    /// template to use
+    template: String,
+
+    /// tags to use
+    tags: Vec<String>,
+
+    /// Directory to include files from, as glob pattern
+    include: Option<String>,
+
+    /// frontmatter metadata
+    frontmatter: toml::Table,
+}
+
+/// Cached state to generate a site with
 pub(crate) struct SiteCache {
     /// loaded syntaxes
     syntaxes: SyntaxSet,
@@ -98,7 +127,7 @@ impl SiteCache {
         }
     }
 
-    /// Generate the files
+    /// Generate the files for the current site state, from the current working directory
     /// `development` is passed on to the lua state
     pub(crate) fn generate(&mut self, development: bool) -> Result<Files> {
         // load syntaxes
@@ -144,22 +173,25 @@ impl SiteCache {
             };
         }
 
+        // ensure lua files, pages and templates directory are present
+        ensure!(
+            fs::exists("site.lua")? || fs::exists("site.fnl")?,
+            "'site.lua' or 'site.fnl' not present"
+        );
+        ensure!(
+            fs::exists("templates")?,
+            "'templates' directory not present"
+        );
+        ensure!(fs::exists("pages")?, "'pages' directory not present");
+
         // load templates
         if self.templates.is_none() {
-            // templates need to exist
-            ensure!(
-                fs::exists("templates")?,
-                "'templates' directory needs to exist"
-            );
-
-            // and load
             self.templates = Some(Tera::new("templates/**/*").context("Failed to load templates")?);
         }
 
         // load pages and create the page index
-        ensure!(fs::exists("pages")?, "Pages directory needs to exist");
         let mut pages = Vec::new();
-        let mut index = BTreeMap::new();
+        let mut index = HashMap::new();
         for path in glob("pages/**/*.md")? {
             let path = path?;
 
@@ -191,7 +223,7 @@ impl SiteCache {
                 })
                 .ok_or_else(|| {
                     anyhow!(
-                        "Page '{}' does not have toml-style ('+++' delimited) frontmatter",
+                        "No toml-style ('+++' delimited) frontmatter for page '{}'",
                         path.path().display()
                     )
                 })?
@@ -223,25 +255,40 @@ impl SiteCache {
                     path.path().display()
                 ))?;
 
+            // files to include
+            let include = frontmatter
+                .get("include")
+                .map(|x| {
+                    x.as_str().ok_or(anyhow!(
+                        "No 'template = \"page.html\"' value for page '{}'",
+                        path.path().display()
+                    ))
+                })
+                .transpose()?;
+
             // tag(s)
-            let tags = frontmatter
-                .get("tag")
-                .and_then(|x| {
-                    // single tag
-                    Some(vec![x.as_str()?])
-                })
-                .or_else(|| {
-                    frontmatter
-                        .get("tags")
-                        // many tags
-                        .and_then(|x| x.as_array())
-                        // collect them into an array
-                        .and_then(|x| x.iter().map(|x| x.as_str()).collect::<Option<_>>())
-                })
-                .ok_or(anyhow!(
-                    "No 'tag = \"tag\"' or 'tags = [\"tag1\", \"tag2\"]' value for page '{}'",
-                    path.path().display()
-                ))?;
+            let tags = if let Some(tag) = frontmatter.get("tag") {
+                // single value
+                vec![
+                    tag.as_str()
+                        .ok_or(anyhow!(
+                            "Value 'tag = \"tag\" needs to be a string for page '{}'",
+                            path.path().display()
+                        ))?
+                        .to_string(),
+                ]
+            } else if let Some(tags) = frontmatter.get("tags") {
+                // multiple values
+                tags.as_array()
+                    .and_then(|x| x.iter().map(|x| x.as_str().map(|x| x.to_string())).collect())
+                    .ok_or(anyhow!(
+                        "Value 'tags = [\"tag1\", \"tag2\"]' must be an array of strings for page '{}'",
+                        path.path().display(),
+                    ))?
+            } else {
+                // no tags
+                Vec::new()
+            };
 
             // parse the markdown
             let parser = Parser::new_ext(
@@ -251,13 +298,26 @@ impl SiteCache {
 
             // convert to html
             let mut html = String::with_capacity(md.len());
-            let html = push_html(&mut html, parser);
+            push_html(&mut html, parser);
 
-            // ad
-            pages.push(html.clone());
-            index.insert(path.into_path(), html);
+            // and page index
+            for tag in tags.iter() {
+                index.insert(tag.clone(), out.to_string());
+            }
+
+            // these are processed later, as a complete index is needed
+            pages.push(Page {
+                path: path.into_path(),
+                output: out.to_string(),
+                html,
+                template: template.to_string(),
+                include: include.map(|x| x.to_string()),
+                tags: tags,
+                frontmatter: frontmatter,
+            });
         }
 
+        // TODO cache this as well?
         // load lua
         // SAFETY: we want all lua libraries
         let lua = unsafe { Lua::unsafe_new() };
@@ -290,15 +350,64 @@ impl SiteCache {
             lua.load(chunk! {
                 // load and install fennel, then run the file
                 // disable error pinpoint as this messes with existing coloration of the terminal
-                require("fennel").install().dofile("site.fnl", { ["error-pinpoint"] = false });
+                require("fennel")
+                    .install()
+                    // pinpoint errors using html, as this highlights it in the preview
+                    // the terminal error reporter also renders html TODO
+                    .dofile("site.fnl", { ["error-pinpoint"] = { "*", "*" } });
             })
             .exec()?;
         } else {
             bail!("No 'site.lua' or 'site.fnl' present");
         }
 
+        // all files to output
+        let mut files = HashMap::with_capacity(pages.len());
+
+        // global context for all the templates
+        let mut ctx = Context::new();
+
+        // TODO insert page index here
+
+        // TODO insert style sheets here
+
+        // TODO lua functions?
+
+        // template the files
+        for page in pages {
+            // page content
+            ctx.insert("content", &page.html);
+
+            // apply template
+            let html = self
+                .templates
+                .as_ref()
+                .expect("templates was none, this should not be able to happen")
+                .render(&page.template, &ctx)
+                .with_context(|| format!("Failed to template page '{}'", page.path.display()))?;
+
+            // apply lolhtml
+            let html = rewrite_str(&html, RewriteStrSettings::new())
+                .with_context(|| format!("Failed to rewrite page '{}'", page.path.display()))?;
+
+            // write out
+            // TODO handle index.html properly here
+            files.insert(RelativePathBuf::from(page.output), html.into_bytes());
+
+            // write out included files
+            if let Some(incl) = page.include {
+                for file in GlobWalkerBuilder::new(page.path, incl).build()? {
+                    todo!()
+                }
+            }
+        }
+
+        // TODO write out stylesheets
+
         Ok(Files {
-            files: BTreeMap::new(),
+            files,
+            // load from the lua env
+            // TODO
             not_found: None,
         })
     }
@@ -311,9 +420,11 @@ impl SiteCache {
     }
 
     /// mark file as dirty
-    pub fn mark_dirty(&mut self, path: RelativePathBuf) {
-        // stylesheet changed
-        if [Some("sass"), Some("scss"), Some("css")].contains(&path.extension())
+    pub fn mark_dirty(&mut self, path: &Path) {
+        // stylesheets changed?
+        if ["sass", "scss", "css"]
+            .map(|x| Some(OsStr::new(x)))
+            .contains(&path.extension())
             && path.starts_with("styles")
         {
             self.styles = None;
