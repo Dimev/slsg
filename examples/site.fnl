@@ -1,2 +1,4 @@
 (print :Hello)
-(print :World)
+(print site.dev)
+
+(site.rewrite :main (fn [] (print :mogus)))

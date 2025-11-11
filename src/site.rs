@@ -8,8 +8,8 @@ use std::{
 use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
-use lol_html::{RewriteStrSettings, rewrite_str};
-use mlua::{Lua, chunk};
+use lol_html::{RewriteStrSettings, element, rewrite_str};
+use mlua::{Function, Lua, chunk};
 use pulldown_cmark::{Options, Parser, html::push_html};
 use relative_path::RelativePathBuf;
 use syntect::{
@@ -302,7 +302,7 @@ impl SiteCache {
 
             // and page index
             for tag in tags.iter() {
-                index.insert(tag.clone(), out.to_string());
+                index.insert(tag.clone(), frontmatter.clone());
             }
 
             // these are processed later, as a complete index is needed
@@ -317,13 +317,13 @@ impl SiteCache {
             });
         }
 
-        // TODO cache this as well?
         // load lua
         // SAFETY: we want all lua libraries
         let lua = unsafe { Lua::unsafe_new() };
 
-        // load api
-        // TODO relevant functions
+        // load api TODO
+        // page rewrite table
+        let rewriters = lua.create_table()?;
 
         // load fennel
         let fennel = lua
@@ -333,12 +333,29 @@ impl SiteCache {
             .context("Failed to load fennel")?;
 
         // set up lua context
+        let rw = rewriters.clone();
         lua.load(chunk! {
             // preload fennel
             package.preload.fennel = $fennel;
 
             // add scripts directory to the load path
             package.path = "./scripts/?.lua;" .. package.path;
+
+            // site API table
+            site = {
+                // are we in development mode?
+                dev = $development;
+
+                // register a page rewriter
+                rewrite = function(pattern, func)
+                    $rw[pattern] = func;
+                end;
+
+                // set the 404 out
+                // TODO
+
+                // TODO other stuff
+            };
         })
         .exec()
         .context("Failed to load fennel")?;
@@ -367,16 +384,18 @@ impl SiteCache {
         // global context for all the templates
         let mut ctx = Context::new();
 
-        // TODO insert page index here
+        // insert page index here
+        ctx.insert("index", &index);
 
         // TODO insert style sheets here
-
-        // TODO lua functions?
 
         // template the files
         for page in pages {
             // page content
-            ctx.insert("content", &page.html);
+            ctx.insert("html", &page.html);
+
+            // page frontmatter
+            ctx.insert("page", &page.frontmatter);
 
             // apply template
             let html = self
@@ -386,9 +405,29 @@ impl SiteCache {
                 .render(&page.template, &ctx)
                 .with_context(|| format!("Failed to template page '{}'", page.path.display()))?;
 
+            // make the rewrite handlers
+            let mut rewrite_handlers = Vec::with_capacity(rewriters.len()? as usize);
+            for pair in rewriters.pairs() {
+                let (pattern, function): (String, Function) = pair?;
+                let rewriter = element!(pattern, move |el| {
+                    let tag = el.tag_name();
+                    let attrs = el.attributes();
+                    function.call::<()>(());
+                    Ok(())
+                });
+                rewrite_handlers.push(rewriter);
+                dbg!("sus");
+            }
+
             // apply lolhtml
-            let html = rewrite_str(&html, RewriteStrSettings::new())
-                .with_context(|| format!("Failed to rewrite page '{}'", page.path.display()))?;
+            let html = rewrite_str(
+                &html,
+                RewriteStrSettings {
+                    element_content_handlers: rewrite_handlers,
+                    ..RewriteStrSettings::new()
+                },
+            )
+            .with_context(|| format!("Failed to rewrite page '{}'", page.path.display()))?;
 
             // write out
             // TODO handle index.html properly here
