@@ -1,7 +1,7 @@
 +++
 out = "index.html"
 template = "page.html"
-tags = "pages"
+tag = "pages"
 +++
 
 # Index page

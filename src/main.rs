@@ -6,15 +6,16 @@ use std::{
     time::Instant,
 };
 
-use mlua::{ErrorContext, ExternalResult, Lua, Result, chunk};
+use mlua::{Lua, chunk};
 use print::print_error;
 
-use crate::{generate::Site, print::print_success};
+use anyhow::{Context, Result, anyhow};
+
+use crate::{print::print_success, site::SiteCache};
 
 mod font;
-mod generate;
-mod page;
 mod print;
+mod site;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -98,16 +99,16 @@ fn main() {
 
     let sub = pargs.subcommand().expect("Failed to parse arguments");
     let err = match sub.as_deref() {
-        Some("dev") => dev(pargs),
-        Some("build") => build(pargs),
-        Some("new") => new(pargs),
+        Some("dev") => dev(pargs).context("Could not run dev server"),
+        Some("build") => build(pargs).context("Could not build site"),
+        Some("new") => new(pargs).context("Could not create new site"),
         Some("docs") => print_docs(),
         _ => Ok(println!("{}", HELP)),
     };
 
     // report error
     if let Err(e) = err {
-        print_error("Failed", &e);
+        print_error("Failed", &format!("{:#}", e));
     }
 }
 
@@ -119,40 +120,34 @@ enum Lang {
 /// Create a new site
 fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     // read the template
-    let language = pargs
-        .subcommand()
-        .into_lua_err()
-        .context("Failed to parse arguments")?;
+    let language = pargs.subcommand().context("Failed to parse arguments")?;
 
     // stop if not the right language
     // leaking memory here is fine as the program will end after this function call
     let language = match language.map(|x| &x.to_lowercase().leak()[..]) {
         Some("lua") => Ok(Lang::Lua),
         Some("fennel") | Some("fnl") => Ok(Lang::Fennel),
-        _ => Err(mlua::Error::external(
-            "The given language needs to either be `lua`, `fennel` or `fnl`",
+        _ => Err(anyhow!(
+            "The given language needs to either be 'lua', 'fennel' or 'fnl'",
         )),
     }?;
 
     // read where we make the site, or the current directory if none are given
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-        .into_lua_err()
         .context("Failed to parse arguments")?
         .unwrap_or(PathBuf::from("."));
 
     // ensure the path does not exist yet
     if let Ok(mut dir) = path.read_dir() {
         if dir.next().is_some() {
-            return Err(mlua::Error::external(format!(
-                "Failed to create new site: target directory {:?} is not empty!",
-                path
-            )));
+            return Err(anyhow!(
+                "Failed to create new site: target directory '{}' is not empty!",
+                path.display()
+            ));
         }
     } else {
-        fs::create_dir_all(&path)
-            .into_lua_err()
-            .context("Failed to create new site directory")?;
+        fs::create_dir_all(&path).context("Failed to create new site directory")?;
     }
 
     // make the template
@@ -167,8 +162,8 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
 
     // report success
     print_success(
-        &format!("Created a new site in `{}`", path.to_string_lossy()),
-        &"Run `slsg dev` in the directory to run the dev server",
+        &format!("Created a new site in '{}'", path.display()),
+        &"Run 'slsg dev' in the directory to run the dev server",
     );
 
     Ok(())
@@ -177,13 +172,11 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
 /// Find the site.conf file
 fn find_working_dir(path: &Path) -> Result<&Path> {
     if path.file_name() == Some(&OsString::from("site.lua")) {
-        path.parent().ok_or(mlua::Error::external(
-            "`site.lua` does not have a parent directory",
-        ))
+        path.parent()
+            .ok_or(anyhow!("'site.lua' does not have a parent directory",))
     } else if path.file_name() == Some(&OsString::from("site.fnl")) {
-        path.parent().ok_or(mlua::Error::external(
-            "`site.fnl` does not have a parent directory",
-        ))
+        path.parent()
+            .ok_or(anyhow!("'site.fnl' does not have a parent directory",))
     } else {
         for ancestor in path.ancestors() {
             if ancestor.join("site.lua").exists() || ancestor.join("site.fnl").exists() {
@@ -191,23 +184,20 @@ fn find_working_dir(path: &Path) -> Result<&Path> {
             }
         }
 
-        Err(mlua::Error::external(format!(
-            "`site.lua` or `site.fnl` does not exist in `{}` or any of it's ancestors",
-            path.to_string_lossy()
-        )))
+        Err(anyhow!(
+            "'site.lua' or 'site.fnl' does not exist in '{}' or any of it's ancestors",
+            path.display()
+        ))
     }
 }
 
 /// Build an existing site
 fn build(mut pargs: pico_args::Arguments) -> Result<()> {
-    let current_dir = current_dir()
-        .into_lua_err()
-        .context("could not open current directory")?;
+    let current_dir = current_dir().context("could not open current directory")?;
 
     // parse these first to not get confused with the positional arg
     let output_path = pargs
         .opt_value_from_os_str::<_, PathBuf, String>(["-o", "--output"], |x| Ok(PathBuf::from(x)))
-        .into_lua_err()
         .context("Failed to parse arguments")?;
 
     // force clear the directory, only if we are building the current site's ./dist folder
@@ -216,7 +206,6 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
 
     let path = if let Some(path) = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-        .into_lua_err()
         .context("Failed to parse arguments")?
     {
         path
@@ -233,34 +222,28 @@ fn build(mut pargs: pico_args::Arguments) -> Result<()> {
 
     // make it canonical
     let output_path = std::env::current_dir()
-        .into_lua_err()
         .context("Failed to get current directory")?
         .join(output_path);
 
     // move to where the main.lua file is
     std::env::set_current_dir(&path)
-        .into_lua_err()
-        .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
+        .with_context(|| format!("Failed to change path to '{}'", path.display()))?;
 
     // generate the site, and write out the files
-    Site::generate()?.write_to_path(&output_path, force_clear)
+    SiteCache::new_site()?.write_to_path(&output_path, force_clear)
 }
 
 /// Serve an existing site with the development server
 fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
     let addr = pargs
         .opt_value_from_str(["-a", "--address"])
-        .into_lua_err()
         .context("Failed to parse arguments")?
         .unwrap_or(String::from("127.0.0.1:1111"));
 
-    let current_dir = current_dir()
-        .into_lua_err()
-        .context("Could not open current directory")?;
+    let current_dir = current_dir().context("Could not open current directory")?;
 
     let path = if let Some(path) = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
-        .into_lua_err()
         .context("Failed to parse arguments")?
     {
         path
@@ -272,8 +255,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
 
     // move to where the main.lua file is
     std::env::set_current_dir(&path)
-        .into_lua_err()
-        .with_context(|_| format!("Failed to change path to `{}`", path.to_string_lossy()))?;
+        .with_context(|| format!("Failed to change path to '{}'", path.display()))?;
 
     // run the development server
     todo!(); //serve::serve(&addr)?;
