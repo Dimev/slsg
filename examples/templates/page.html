@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
 
-<head></head>
+<head>
+	<link rel="stylesheet" href="/style.css">
+</head>
 
 <body>
 	{% for tag, page in index %}
-		<p>{{ tag }}: {{ page.out }}</p>
+	<p>{{ tag }}: {{ page.out }}</p>
 	{% endfor %}
 	<main>{{ html | safe }}</main>
 </body>

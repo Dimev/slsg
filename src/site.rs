@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
+use grass::OutputStyle;
 use lol_html::{RewriteStrSettings, element, rewrite_str};
 use mlua::{Function, Lua, chunk};
 use pulldown_cmark::{Options, Parser, html::push_html};
@@ -50,7 +51,7 @@ impl Files {
         // write out all files here
         for (output, contents) in self.files.iter() {
             // output path
-            let path = output.to_path(path);
+            let path = path.join(output.to_logical_path(""));
 
             // ensure it exists
             fs::create_dir_all(
@@ -112,7 +113,7 @@ pub(crate) struct SiteCache {
     templates: Option<Tera>,
 
     /// Stylesheets
-    styles: Option<()>,
+    styles: Option<HashMap<String, String>>,
 }
 
 impl SiteCache {
@@ -160,16 +161,57 @@ impl SiteCache {
         // load styles
         if self.styles.is_none() {
             self.styles = if fs::exists("styles")? {
+                // all styles
+                let mut styles = HashMap::new();
+
                 // go over all styles that can be compiled
                 // css, sass and scss
                 for path in glob("styles/**/*.{css,sass,scss}")? {
                     let path = path?;
-                    dbg!(path);
+
+                    // options for grass
+                    let opts = grass::Options::default()
+                        .load_path("styles")
+                        // TODO config?
+                        .style(OutputStyle::Expanded)
+                        .input_syntax(if path.path().extension() == Some(OsStr::new("scss")) {
+                            grass::InputSyntax::Scss
+                        } else if path.path().extension() == Some(OsStr::new("sass")) {
+                            grass::InputSyntax::Sass
+                        } else {
+                            grass::InputSyntax::Css
+                        });
+
+                    // compile css
+                    let css = grass::from_path(path.path(), &opts).with_context(|| {
+                        format!("Failed to compile '{}' to css", path.path().display())
+                    })?;
+
+                    // insert
+                    styles.insert(
+                        path.path()
+                            .file_stem()
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "Path '{}' does not have a file stem",
+                                    path.path().display()
+                                )
+                            })?
+                            .to_str()
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "Could not convert path '{}' to an utf8 string",
+                                    path.path().display()
+                                )
+                            })?
+                            .to_string(),
+                        css,
+                    );
                 }
 
-                Some(())
+                Some(styles)
             } else {
-                Some(())
+                Some(HashMap::new())
             };
         }
 
@@ -186,6 +228,7 @@ impl SiteCache {
 
         // load templates
         if self.templates.is_none() {
+            // TODO: maybe optional? could simply use the funny lua stuff?
             self.templates = Some(Tera::new("templates/**/*").context("Failed to load templates")?);
         }
 
@@ -293,7 +336,10 @@ impl SiteCache {
             // parse the markdown
             let parser = Parser::new_ext(
                 &md,
-                Options::ENABLE_MATH | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS,
+                Options::ENABLE_MATH
+                    | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
+                    | Options::ENABLE_HEADING_ATTRIBUTES
+                    | Options::ENABLE_FOOTNOTES,
             );
 
             // convert to html
@@ -325,6 +371,15 @@ impl SiteCache {
         // page rewrite table
         let rewriters = lua.create_table()?;
 
+        // style sheets
+        let styles = lua.create_table_from(
+            self.styles
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(k, v)| (k.to_owned(), v.to_owned())),
+        )?;
+
         // load fennel
         let fennel = lua
             .load(include_str!("fennel.lua"))
@@ -346,15 +401,25 @@ impl SiteCache {
                 // are we in development mode?
                 dev = $development;
 
+                // not found page is nil by default
+                not_found = nil;
+
+                // style sheet index
+                styles = $styles;
+
                 // register a page rewriter
                 rewrite = function(pattern, func)
                     $rw[pattern] = func;
                 end;
 
+                // temporary
+                macro = {}
+
                 // set the 404 out
                 // TODO
 
                 // TODO other stuff
+                // TODO emit file
             };
         })
         .exec()
@@ -369,9 +434,9 @@ impl SiteCache {
                 // disable error pinpoint as this messes with existing coloration of the terminal
                 require("fennel")
                     .install()
-                    // pinpoint errors using html, as this highlights it in the preview
-                    // the terminal error reporter also renders html TODO
-                    .dofile("site.fnl", { ["error-pinpoint"] = { "*", "*" } });
+                    // pinpoint errors with another character, as the default messes
+                    // up terminal color output
+                    .dofile("site.fnl", { ["error-pinpoint"] = { "\0", "\0" } });
             })
             .exec()?;
         } else {
@@ -387,7 +452,8 @@ impl SiteCache {
         // insert page index here
         ctx.insert("index", &index);
 
-        // TODO insert style sheets here
+        // insert style sheets here
+        ctx.insert("styles", self.styles.as_ref().unwrap());
 
         // template the files
         for page in pages {
@@ -416,7 +482,6 @@ impl SiteCache {
                     Ok(())
                 });
                 rewrite_handlers.push(rewriter);
-                dbg!("sus");
             }
 
             // apply lolhtml
@@ -441,13 +506,27 @@ impl SiteCache {
             }
         }
 
-        // TODO write out stylesheets
+        // write out stylesheets
+        for (path, style) in self.styles.as_ref().unwrap().iter() {
+            files.insert(
+                // no extention is present, so add the css one
+                RelativePathBuf::from(format!("{path}.css")),
+                style.as_bytes().to_vec(),
+            );
+        }
+
+        // write out emitted files
+        // TODO
 
         Ok(Files {
             files,
+
             // load from the lua env
-            // TODO
-            not_found: None,
+            not_found: lua
+                .globals()
+                .get::<mlua::Table>("site")?
+                .get::<Option<String>>("not_found")?
+                .map(RelativePathBuf::from),
         })
     }
 
