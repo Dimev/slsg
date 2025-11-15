@@ -9,7 +9,7 @@ use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
 use grass::OutputStyle;
-use lol_html::{RewriteStrSettings, element, rewrite_str};
+
 use mlua::{Function, Lua, chunk};
 use pulldown_cmark::{Options, Parser, html::push_html};
 use relative_path::RelativePathBuf;
@@ -17,7 +17,7 @@ use syntect::{
     highlighting::ThemeSet,
     parsing::{SyntaxSet, SyntaxSetBuilder},
 };
-use tera::{Context, Tera};
+//use tera::{Context, Tera};
 
 pub(crate) struct Files {
     /// resulting files
@@ -110,7 +110,7 @@ pub(crate) struct SiteCache {
     user_themes: Option<ThemeSet>,
 
     /// templates
-    templates: Option<Tera>,
+    //templates: Option<Tera>,
 
     /// Stylesheets
     styles: Option<HashMap<String, String>>,
@@ -123,7 +123,7 @@ impl SiteCache {
             themes: ThemeSet::load_defaults(),
             user_syntaxes: None,
             user_themes: None,
-            templates: None,
+            //templates: None,
             styles: None,
         }
     }
@@ -227,10 +227,11 @@ impl SiteCache {
         ensure!(fs::exists("pages")?, "'pages' directory not present");
 
         // load templates
-        if self.templates.is_none() {
-            // TODO: maybe optional? could simply use the funny lua stuff?
-            self.templates = Some(Tera::new("templates/**/*").context("Failed to load templates")?);
-        }
+        /*if self.templates.is_none() {
+        // TODO: maybe optional? could simply use the funny lua stuff?
+        self.templates = Some(Tera::new("templates/**/
+*").context("Failed to load templates")?);
+        }*/
 
         // load pages and create the page index
         let mut pages = Vec::new();
@@ -334,7 +335,7 @@ impl SiteCache {
             };
 
             // parse the markdown
-            let parser = Parser::new_ext(
+            let mut parser = Parser::new_ext(
                 &md,
                 Options::ENABLE_MATH
                     | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
@@ -342,7 +343,8 @@ impl SiteCache {
                     | Options::ENABLE_FOOTNOTES,
             );
 
-            // convert to html
+            // rewrite math and code blocks to the preferred elements
+            // TODO probably just copy/port the cmark-pulldown push-html code and insert the lua functions there?
             let mut html = String::with_capacity(md.len());
             push_html(&mut html, parser);
 
@@ -367,9 +369,11 @@ impl SiteCache {
         // SAFETY: we want all lua libraries
         let lua = unsafe { Lua::unsafe_new() };
 
-        // load api TODO
-        // page rewrite table
-        let rewriters = lua.create_table()?;
+        // map of rewrite functions
+        let rewrite_fns = lua.create_table()?;
+
+        // map of files to output from lua
+        let emitted_files = lua.create_table()?;
 
         // style sheets
         let styles = lua.create_table_from(
@@ -388,7 +392,8 @@ impl SiteCache {
             .context("Failed to load fennel")?;
 
         // set up lua context
-        let rw = rewriters.clone();
+        let rw = rewrite_fns.clone();
+        let em = emitted_files.clone();
         lua.load(chunk! {
             // preload fennel
             package.preload.fennel = $fennel;
@@ -398,28 +403,20 @@ impl SiteCache {
 
             // site API table
             site = {
-                // are we in development mode?
-                dev = $development;
-
                 // not found page is nil by default
                 not_found = nil;
+
+                // are we in development mode?
+                dev = $development;
 
                 // style sheet index
                 styles = $styles;
 
-                // register a page rewriter
-                rewrite = function(pattern, func)
-                    $rw[pattern] = func;
-                end;
+                // rewrite functions
+                rewrite = $rw;
 
-                // temporary
-                macro = {}
-
-                // set the 404 out
-                // TODO
-
-                // TODO other stuff
-                // TODO emit file
+                // files to emit
+                emit = $em;
             };
         })
         .exec()
@@ -443,56 +440,25 @@ impl SiteCache {
             bail!("No 'site.lua' or 'site.fnl' present");
         }
 
+        // rewrite functions
+        let rewriters = rewrite_fns
+            .pairs()
+            .map(|x| {
+                let (name, fun): (String, Function) = x?;
+                Ok((name, fun))
+            })
+            .collect::<Result<HashMap<String, Function>>>()?;
+
         // all files to output
         let mut files = HashMap::with_capacity(pages.len());
 
-        // global context for all the templates
-        let mut ctx = Context::new();
-
-        // insert page index here
-        ctx.insert("index", &index);
-
-        // insert style sheets here
-        ctx.insert("styles", self.styles.as_ref().unwrap());
-
         // template the files
         for page in pages {
-            // page content
-            ctx.insert("html", &page.html);
+            // TODO template with lua
+            // JSX style, so replace elements with a function call
+            let html = page.html;
 
-            // page frontmatter
-            ctx.insert("page", &page.frontmatter);
-
-            // apply template
-            let html = self
-                .templates
-                .as_ref()
-                .expect("templates was none, this should not be able to happen")
-                .render(&page.template, &ctx)
-                .with_context(|| format!("Failed to template page '{}'", page.path.display()))?;
-
-            // make the rewrite handlers
-            let mut rewrite_handlers = Vec::with_capacity(rewriters.len()? as usize);
-            for pair in rewriters.pairs() {
-                let (pattern, function): (String, Function) = pair?;
-                let rewriter = element!(pattern, move |el| {
-                    let tag = el.tag_name();
-                    let attrs = el.attributes();
-                    function.call::<()>(());
-                    Ok(())
-                });
-                rewrite_handlers.push(rewriter);
-            }
-
-            // apply lolhtml
-            let html = rewrite_str(
-                &html,
-                RewriteStrSettings {
-                    element_content_handlers: rewrite_handlers,
-                    ..RewriteStrSettings::new()
-                },
-            )
-            .with_context(|| format!("Failed to rewrite page '{}'", page.path.display()))?;
+            // apply template lua stuff TODO
 
             // write out
             // TODO handle index.html properly here
@@ -516,7 +482,9 @@ impl SiteCache {
         }
 
         // write out emitted files
-        // TODO
+        for pair in emitted_files.pairs() {
+            let (path, content): (String, mlua::BString) = pair?;
+        }
 
         Ok(Files {
             files,
@@ -550,7 +518,7 @@ impl SiteCache {
 
         // template changed?
         if path.starts_with("templates") {
-            self.templates = None;
+            //self.templates = None;
         }
 
         // themes changed?

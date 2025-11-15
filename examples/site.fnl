@@ -1,9 +1,9 @@
 
-(fn site.macro.replace-text [x] (print :sus!))
+(fn site.rewrite.replace-text [x] (print :sus!))
 
-(each [key val (pairs site.macro)] (print key))
+(each [key val (pairs site.rewrite)] (print key))
 
 ;; set the not found page
 (set site.not_found :index.html)
 
-(site.rewrite :main (fn [] (print :mogus)))
+
