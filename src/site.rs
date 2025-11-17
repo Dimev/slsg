@@ -109,9 +109,6 @@ pub(crate) struct SiteCache {
     /// loaded user themes
     user_themes: Option<ThemeSet>,
 
-    /// templates
-    //templates: Option<Tera>,
-
     /// Stylesheets
     styles: Option<HashMap<String, String>>,
 }
@@ -123,7 +120,6 @@ impl SiteCache {
             themes: ThemeSet::load_defaults(),
             user_syntaxes: None,
             user_themes: None,
-            //templates: None,
             styles: None,
         }
     }
@@ -225,13 +221,6 @@ impl SiteCache {
             "'templates' directory not present"
         );
         ensure!(fs::exists("pages")?, "'pages' directory not present");
-
-        // load templates
-        /*if self.templates.is_none() {
-        // TODO: maybe optional? could simply use the funny lua stuff?
-        self.templates = Some(Tera::new("templates/**/
-*").context("Failed to load templates")?);
-        }*/
 
         // load pages and create the page index
         let mut pages = Vec::new();
@@ -335,7 +324,7 @@ impl SiteCache {
             };
 
             // parse the markdown
-            let mut parser = Parser::new_ext(
+            let parser = Parser::new_ext(
                 &md,
                 Options::ENABLE_MATH
                     | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS

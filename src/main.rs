@@ -10,11 +10,12 @@ use print::print_error;
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::{print::print_success, site::SiteCache};
+use crate::{dev::serve_dev_site, print::print_success, site::SiteCache};
 
 mod font;
 mod print;
 mod site;
+mod dev;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -257,7 +258,7 @@ fn dev(mut pargs: pico_args::Arguments) -> Result<()> {
         .with_context(|| format!("Failed to change path to '{}'", path.display()))?;
 
     // run the development server
-    todo!(); //serve::serve(&addr)?;
+    serve_dev_site(&addr)?;
     println!("Stopped (ctrl-c)");
     Ok(())
 }
