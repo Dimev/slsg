@@ -65,11 +65,16 @@ pub(crate) fn html_error<E: Display>(error: &E) -> String {
     let mut err = String::with_capacity(error.len());
     for c in error.chars() {
         match c {
+            // html characters to escape
             '&' => err.push_str("&amp;"),
             '<' => err.push_str("&lt;"),
             '>' => err.push_str("&gt;"),
             '"' => err.push_str("&quot;"),
             '\'' => err.push_str("&#39;"),
+            // fennel error marks
+            '\x02' => err.push_str("<b>"),
+            '\x03' => err.push_str("</b>"),
+            // don't escape the rest
             _ => err.push(c),
         }
     }

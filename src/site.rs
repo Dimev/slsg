@@ -422,7 +422,7 @@ impl SiteCache {
                     .install()
                     // pinpoint errors with another character, as the default messes
                     // up terminal color output
-                    .dofile("site.fnl", { ["error-pinpoint"] = { "\0", "\0" } });
+                    .dofile("site.fnl", { ["error-pinpoint"] = { "\x02", "\x03" } });
             })
             .exec()?;
         } else {
@@ -445,6 +445,8 @@ impl SiteCache {
         for page in pages {
             // TODO template with lua
             // JSX style, so replace elements with a function call
+            // ALSO: returned functions are run again after everything is processed?
+            // this allows doing things in stages, kinda?
             let html = page.html;
 
             // apply template lua stuff TODO
