@@ -11,7 +11,7 @@ use globwalk::{GlobWalkerBuilder, glob};
 use grass::OutputStyle;
 
 use mlua::{Function, Lua, chunk};
-use pulldown_cmark::{Options, Parser, html::push_html};
+use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
 use relative_path::RelativePathBuf;
 use syntect::{
     highlighting::ThemeSet,
@@ -237,37 +237,38 @@ impl SiteCache {
             // pulldown-cmark expects the metadata block to start and end with a +++
             // without any preceding spaces
             // find the range of the first metadata block
-            let frontmatter = md
+            let (frontmatter, rest) = md
                 // opens with a +++, so no preceding newline
                 .starts_with("+++")
                 .then_some(3)
                 // or if there's spaces between, there is a preceding newline
-                .or_else(|| md.find("\n+++").map(|x| x + 4))
+                .or_else(|| md.find("+++").map(|x| x + 3))
                 // then, find the closing tag
                 .and_then(|start| {
-                    // offset to not search inside the opening tag
-                    // + 3 to skip the opening tag
+                    // read the frontmatter that appears after the onening tag
                     md[start..]
+                        // find the closing tag in the rest of the text
                         // it must come after the opening tag
                         .find("\n+++")
                         // starts at the first +++, ends at the second +++
                         // start + end because the end is relative
-                        .map(|end| &md[start..start + end])
+                        // for the rest, skip the closing +++
+                        .map(|end| (&md[start..start + end], &md[start + end + 4..]))
                 })
                 .ok_or_else(|| {
                     anyhow!(
                         "No toml-style ('+++' delimited) frontmatter for page '{}'",
                         path.path().display()
                     )
-                })?
-                // parse into a toml table
-                .parse::<toml::Table>()
-                .with_context(|| {
-                    format!(
-                        "Failed to parse frontmatter for page '{}'",
-                        path.path().display()
-                    )
                 })?;
+
+            // parse into a toml table
+            let frontmatter = frontmatter.parse::<toml::Table>().with_context(|| {
+                format!(
+                    "Failed to parse frontmatter for page '{}'",
+                    path.path().display()
+                )
+            })?;
 
             // recover the front matter tags
             // output directory
@@ -289,6 +290,8 @@ impl SiteCache {
                 ))?;
 
             // files to include
+            // TODO: give this to lua as a table of file paths?
+            // then things can be emitted that way
             let include = frontmatter
                 .get("include")
                 .map(|x| {
@@ -325,16 +328,42 @@ impl SiteCache {
 
             // parse the markdown
             let parser = Parser::new_ext(
-                &md,
+                rest,
                 Options::ENABLE_MATH
-                    | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
                     | Options::ENABLE_HEADING_ATTRIBUTES
                     | Options::ENABLE_FOOTNOTES,
-            );
+            )
+            .map(|e| match e {
+                // code block, convert to a tag
+                Event::Start(Tag::CodeBlock(kind)) => {
+                    // language of the code block
+                    let lang = match kind {
+                        CodeBlockKind::Indented => "".into(),
+                        // also escape the attribute
+                        CodeBlockKind::Fenced(lang) => lang.replace("\"", "&quot;"),
+                    };
 
-            // rewrite math and code blocks to the preferred elements
-            // TODO probably just copy/port the cmark-pulldown push-html code and insert the lua functions there?
-            let mut html = String::with_capacity(md.len());
+                    // and the opening html
+                    Event::Html(format!("<l-code lang=\"{lang}\">").into())
+                }
+                // end tag
+                // no need to deal with the middle tag, as that simply exports the html
+                Event::End(TagEnd::CodeBlock) => Event::Html(format!("</l-code>").into()),
+
+                // math, convert to math replace block
+                Event::InlineMath(x) => {
+                    Event::InlineHtml(format!("<l-math-inline>{x}</l-math-inline>").into())
+                }
+                Event::DisplayMath(x) => {
+                    Event::InlineHtml(format!("<l-math-display>{x}</l-math-display>").into())
+                }
+
+                // other cases
+                x => x,
+            });
+
+            // convert to html
+            let mut html = String::with_capacity(rest.len());
             push_html(&mut html, parser);
 
             // and page index
@@ -464,6 +493,8 @@ impl SiteCache {
         }
 
         // write out stylesheets
+        // TODO don't?
+        // instead read all the markdown posts, then define custom paths for other things in lua?
         for (path, style) in self.styles.as_ref().unwrap().iter() {
             files.insert(
                 // no extention is present, so add the css one
