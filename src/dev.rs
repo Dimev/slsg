@@ -37,7 +37,7 @@ pub(crate) fn serve_dev_site(addr: &str) -> anyhow::Result<()> {
 
     // notify if it went bad
     if let Err(ref e) = site {
-        print_error("Failed to build site", e)
+        print_error("Failed to build site", &format!("{e:?}"))
     }
 
     // we are live
@@ -201,7 +201,7 @@ fn respond(
 
     // if the site is an error, push the error page
     } else if let Err(error) = site {
-        let error_page = html_error(error);
+        let error_page = html_error(&format!("{error:?}"));
         (error_page.into_bytes(), 500, Some("text/html"))
 
     // otherwise, push the 404 page
@@ -321,7 +321,7 @@ fn reload(
 
         // notify if it went bad
         if let Err(ref e) = *site {
-            print_error("Failed to build site", e);
+            print_error("Failed to build site", &format!("{e:?}"));
         } else if let Ok(ref s) = *site {
             let count = s.files.len();
             let size = s.files.values().map(|x| x.len()).sum::<usize>() as f64 / 1000.0;
