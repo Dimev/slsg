@@ -8,16 +8,9 @@ use std::{
 use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
-use grass::OutputStyle;
-
 use mlua::{Function, Lua, chunk};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
 use relative_path::RelativePathBuf;
-use syntect::{
-    highlighting::ThemeSet,
-    parsing::{SyntaxSet, SyntaxSetBuilder},
-};
-//use tera::{Context, Tera};
 
 pub(crate) struct Files {
     /// resulting files
@@ -96,120 +89,24 @@ struct Page {
 }
 
 /// Cached state to generate a site with
-pub(crate) struct SiteCache {
-    /// loaded syntaxes
-    syntaxes: SyntaxSet,
-
-    /// loaded user syntaxes
-    user_syntaxes: Option<SyntaxSet>,
-
-    /// Loaded themes
-    themes: ThemeSet,
-
-    /// loaded user themes
-    user_themes: Option<ThemeSet>,
-
-    /// Stylesheets
-    styles: Option<HashMap<String, String>>,
-}
+pub(crate) struct SiteCache;
 
 impl SiteCache {
     pub(crate) fn new() -> SiteCache {
-        Self {
-            syntaxes: SyntaxSet::load_defaults_newlines(),
-            themes: ThemeSet::load_defaults(),
-            user_syntaxes: None,
-            user_themes: None,
-            styles: None,
-        }
+        Self {}
     }
 
     /// Generate the files for the current site state, from the current working directory
     /// `development` is passed on to the lua state
     pub(crate) fn generate(&mut self, development: bool) -> Result<Files> {
-        // load syntaxes
-        if self.user_syntaxes.is_none() {
-            // if the folder exists, load from there
-            self.user_syntaxes = if fs::exists("syntaxes")? {
-                let mut set = SyntaxSetBuilder::new();
+        // TODO: use a lua syntax highlighter and call into that?
+        // TODO: use etlua for templates https://github.com/leafo/etlua
+        // TODO: the rust part will then just be running the script, and parsing and passing in the markdown
+        // aka, inspire from https://log.schemescape.com/posts/static-site-generators/smallest-static-site-generator.html
+        // TODO: also don't do fennel maybe?
+        // TODO: don't do grass either
 
-                // add with newlines
-                set.add_from_folder("syntaxes", true)
-                    .context("Failed to load syntaxes")?;
-
-                Some(set.build())
-            } else {
-                // empty default set
-                Some(SyntaxSet::new())
-            }
-        }
-
-        // load themes
-        if self.user_themes.is_none() {
-            self.user_themes = if fs::exists("themes")? {
-                Some(ThemeSet::load_from_folder("themes").context("Failed to load themes")?)
-            } else {
-                // default empty set
-                Some(ThemeSet::new())
-            }
-        }
-
-        // load styles
-        if self.styles.is_none() {
-            self.styles = if fs::exists("styles")? {
-                // all styles
-                let mut styles = HashMap::new();
-
-                // go over all styles that can be compiled
-                // css, sass and scss
-                for path in glob("styles/**/*.{css,sass,scss}")? {
-                    let path = path?;
-
-                    // options for grass
-                    let opts = grass::Options::default()
-                        .load_path("styles")
-                        // TODO config?
-                        .style(OutputStyle::Expanded)
-                        .input_syntax(if path.path().extension() == Some(OsStr::new("scss")) {
-                            grass::InputSyntax::Scss
-                        } else if path.path().extension() == Some(OsStr::new("sass")) {
-                            grass::InputSyntax::Sass
-                        } else {
-                            grass::InputSyntax::Css
-                        });
-
-                    // compile css
-                    let css = grass::from_path(path.path(), &opts).with_context(|| {
-                        format!("Failed to compile '{}' to css", path.path().display())
-                    })?;
-
-                    // insert
-                    styles.insert(
-                        path.path()
-                            .file_stem()
-                            .ok_or_else(|| {
-                                anyhow!(
-                                    "Path '{}' does not have a file stem",
-                                    path.path().display()
-                                )
-                            })?
-                            .to_str()
-                            .ok_or_else(|| {
-                                anyhow!(
-                                    "Could not convert path '{}' to an utf8 string",
-                                    path.path().display()
-                                )
-                            })?
-                            .to_string(),
-                        css,
-                    );
-                }
-
-                Some(styles)
-            } else {
-                Some(HashMap::new())
-            };
-        }
+       
 
         // ensure lua files, pages and templates directory are present
         ensure!(
@@ -393,15 +290,6 @@ impl SiteCache {
         // map of files to output from lua
         let emitted_files = lua.create_table()?;
 
-        // style sheets
-        let styles = lua.create_table_from(
-            self.styles
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|(k, v)| (k.to_owned(), v.to_owned())),
-        )?;
-
         // load fennel
         let fennel = lua
             .load(include_str!("fennel.lua"))
@@ -426,9 +314,6 @@ impl SiteCache {
 
                 // are we in development mode?
                 dev = $development;
-
-                // style sheet index
-                styles = $styles;
 
                 // rewrite functions
                 rewrite = $rw;
@@ -491,17 +376,7 @@ impl SiteCache {
                 }
             }
         }
-
-        // write out stylesheets
-        // TODO don't?
-        // instead read all the markdown posts, then define custom paths for other things in lua?
-        for (path, style) in self.styles.as_ref().unwrap().iter() {
-            files.insert(
-                // no extention is present, so add the css one
-                RelativePathBuf::from(format!("{path}.css")),
-                style.as_bytes().to_vec(),
-            );
-        }
+        
 
         // write out emitted files
         for pair in emitted_files.pairs() {
@@ -529,28 +404,11 @@ impl SiteCache {
 
     /// mark file as dirty
     pub fn mark_dirty(&mut self, path: &Path) {
-        // stylesheets changed?
-        if ["sass", "scss", "css"]
-            .map(|x| Some(OsStr::new(x)))
-            .contains(&path.extension())
-            && path.starts_with("styles")
-        {
-            self.styles = None;
-        }
+        
 
         // template changed?
         if path.starts_with("templates") {
             //self.templates = None;
-        }
-
-        // themes changed?
-        if path.starts_with("themes") {
-            self.user_themes = None;
-        }
-
-        // syntaxes changed?
-        if path.starts_with("syntaxes") {
-            self.user_syntaxes = None;
         }
     }
 }

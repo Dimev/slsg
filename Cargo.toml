@@ -8,20 +8,23 @@ keywords = ["lua", "website", "html", "blog", "markdown"]
 categories = ["web-programming", "template-engine", "command-line-utilities"]
 edition = "2024"
 
+[profile.release]
+opt-level = "z"
+strip = true
+
 [dependencies]
 mlua = { version = "0.11.0", features = ["luajit", "macros", "anyhow"] }
 pulldown-cmark = "0.13.0"
-grass = "0.13.4"
 latex2mathml = "0.2.3"
 hb-subset = "0.3.0"
 crossterm = "0.29.0"
 notify = "8.2.0"
 pico-args = "0.5.0"
-syntect = "5.3.0"
 relative-path = "2.0.1"
 toml = "0.9.8"
 anyhow = "1.0.100"
 globwalk = "0.9.1"
-axum = "0.8.7"
-tokio = { version = "1.48.0", features = ["rt-multi-thread", "signal"] }
+ctrlc = "3.5.1"
+flate2 = "1.1.5"
+
 

@@ -71,9 +71,6 @@ pub(crate) fn html_error<E: Display>(error: &E) -> String {
             '>' => err.push_str("&gt;"),
             '"' => err.push_str("&quot;"),
             '\'' => err.push_str("&#39;"),
-            // fennel error marks
-            '\x02' => err.push_str("<b>"),
-            '\x03' => err.push_str("</b>"),
             // don't escape the rest
             _ => err.push(c),
         }
