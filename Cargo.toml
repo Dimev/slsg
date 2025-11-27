@@ -13,7 +13,7 @@ opt-level = "z"
 strip = true
 
 [dependencies]
-mlua = { version = "0.11.0", features = ["luajit", "macros", "anyhow"] }
+mlua = { version = "0.11.0", features = ["luajit", "macros", "anyhow", "serde"] }
 pulldown-cmark = "0.13.0"
 latex2mathml = "0.2.3"
 hb-subset = "0.3.0"

@@ -43,7 +43,7 @@ pub(crate) fn serve_dev_site(addr: &str) -> anyhow::Result<()> {
     // we are live
     print_success(
         &format!(
-            "serving on `http://{}` ({}ms)",
+            "serving on 'http://{}' ({}ms)",
             listener
                 .local_addr()
                 .map(|x| x.to_string())
@@ -212,7 +212,7 @@ fn respond(
     {
         // warn that we serve the 404 page
         print_warning(
-            &format!("Failed to serve file (404) `{}`", file_path),
+            &format!("Failed to serve file (404) '{}'", file_path),
             &"Wrong link? Forgot to include the file?",
         );
 
@@ -221,7 +221,7 @@ fn respond(
     } else if let Some(site) = site.as_ref().ok() {
         // warn that we serve the 404 page
         print_warning(
-            &format!("Failed to serve file (404) `{}`", file_path),
+            &format!("Failed to serve file (404) '{}'", file_path),
             &"Wrong link? Forgot to include the file?",
         );
 

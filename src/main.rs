@@ -5,17 +5,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mlua::{Lua, chunk};
+use mlua::Lua;
 use print::print_error;
 
 use anyhow::{Context, Result, anyhow};
 
 use crate::{dev::serve_dev_site, print::print_success, site::SiteCache};
 
+mod dev;
 mod font;
 mod print;
 mod site;
-mod dev;
 
 const HELP: &str = "\
 SLSG - Scriptable Lua Site Generator
@@ -34,26 +34,9 @@ Options:
   -f --force    Force overwrite the output directory.
 
   -h --help     Show this screen, and the extra help screen
-  -v --version  Print SLSG, luaJIT, and Fennel version
+  -v --version  Print SLSG, LuaJIT, and etlua versions
 ";
 const MANUAL: &str = "\
-Site file structure:
-    site.lua (or site.fnl)     Main script, registers all file's settings.
-    scripts                    Put all other lua and fennel files here,
-        *.lua, *.fnl           This directory is added to lua's require path.
-    pages
-        *.md
-    templates
-        *.tera
-    themes
-        
-    syntaxes
-        
-    styles
-        *.css, *.scss, *.sass
-    static
-        *
-
 Lua API:
 ";
 
@@ -79,20 +62,7 @@ fn main() {
             .expect("Failed to get LuaJIT version");
         println!("{}", version);
 
-        // install fennel to get it's version
-        let fennel = include_str!("fennel.lua");
-        let fennel = lua
-            .load(fennel)
-            .into_function()
-            .expect("Failed to load fennel");
-        let version = lua
-            .load(chunk! {
-                package.preload["fennel"] = $fennel;
-                return require("fennel").version;
-            })
-            .eval::<String>()
-            .expect("Failed to install fennel");
-        println!("Fennel {}", version);
+        // TODO library versions?
 
         return;
     }
@@ -112,26 +82,8 @@ fn main() {
     }
 }
 
-enum Lang {
-    Lua,
-    Fennel,
-}
-
 /// Create a new site
 fn new(mut pargs: pico_args::Arguments) -> Result<()> {
-    // read the template
-    let language = pargs.subcommand().context("Failed to parse arguments")?;
-
-    // stop if not the right language
-    // leaking memory here is fine as the program will end after this function call
-    let language = match language.map(|x| &x.to_lowercase().leak()[..]) {
-        Some("lua") => Ok(Lang::Lua),
-        Some("fennel") | Some("fnl") => Ok(Lang::Fennel),
-        _ => Err(anyhow!(
-            "The given language needs to either be 'lua', 'fennel' or 'fnl'",
-        )),
-    }?;
-
     // read where we make the site, or the current directory if none are given
     let path = pargs
         .opt_free_from_os_str::<PathBuf, String>(|x| Ok(PathBuf::from(x)))
@@ -151,14 +103,7 @@ fn new(mut pargs: pico_args::Arguments) -> Result<()> {
     }
 
     // make the template
-    match language {
-        Lang::Lua => {
-            todo!()
-        }
-        Lang::Fennel => {
-            todo!()
-        }
-    }
+    todo!();
 
     // report success
     print_success(
@@ -174,18 +119,15 @@ fn find_working_dir(path: &Path) -> Result<&Path> {
     if path.file_name() == Some(&OsString::from("site.lua")) {
         path.parent()
             .ok_or_else(|| anyhow!("'site.lua' does not have a parent directory",))
-    } else if path.file_name() == Some(&OsString::from("site.fnl")) {
-        path.parent()
-            .ok_or_else(|| anyhow!("'site.fnl' does not have a parent directory",))
     } else {
         for ancestor in path.ancestors() {
-            if ancestor.join("site.lua").exists() || ancestor.join("site.fnl").exists() {
+            if ancestor.join("site.lua").exists() {
                 return Ok(ancestor);
             }
         }
 
         Err(anyhow!(
-            "'site.lua' or 'site.fnl' does not exist in '{}' or any of it's ancestors",
+            "'site.lua' does not exist in '{}' or any of it's ancestors",
             path.display()
         ))
     }

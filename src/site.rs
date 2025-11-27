@@ -8,9 +8,14 @@ use std::{
 use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
-use mlua::{Function, Lua, chunk};
+use mlua::{Function, Lua, LuaSerdeExt, chunk};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
 use relative_path::RelativePathBuf;
+
+/// Escape a '' lua string
+fn escape_lua_str(s: &str) -> String {
+    s.replace("\\", "\\\\").replace("'", "\\'")
+}
 
 pub(crate) struct Files {
     /// resulting files
@@ -64,30 +69,6 @@ impl Files {
     }
 }
 
-/// Page entry for the pages to generate later
-struct Page {
-    /// Filepath
-    path: PathBuf,
-
-    /// Where to output to
-    output: String,
-
-    /// Generated html from the markdown
-    html: String,
-
-    /// template to use
-    template: String,
-
-    /// tags to use
-    tags: Vec<String>,
-
-    /// Directory to include files from, as glob pattern
-    include: Option<String>,
-
-    /// frontmatter metadata
-    frontmatter: toml::Table,
-}
-
 /// Cached state to generate a site with
 pub(crate) struct SiteCache;
 
@@ -106,23 +87,16 @@ impl SiteCache {
         // TODO: also don't do fennel maybe?
         // TODO: don't do grass either
 
-       
-
         // ensure lua files, pages and templates directory are present
-        ensure!(
-            fs::exists("site.lua")? || fs::exists("site.fnl")?,
-            "'site.lua' or 'site.fnl' not present"
-        );
-        ensure!(
-            fs::exists("templates")?,
-            "'templates' directory not present"
-        );
-        ensure!(fs::exists("pages")?, "'pages' directory not present");
+        ensure!(fs::exists("site.lua")?, "'site.lua' not present");
+
+        // load lua
+        // SAFETY: we want all lua libraries
+        let lua = unsafe { Lua::unsafe_new() };
 
         // load pages and create the page index
-        let mut pages = Vec::new();
-        let mut index = HashMap::new();
-        for path in glob("pages/**/*.md")? {
+        let pages = lua.create_table()?;
+        for path in glob("**/*.md")? {
             let path = path?;
 
             // load markdown
@@ -159,69 +133,9 @@ impl SiteCache {
                     )
                 })?;
 
-            // parse into a toml table
-            let frontmatter = frontmatter.parse::<toml::Table>().with_context(|| {
-                format!(
-                    "Failed to parse frontmatter for page '{}'",
-                    path.path().display()
-                )
-            })?;
-
-            // recover the front matter tags
-            // output directory
-            let out = frontmatter
-                .get("out")
-                .and_then(|x| x.as_str())
-                .ok_or(anyhow!(
-                    "No 'out = \"output.html\"' value for page '{}'",
-                    path.path().display()
-                ))?;
-
-            // template to use
-            let template = frontmatter
-                .get("template")
-                .and_then(|x| x.as_str())
-                .ok_or(anyhow!(
-                    "No 'template = \"page.html\"' value for page '{}'",
-                    path.path().display()
-                ))?;
-
-            // files to include
-            // TODO: give this to lua as a table of file paths?
-            // then things can be emitted that way
-            let include = frontmatter
-                .get("include")
-                .map(|x| {
-                    x.as_str().ok_or(anyhow!(
-                        "No 'template = \"page.html\"' value for page '{}'",
-                        path.path().display()
-                    ))
-                })
-                .transpose()?;
-
-            // tag(s)
-            let tags = if let Some(tag) = frontmatter.get("tag") {
-                // single value
-                vec![
-                    tag.as_str()
-                        .ok_or(anyhow!(
-                            "Value 'tag = \"tag\" needs to be a string for page '{}'",
-                            path.path().display()
-                        ))?
-                        .to_string(),
-                ]
-            } else if let Some(tags) = frontmatter.get("tags") {
-                // multiple values
-                tags.as_array()
-                    .and_then(|x| x.iter().map(|x| x.as_str().map(|x| x.to_string())).collect())
-                    .ok_or(anyhow!(
-                        "Value 'tags = [\"tag1\", \"tag2\"]' must be an array of strings for page '{}'",
-                        path.path().display(),
-                    ))?
-            } else {
-                // no tags
-                Vec::new()
-            };
+            // parser state
+            // inside a lua string?
+            let mut inside_lua = false;
 
             // parse the markdown
             let parser = Parser::new_ext(
@@ -232,27 +146,52 @@ impl SiteCache {
             )
             .map(|e| match e {
                 // code block, convert to a tag
-                Event::Start(Tag::CodeBlock(kind)) => {
-                    // language of the code block
-                    let lang = match kind {
-                        CodeBlockKind::Indented => "".into(),
-                        // also escape the attribute
-                        CodeBlockKind::Fenced(lang) => lang.replace("\"", "&quot;"),
-                    };
-
-                    // and the opening html
-                    Event::Html(format!("<l-code lang=\"{lang}\">").into())
+                // TODO: consider making a simple html parser so this is not needed?
+                Event::Start(Tag::CodeBlock(info)) => {
+                    match info {
+                        CodeBlockKind::Indented => {
+                            // we are now emitting lua
+                            inside_lua = true;
+                            Event::InlineHtml("<pre><code><%- highlight(nil, '".into())
+                        }
+                        CodeBlockKind::Fenced(info) => {
+                            // we are now emitting lua
+                            inside_lua = true;
+                            let lang = info.split(' ').next().unwrap();
+                            if lang.is_empty() {
+                                Event::InlineHtml("<pre><code><%- highlight(nil, '".into())
+                            } else {
+                                Event::InlineHtml(
+                                    format!(
+                                        "<pre><code><%- highlight('{}', '",
+                                        escape_lua_str(lang)
+                                    )
+                                    .into(),
+                                )
+                            }
+                        }
+                    }
                 }
                 // end tag
                 // no need to deal with the middle tag, as that simply exports the html
-                Event::End(TagEnd::CodeBlock) => Event::Html(format!("</l-code>").into()),
+                Event::End(TagEnd::CodeBlock) => {
+                    // end of lua text
+                    inside_lua = false;
+                    Event::Html(format!("') -%></code></pre>").into())
+                }
 
                 // math, convert to math replace block
-                Event::InlineMath(x) => {
-                    Event::InlineHtml(format!("<l-math-inline>{x}</l-math-inline>").into())
-                }
-                Event::DisplayMath(x) => {
-                    Event::InlineHtml(format!("<l-math-display>{x}</l-math-display>").into())
+                Event::InlineMath(x) => Event::InlineHtml(
+                    format!("<%- math_inline '{}' -%>", escape_lua_str(&x)).into(),
+                ),
+                Event::DisplayMath(x) => Event::InlineHtml(
+                    format!("<%- math_display '{}' -%>", escape_lua_str(&x)).into(),
+                ),
+
+                // text tag, inside a codeblock
+                Event::Text(t) if inside_lua => {
+                    // no escape for html, but do escape for lua
+                    Event::Html(t.replace("\\", "\\\\").replace("'", "\\'").into())
                 }
 
                 // other cases
@@ -262,136 +201,53 @@ impl SiteCache {
             // convert to html
             let mut html = String::with_capacity(rest.len());
             push_html(&mut html, parser);
+            //println!("{}", &html);
 
-            // and page index
-            for tag in tags.iter() {
-                index.insert(tag.clone(), frontmatter.clone());
-            }
+            // parse into a toml table
+            let mut frontmatter = frontmatter.parse::<toml::Table>().with_context(|| {
+                format!(
+                    "Failed to parse frontmatter for page '{}'",
+                    path.path().display()
+                )
+            })?;
 
-            // these are processed later, as a complete index is needed
-            pages.push(Page {
-                path: path.into_path(),
-                output: out.to_string(),
-                html,
-                template: template.to_string(),
-                include: include.map(|x| x.to_string()),
-                tags: tags,
-                frontmatter: frontmatter,
-            });
+            // add the markdown and content to the front matter
+            frontmatter.insert("markdown".into(), rest.into());
+            frontmatter.insert("content".into(), html.into());
+
+            // frontmatter table
+            let frontmatter = lua.to_value(&frontmatter)?;
+
+            // and to the page list
+            pages.push(&frontmatter)?;
         }
 
-        // load lua
-        // SAFETY: we want all lua libraries
-        let lua = unsafe { Lua::unsafe_new() };
+        // API
+        let api = lua.create_table()?;
+        api.set("pages", pages)?;
 
-        // map of rewrite functions
-        let rewrite_fns = lua.create_table()?;
+        // run the site generator
+        let res: mlua::Table = lua
+            .load(Path::new("site.lua"))
+            .call(api)
+            .context("'site.lua' did not return a table of results")?;
 
-        // map of files to output from lua
-        let emitted_files = lua.create_table()?;
+        // get the pages
+        let pages: mlua::Table = res.get("pages").context(
+            "'site.lua' must return a table with a key 'pages' with the table of files to emit",
+        )?;
 
-        // load fennel
-        let fennel = lua
-            .load(include_str!("fennel.lua"))
-            .set_name("=fennel.lua")
-            .into_function()
-            .context("Failed to load fennel")?;
+        // not found page
+        let not_found: Option<String> = res.get("not_found")?;
 
-        // set up lua context
-        let rw = rewrite_fns.clone();
-        let em = emitted_files.clone();
-        lua.load(chunk! {
-            // preload fennel
-            package.preload.fennel = $fennel;
-
-            // add scripts directory to the load path
-            package.path = "./scripts/?.lua;" .. package.path;
-
-            // site API table
-            site = {
-                // not found page is nil by default
-                not_found = nil;
-
-                // are we in development mode?
-                dev = $development;
-
-                // rewrite functions
-                rewrite = $rw;
-
-                // files to emit
-                emit = $em;
-            };
-        })
-        .exec()
-        .context("Failed to load fennel")?;
-
-        // load site.lua
-        if fs::exists("site.lua")? {
-            lua.load(Path::new("site.lua")).exec()?;
-        } else if fs::exists("site.fnl")? {
-            lua.load(chunk! {
-                // load and install fennel, then run the file
-                // disable error pinpoint as this messes with existing coloration of the terminal
-                require("fennel")
-                    .install()
-                    // pinpoint errors with another character, as the default messes
-                    // up terminal color output
-                    .dofile("site.fnl", { ["error-pinpoint"] = { "\x02", "\x03" } });
-            })
-            .exec()?;
-        } else {
-            bail!("No 'site.lua' or 'site.fnl' present");
-        }
-
-        // rewrite functions
-        let rewriters = rewrite_fns
-            .pairs()
-            .map(|x| {
-                let (name, fun): (String, Function) = x?;
-                Ok((name, fun))
-            })
-            .collect::<Result<HashMap<String, Function>>>()?;
-
-        // all files to output
-        let mut files = HashMap::with_capacity(pages.len());
-
-        // template the files
-        for page in pages {
-            // TODO template with lua
-            // JSX style, so replace elements with a function call
-            // ALSO: returned functions are run again after everything is processed?
-            // this allows doing things in stages, kinda?
-            let html = page.html;
-
-            // apply template lua stuff TODO
-
-            // write out
-            // TODO handle index.html properly here
-            files.insert(RelativePathBuf::from(page.output), html.into_bytes());
-
-            // write out included files
-            if let Some(incl) = page.include {
-                for file in GlobWalkerBuilder::new(page.path, incl).build()? {
-                    todo!()
-                }
-            }
-        }
-        
-
-        // write out emitted files
-        for pair in emitted_files.pairs() {
-            let (path, content): (String, mlua::BString) = pair?;
-        }
+        // TODO subset font?
 
         Ok(Files {
-            files,
+            // TODO build from the script
+            files: Default::default(),
 
-            // load from the lua env
-            not_found: lua
-                .globals()
-                .get::<mlua::Table>("site")?
-                .get::<Option<String>>("not_found")?
-                .map(RelativePathBuf::from),
+            // returned from the script
+            not_found: not_found.map(RelativePathBuf::from),
         })
     }
 
@@ -404,8 +260,6 @@ impl SiteCache {
 
     /// mark file as dirty
     pub fn mark_dirty(&mut self, path: &Path) {
-        
-
         // template changed?
         if path.starts_with("templates") {
             //self.templates = None;
