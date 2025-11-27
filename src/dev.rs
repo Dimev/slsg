@@ -228,7 +228,7 @@ fn respond(
         // 404, return the not found page
         (
             format!(
-                include_str!("not_found_template.html"),
+                include_str!("html/not_found_template.html"),
                 file_path,
                 site.files
                     .keys()
@@ -247,7 +247,7 @@ fn respond(
     // update notify script, allows reloading the page when we send a message
     let update_notify = if mime == Some("text/html") {
         format!(
-            include_str!("update_notify.html"),
+            include_str!("html/update_notify.html"),
             version = version.load(Ordering::Relaxed),
             path = VERY_LONG_PATH
         )

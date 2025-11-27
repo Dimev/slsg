@@ -14,7 +14,9 @@ use relative_path::RelativePathBuf;
 
 /// Escape a '' lua string
 fn escape_lua_str(s: &str) -> String {
-    s.replace("\\", "\\\\").replace("'", "\\'")
+    s.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\n", "\\\n")
 }
 
 pub(crate) struct Files {
@@ -191,7 +193,7 @@ impl SiteCache {
                 // text tag, inside a codeblock
                 Event::Text(t) if inside_lua => {
                     // no escape for html, but do escape for lua
-                    Event::Html(t.replace("\\", "\\\\").replace("'", "\\'").into())
+                    Event::Html(escape_lua_str(&t).into())
                 }
 
                 // other cases
@@ -201,7 +203,6 @@ impl SiteCache {
             // convert to html
             let mut html = String::with_capacity(rest.len());
             push_html(&mut html, parser);
-            //println!("{}", &html);
 
             // parse into a toml table
             let mut frontmatter = frontmatter.parse::<toml::Table>().with_context(|| {
@@ -225,6 +226,24 @@ impl SiteCache {
         // API
         let api = lua.create_table()?;
         api.set("pages", pages)?;
+
+        // etlua
+        let etlua = lua
+            .load(include_str!("lua/etlua.lua"))
+            .set_name("=etlua.lua")
+            .into_function()?;
+
+        // preload libraries
+        lua.load(chunk! {
+            // TODO: see if there's a way to make the render error out? as we have feedback anyway
+            // TODO: consider making this in rust instead?
+            // TODO: Do this in rust instead, then it can be used from inside markdown too
+            // TODO: Also allows a bit better error messages?
+            package.preload.etlua = $etlua;
+
+            // TODO: the highlighter
+        })
+        .exec()?;
 
         // run the site generator
         let res: mlua::Table = lua

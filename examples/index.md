@@ -8,11 +8,13 @@ tags = ["pages", "index"]
 Hello slsg!
 
 ```lua
-print 'hello code!'
+print 'Hello, world!'
 ```
 
 $$\frac{2x}{\sqrt(\pi)}$$
 
 $2\left(x\frac{x}{4\pi}\right)$
 
-sus amogus $$1 + 1$$
+Sus amogus $$1 + 1$$
+
+<?- "sus amogus" -?>

@@ -12,6 +12,7 @@ use anyhow::{Context, Result, anyhow};
 
 use crate::{dev::serve_dev_site, print::print_success, site::SiteCache};
 
+mod template;
 mod dev;
 mod font;
 mod print;

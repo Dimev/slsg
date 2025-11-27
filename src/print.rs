@@ -75,5 +75,5 @@ pub(crate) fn html_error<E: Display>(error: &E) -> String {
             _ => err.push(c),
         }
     }
-    format!(include_str!("error_template.html"), err)
+    format!(include_str!("html/error_template.html"), err)
 }
