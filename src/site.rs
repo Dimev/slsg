@@ -8,9 +8,12 @@ use std::{
 use anyhow::{Context as AnyhowCtx, Result, anyhow, bail, ensure};
 use globwalk::{GlobWalkerBuilder, glob};
 
-use mlua::{Function, Lua, LuaSerdeExt, chunk};
+use math_core::{LatexToMathML, MathCoreConfig};
+use mlua::{ExternalError, ExternalResult, Function, Lua, LuaSerdeExt, chunk};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html::push_html};
 use relative_path::RelativePathBuf;
+
+use crate::template::compile;
 
 /// Escape a '' lua string
 fn escape_lua_str(s: &str) -> String {
@@ -110,7 +113,7 @@ impl SiteCache {
             // pulldown-cmark expects the metadata block to start and end with a +++
             // without any preceding spaces
             // find the range of the first metadata block
-            let (frontmatter, rest) = md
+            let frontmatter = md
                 // opens with a +++, so no preceding newline
                 .starts_with("+++")
                 .then_some(3)
@@ -126,7 +129,7 @@ impl SiteCache {
                         // starts at the first +++, ends at the second +++
                         // start + end because the end is relative
                         // for the rest, skip the closing +++
-                        .map(|end| (&md[start..start + end], &md[start + end + 4..]))
+                        .map(|end| &md[start..start + end])
                 })
                 .ok_or_else(|| {
                     anyhow!(
@@ -141,10 +144,11 @@ impl SiteCache {
 
             // parse the markdown
             let parser = Parser::new_ext(
-                rest,
+                &md,
                 Options::ENABLE_MATH
                     | Options::ENABLE_HEADING_ATTRIBUTES
-                    | Options::ENABLE_FOOTNOTES,
+                    | Options::ENABLE_FOOTNOTES
+                    | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS,
             )
             .map(|e| match e {
                 // code block, convert to a tag
@@ -154,18 +158,18 @@ impl SiteCache {
                         CodeBlockKind::Indented => {
                             // we are now emitting lua
                             inside_lua = true;
-                            Event::InlineHtml("<pre><code><%- highlight(nil, '".into())
+                            Event::InlineHtml("<pre><code><?- md.highlight(nil, '".into())
                         }
                         CodeBlockKind::Fenced(info) => {
                             // we are now emitting lua
                             inside_lua = true;
                             let lang = info.split(' ').next().unwrap();
                             if lang.is_empty() {
-                                Event::InlineHtml("<pre><code><%- highlight(nil, '".into())
+                                Event::InlineHtml("<pre><code><?- md.highlight(nil, '".into())
                             } else {
                                 Event::InlineHtml(
                                     format!(
-                                        "<pre><code><%- highlight('{}', '",
+                                        "<pre><code><?- md.highlight('{}', '",
                                         escape_lua_str(lang)
                                     )
                                     .into(),
@@ -179,15 +183,15 @@ impl SiteCache {
                 Event::End(TagEnd::CodeBlock) => {
                     // end of lua text
                     inside_lua = false;
-                    Event::Html(format!("') -%></code></pre>").into())
+                    Event::Html(format!("') -?></code></pre>").into())
                 }
 
                 // math, convert to math replace block
                 Event::InlineMath(x) => Event::InlineHtml(
-                    format!("<%- math_inline '{}' -%>", escape_lua_str(&x)).into(),
+                    format!("<?- md.math_inline '{}' -?>", escape_lua_str(&x)).into(),
                 ),
                 Event::DisplayMath(x) => Event::InlineHtml(
-                    format!("<%- math_display '{}' -%>", escape_lua_str(&x)).into(),
+                    format!("<?- md.math_display '{}' -?>", escape_lua_str(&x)).into(),
                 ),
 
                 // text tag, inside a codeblock
@@ -201,7 +205,7 @@ impl SiteCache {
             });
 
             // convert to html
-            let mut html = String::with_capacity(rest.len());
+            let mut html = String::with_capacity(md.len());
             push_html(&mut html, parser);
 
             // parse into a toml table
@@ -213,8 +217,10 @@ impl SiteCache {
             })?;
 
             // add the markdown and content to the front matter
-            frontmatter.insert("markdown".into(), rest.into());
+            frontmatter.insert("markdown".into(), md.into());
             frontmatter.insert("content".into(), html.into());
+
+            // TODO: figure out how to deal with file paths?
 
             // frontmatter table
             let frontmatter = lua.to_value(&frontmatter)?;
@@ -225,13 +231,51 @@ impl SiteCache {
 
         // API
         let api = lua.create_table()?;
+
+        // all markdown pages
         api.set("pages", pages)?;
 
-        // etlua
-        let etlua = lua
-            .load(include_str!("lua/etlua.lua"))
-            .set_name("=etlua.lua")
-            .into_function()?;
+        // convert tex to mathml
+        api.set(
+            "mathml",
+            lua.create_function(move |_, tex: String| {
+                // TODO: display mode and so on
+                let conf = MathCoreConfig::default();
+                let converter = LatexToMathML::new(&conf).map_err(|x| anyhow!("{:?}", x))?;
+                let html = converter
+                    .convert_with_local_counter(&tex, math_core::MathDisplay::Block)
+                    .map_err(|x| anyhow!("{:?}", x))?;
+                Ok(html.to_string())
+            })?,
+        )?;
+
+        // compile a script from a template
+        let compile =
+            lua.create_function(move |lua, (template, name): (String, Option<String>)| {
+                // render the template
+                compile(lua, &template, name).into_lua_err()
+            })?;
+
+        // compile template
+        api.set("compile", compile.clone())?;
+
+        // render template
+        api.set(
+            "render",
+            lua.load(chunk! {
+                // compile a template, then run it
+                local template, name, env = ...
+                return $compile(template, name)(env)
+            })
+            .into_function()?,
+        )?;
+
+        // list files
+        api.set("glob", lua.create_function(move |lua, ()| Ok(()))?)?;
+
+        // read file to string
+
+        // TODO image resizing?
 
         // preload libraries
         lua.load(chunk! {
@@ -239,9 +283,10 @@ impl SiteCache {
             // TODO: consider making this in rust instead?
             // TODO: Do this in rust instead, then it can be used from inside markdown too
             // TODO: Also allows a bit better error messages?
-            package.preload.etlua = $etlua;
+
 
             // TODO: the highlighter
+            // TODO: cache input?
         })
         .exec()?;
 
